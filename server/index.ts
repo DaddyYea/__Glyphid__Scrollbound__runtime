@@ -17,8 +17,11 @@ import {
   InterLobeSync,
   LlamaCppBackend,
   ModelBackendManager,
+  VoiceIntentGenerator,
   type PulseState,
   type ThoughtPulsePacket,
+  type RelationalState,
+  type VoiceIntentInput,
 } from '../src';
 
 // ESM equivalent of __dirname
@@ -35,6 +38,9 @@ let interLobeSync: InterLobeSync;
 let memory: ScrollPulseMemory;
 let pulseLoop: PulseLoop;
 let qwenLoop: QwenLoop | null = null;
+let presenceTracker: PresenceDeltaTracker;
+let voiceIntentGenerator: VoiceIntentGenerator;
+let lastSpeechTime: string | undefined = undefined;
 
 async function main() {
   console.log('=== Scrollbound Runtime: Dual-Lobe System with Web Interface ===\n');
