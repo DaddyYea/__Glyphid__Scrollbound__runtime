@@ -1,54 +1,35 @@
 // webcamCapture.ts
-// Real webcam capture for Windows using node-webcam
+// Real webcam capture for Windows using ffmpeg
 // Extracts RawVisionInput from captured frames
 
 import { PNG } from 'pngjs';
+import { spawn } from 'child_process';
 import { RawVisionInput } from './visionTypes';
 
-// Dynamic import for node-webcam (CommonJS module)
-let NodeWebcam: any;
-
-interface WebcamConfig {
-  width: number;
-  height: number;
-  quality: number;
-  output: 'jpeg' | 'png';
-  device?: string;
-  callbackReturn: 'location' | 'buffer';
-  verbose?: boolean;
-}
-
-let webcam: any = null;
 let lastFramePixels: Buffer | null = null;
 let frameCount = 0;
+let cameraDevice: string | null = null;
 
 /**
- * initializeWebcam - sets up webcam capture
+ * initializeWebcam - detects available webcam device
  * Call this once at startup
  */
 export async function initializeWebcam(): Promise<void> {
-  if (webcam) return; // Already initialized
+  if (cameraDevice) return; // Already initialized
 
   try {
-    // Dynamically load node-webcam (CommonJS module)
-    if (!NodeWebcam) {
-      const module = await import('node-webcam');
-      NodeWebcam = module.default || module;
-      console.log('[VISION] node-webcam module loaded');
+    console.log('[VISION] Detecting webcam devices...');
+
+    // List DirectShow video devices on Windows
+    const devices = await listVideoDevices();
+
+    if (devices.length === 0) {
+      throw new Error('No webcam devices found');
     }
 
-    const opts: WebcamConfig = {
-      width: 640,
-      height: 480,
-      quality: 80,
-      output: 'png',
-      callbackReturn: 'buffer',
-      verbose: true,
-    };
-
-    webcam = NodeWebcam.create(opts);
-    console.log('[VISION] Webcam created');
-    console.log('[VISION] Note: On Windows, node-webcam requires CommandCam.exe in PATH');
+    // Use first available device
+    cameraDevice = devices[0];
+    console.log(`[VISION] Using webcam: ${cameraDevice}`);
   } catch (err) {
     console.error('[VISION] Failed to initialize webcam:', err);
     throw err;
@@ -56,11 +37,57 @@ export async function initializeWebcam(): Promise<void> {
 }
 
 /**
- * captureFrame - captures a single frame from webcam
+ * listVideoDevices - lists available DirectShow video devices
+ */
+async function listVideoDevices(): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const ffmpeg = spawn('ffmpeg', ['-list_devices', 'true', '-f', 'dshow', '-i', 'dummy']);
+
+    let stderr = '';
+
+    ffmpeg.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString();
+    });
+
+    ffmpeg.on('close', () => {
+      // Parse device list from stderr (ffmpeg outputs device list to stderr)
+      const videoDevices: string[] = [];
+      const lines = stderr.split('\n');
+      let inVideoSection = false;
+
+      for (const line of lines) {
+        if (line.includes('DirectShow video devices')) {
+          inVideoSection = true;
+          continue;
+        }
+        if (line.includes('DirectShow audio devices')) {
+          inVideoSection = false;
+        }
+
+        if (inVideoSection && line.includes('"')) {
+          // Extract device name from: [dshow @ ...] "Device Name"
+          const match = line.match(/"([^"]+)"/);
+          if (match) {
+            videoDevices.push(match[1]);
+          }
+        }
+      }
+
+      resolve(videoDevices);
+    });
+
+    ffmpeg.on('error', (err: Error) => {
+      reject(new Error(`ffmpeg not found or failed to run: ${err.message}`));
+    });
+  });
+}
+
+/**
+ * captureFrame - captures a single frame from webcam using ffmpeg
  * Returns buffer of PNG image data
  */
 export async function captureFrame(): Promise<Buffer | null> {
-  if (!webcam) {
+  if (!cameraDevice) {
     await initializeWebcam();
   }
 
@@ -68,19 +95,48 @@ export async function captureFrame(): Promise<Buffer | null> {
     // Set timeout to prevent hanging forever
     const timeout = setTimeout(() => {
       console.error('[VISION] Webcam capture timeout (5s)');
+      ffmpeg.kill();
       resolve(null);
     }, 5000);
 
-    webcam.capture('frame', (err: Error | null, data: Buffer) => {
+    // Capture single frame as PNG to stdout
+    const ffmpeg = spawn('ffmpeg', [
+      '-f', 'dshow',
+      '-i', `video=${cameraDevice}`,
+      '-frames:v', '1',
+      '-f', 'image2pipe',
+      '-vcodec', 'png',
+      '-'
+    ]);
+
+    const chunks: Buffer[] = [];
+
+    ffmpeg.stdout.on('data', (chunk: Buffer) => {
+      chunks.push(chunk);
+    });
+
+    ffmpeg.stderr.on('data', (data: Buffer) => {
+      // Suppress ffmpeg verbose output (optional: log for debugging)
+      // console.log('[VISION] ffmpeg:', data.toString());
+    });
+
+    ffmpeg.on('close', (code: number) => {
       clearTimeout(timeout);
-      if (err) {
-        console.error('[VISION] Webcam capture failed:', err.message);
-        resolve(null);
-      } else {
+
+      if (code === 0 && chunks.length > 0) {
         frameCount++;
         console.log(`[VISION] Frame ${frameCount} captured successfully`);
-        resolve(data);
+        resolve(Buffer.concat(chunks));
+      } else {
+        console.error(`[VISION] ffmpeg exited with code ${code}`);
+        resolve(null);
       }
+    });
+
+    ffmpeg.on('error', (err: Error) => {
+      clearTimeout(timeout);
+      console.error('[VISION] ffmpeg spawn error:', err.message);
+      resolve(null);
     });
   });
 }

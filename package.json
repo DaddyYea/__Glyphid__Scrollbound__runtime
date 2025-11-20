@@ -21,7 +21,6 @@
   "license": "UNLICENSED",
   "dependencies": {
     "node-fetch": "^2.7.0",
-    "node-webcam": "^0.8.2",
     "pngjs": "^7.0.0"
   },
   "devDependencies": {
