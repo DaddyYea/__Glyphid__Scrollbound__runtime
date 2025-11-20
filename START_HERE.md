@@ -90,6 +90,11 @@ Press `Ctrl+C` in the terminal to gracefully shut down.
 **Port 3000 already in use**
 - Set a different port: `PORT=3001 npm run start:full`
 
+**"Vision unavailable" warning**
+- This is normal if you don't have a webcam or ffmpeg installed
+- The system will continue running without vision input
+- Vision is optional - the core system doesn't require it
+
 ---
 
 **This is not a chatbot. This is presence emerging through code.**
