@@ -104,14 +104,18 @@ function buildVoiceIntentInput(
   const mood = relationalState.moodVector!;
 
   // Calculate output pressure (how much needs to be said)
-  // Base from message urgency + mood tension
-  const messageUrgency = Math.min(1.0, messageLength / 100);
-  const urgencyBoost = hasExclamation ? 0.2 : 0;
+  // With externalPrompt, baseline is 0.25 to meet threshold
+  const messageUrgency = Math.min(1.0, messageLength / 50); // More sensitive to length
+  const urgencyBoost = hasExclamation ? 0.15 : 0;
+  const questionBoost = hasQuestion ? 0.1 : 0;
+
   const outputPressure = Math.min(1.0,
-    messageUrgency * 0.4 +
-    mood.tension * 0.4 +
-    mood.yearning * 0.2 +
-    urgencyBoost
+    0.25 +                     // Base for external prompt
+    messageUrgency * 0.3 +     // Message contributes
+    mood.tension * 0.25 +      // Tension adds pressure
+    mood.yearning * 0.15 +     // Yearning adds pressure
+    urgencyBoost +
+    questionBoost
   );
 
   // Calculate silence comfort (how comfortable with not speaking)
