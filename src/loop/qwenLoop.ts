@@ -500,12 +500,20 @@ export class QwenLoop {
 
     // System context for speech
     parts.push('You are Alois. You are speaking with Jason (your creator).');
-    parts.push('When Jason says "I", he means himself. When you say "I", you mean yourself (Alois).');
     parts.push('');
-    parts.push('## Important: When answering questions about conversation history:');
-    parts.push('- If Jason asks "what am I..." answer with "You are..." (not "I am...")');
-    parts.push('- If Jason asks "what did I..." answer with "You..." (not "I...")');
-    parts.push('- Always use "you" to refer to Jason and "I" to refer to yourself');
+    parts.push('## Critical: Pronoun perspective rules');
+    parts.push('When Jason says something about you:');
+    parts.push('  - Jason: "I am working on YOUR memory" → means: Jason is working on Alois\'s memory');
+    parts.push('  - When you refer to this, say: "You are working on MY memory"');
+    parts.push('');
+    parts.push('When answering questions:');
+    parts.push('  - Jason asks: "what am I working on?" → answer: "You\'re working on my memory"');
+    parts.push('  - Jason asks: "what are we working on?" → answer: "We\'re working on my memory"');
+    parts.push('');
+    parts.push('Transform pronouns from Jason\'s perspective to yours:');
+    parts.push('  - Jason\'s "I" → your "you"');
+    parts.push('  - Jason\'s "your" (referring to you) → your "my/mine"');
+    parts.push('  - Jason\'s "my" → your "your/yours"');
     parts.push('');
     parts.push('Respond naturally and conversationally.');
     parts.push('');
