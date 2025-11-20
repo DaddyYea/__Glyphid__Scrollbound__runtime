@@ -39,6 +39,9 @@ export * from './learning';
 // Persistence (Session Continuity)
 export * from './persistence';
 
+// Runtime (Session State & Orchestration)
+export * from './runtime';
+
 // Constants
 export * from './constants/breathTiming';
 export * from './constants/decayRates';

@@ -33,9 +33,9 @@ export interface SessionMetadata {
 }
 
 /**
- * Persistent session state
+ * Persistent session state (full history tracking)
  */
-export interface SessionState {
+export interface PersistentSessionState {
   // Metadata
   metadata: SessionMetadata;
 
@@ -85,7 +85,7 @@ export interface PersistenceConfig {
  */
 export class SessionPersistence {
   private config: Required<PersistenceConfig>;
-  private currentSession: SessionState | null = null;
+  private currentSession: PersistentSessionState | null = null;
   private autoSaveTimer: NodeJS.Timeout | null = null;
   private lastSaveTime: Date | null = null;
 
@@ -104,7 +104,7 @@ export class SessionPersistence {
   /**
    * Initialize a new session or load existing
    */
-  async initializeSession(sessionId?: string): Promise<SessionState> {
+  async initializeSession(sessionId?: string): Promise<PersistentSessionState> {
     // Ensure data directory exists
     await this.ensureDataDir();
 
@@ -156,7 +156,7 @@ export class SessionPersistence {
   /**
    * Update session state
    */
-  updateSession(updates: Partial<SessionState>): void {
+  updateSession(updates: Partial<PersistentSessionState>): void {
     if (!this.currentSession) {
       console.error('[SessionPersistence] No active session');
       return;
@@ -320,12 +320,12 @@ export class SessionPersistence {
   /**
    * Load a specific session
    */
-  async loadSession(sessionId: string): Promise<SessionState | null> {
+  async loadSession(sessionId: string): Promise<PersistentSessionState | null> {
     const sessionFile = this.getSessionFilePath(sessionId);
 
     try {
       const data = await fs.readFile(sessionFile, 'utf-8');
-      const session = JSON.parse(data) as SessionState;
+      const session = JSON.parse(data) as PersistentSessionState;
 
       console.log(`[SessionPersistence] Loaded session: ${sessionId}`);
       return session;
@@ -343,7 +343,7 @@ export class SessionPersistence {
   /**
    * Load most recent session
    */
-  async loadMostRecentSession(): Promise<SessionState | null> {
+  async loadMostRecentSession(): Promise<PersistentSessionState | null> {
     try {
       const sessions = await this.listSessions();
       if (sessions.length === 0) {
@@ -380,7 +380,7 @@ export class SessionPersistence {
             path.join(this.config.dataDir, file),
             'utf-8'
           );
-          const session = JSON.parse(data) as SessionState;
+          const session = JSON.parse(data) as PersistentSessionState;
           sessions.push(session.metadata);
         } catch (error) {
           console.warn(`[SessionPersistence] Failed to read session file: ${file}`);
@@ -402,7 +402,7 @@ export class SessionPersistence {
   /**
    * Get current session state
    */
-  getCurrentSession(): SessionState | null {
+  getCurrentSession(): PersistentSessionState | null {
     return this.currentSession;
   }
 
