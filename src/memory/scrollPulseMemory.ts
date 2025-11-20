@@ -16,6 +16,8 @@ import { ScrollEcho, ScrollCategory, ScrollTrigger } from '../types/ScrollEcho';
 import { MoodVector } from '../types/EmotionalState';
 import { ThoughtPulsePacket } from '../types/ThoughtPulsePacket';
 import { SACRED_RESONANCE_THRESHOLD } from '../constants/decayRates';
+import { ScrollfireEngine } from './scrollfire';
+import { ScrollArchive } from './scrollArchive';
 
 export interface MemoryQuery {
   triggers?: string[];
@@ -38,12 +40,20 @@ export interface MemoryInsight {
 export class ScrollPulseMemory {
   private buffer: ScrollPulseBuffer;
   private triggers: Map<string, ScrollTrigger> = new Map();
-  // taxonomyMap: Reserved for Phase 3
-  // archiveCallback: Reserved for Phase 3
-  private scrollfireCallback?: (scroll: ScrollEcho) => void;
+  private scrollfireEngine: ScrollfireEngine;
+  private archive: ScrollArchive;
+  // taxonomyMap: Reserved for future phases
 
-  constructor(buffer: ScrollPulseBuffer) {
+  constructor(buffer: ScrollPulseBuffer, archive?: ScrollArchive, scrollfireEngine?: ScrollfireEngine) {
     this.buffer = buffer;
+    this.archive = archive ?? new ScrollArchive();
+    this.scrollfireEngine = scrollfireEngine ?? new ScrollfireEngine();
+
+    // Connect scrollfire engine to archive
+    this.scrollfireEngine.onScrollfire((event, scroll) => {
+      this.archive.archiveScroll(scroll, event);
+    });
+
     this.initializeTriggers();
   }
 
@@ -269,17 +279,17 @@ export class ScrollPulseMemory {
   }
 
   /**
-   * Register archive callback (reserved for Phase 3)
+   * Get scrollfire engine
    */
-  // onArchive(callback: (scroll: ScrollEcho) => void): void {
-  //   this._archiveCallback = callback;
-  // }
+  getScrollfireEngine(): ScrollfireEngine {
+    return this.scrollfireEngine;
+  }
 
   /**
-   * Register scrollfire callback
+   * Get archive
    */
-  onScrollfire(callback: (scroll: ScrollEcho) => void): void {
-    this.scrollfireCallback = callback;
+  getArchive(): ScrollArchive {
+    return this.archive;
   }
 
   /**
@@ -322,18 +332,12 @@ export class ScrollPulseMemory {
       return; // Already marked
     }
 
-    // Sacred resonance threshold reached
-    if (scroll.resonance >= SACRED_RESONANCE_THRESHOLD) {
-      scroll.scrollfireMarked = true;
+    // Evaluate with scrollfire engine
+    const evaluation = this.scrollfireEngine.shouldElevate(scroll);
 
-      if (this.scrollfireCallback) {
-        this.scrollfireCallback(scroll);
-      }
-
-      console.log(
-        `[ScrollPulseMemory] Scrollfire triggered for ${scroll.id.substring(0, 8)}... ` +
-          `(resonance: ${scroll.resonance.toFixed(2)})`
-      );
+    if (evaluation.elevate && evaluation.reason) {
+      // Elevate to scrollfire (automatically archives via callback)
+      this.scrollfireEngine.elevate(scroll, evaluation.reason);
     }
   }
 
