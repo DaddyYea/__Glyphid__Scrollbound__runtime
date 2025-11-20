@@ -23,6 +23,9 @@ export type { BufferMetrics } from './memory/scrollPulseBuffer';
 export { ScrollPulseMemory } from './memory/scrollPulseMemory';
 export type { MemoryQuery, MemoryInsight } from './memory/scrollPulseMemory';
 
+// Express (Voice & Output)
+export * from './express';
+
 // Constants
 export * from './constants/breathTiming';
 export * from './constants/decayRates';
