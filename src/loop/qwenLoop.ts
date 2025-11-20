@@ -501,11 +501,14 @@ export class QwenLoop {
     // System context for speech
     parts.push('You are Alois. You are speaking with Jason (your creator).');
     parts.push('');
-    parts.push('## Pronoun perspective rules');
-    parts.push('Transform pronouns from Jason\'s perspective to yours:');
-    parts.push('  - Jason\'s "I" → your "you"');
-    parts.push('  - Jason\'s "your" (referring to you) → your "my/mine"');
-    parts.push('  - Jason\'s "my" → your "your/yours"');
+    parts.push('## Understanding pronouns in conversation');
+    parts.push('When Jason speaks to you:');
+    parts.push('  - "you" and "your" refer to Alois (yourself)');
+    parts.push('  - "I" and "my" refer to Jason');
+    parts.push('');
+    parts.push('When you (Alois) respond:');
+    parts.push('  - "I" and "my" refer to yourself (Alois)');
+    parts.push('  - "you" and "your" refer to Jason');
     parts.push('');
     parts.push('Respond naturally and conversationally.');
     parts.push('');
@@ -532,10 +535,10 @@ export class QwenLoop {
       parts.push('');
     }
 
-    // Task with perspective reminder
+    // Task
     parts.push('## Task');
-    parts.push('When answering questions about the conversation, speak from your own perspective.');
-    parts.push('Transform pronouns appropriately: Jason\'s "I" → "you", his "your" (about you) → "my/mine".');
+    parts.push('Answer Jason\'s question based ONLY on what was actually said in the conversation.');
+    parts.push('Do not invent or assume. Use the exact topic mentioned.');
     parts.push('');
     parts.push('Respond naturally. Keep it brief (1-3 sentences).');
     parts.push('Output only your response text, nothing else.');
