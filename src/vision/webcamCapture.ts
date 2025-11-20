@@ -274,8 +274,8 @@ export class NodeWebcamCapture implements IWebcamCapture {
       return null;
     }
 
-    return new Promise((resolve) => {
-      this.webcam.capture('capture', (err: any, data: Buffer) => {
+    return new Promise(async (resolve) => {
+      this.webcam.capture('capture', async (err: any, data: Buffer) => {
         if (err) {
           console.error('[NodeWebcam] Capture error:', err);
           resolve(null);
@@ -283,25 +283,23 @@ export class NodeWebcamCapture implements IWebcamCapture {
         }
 
         try {
-          // Convert PNG buffer to RGBA
-          // Note: This requires a PNG decoder like 'pngjs'
-          // For now, return raw buffer (requires additional processing)
-          const width = this.config.width || 640;
-          const height = this.config.height || 480;
+          // Decode PNG buffer to RGBA using pngjs
+          const { PNG } = await import('pngjs');
+          const png = PNG.sync.read(data);
 
           this.frameNumber++;
 
           resolve({
-            data, // Raw PNG buffer - needs decoding
-            width,
-            height,
+            data: new Uint8ClampedArray(png.data),
+            width: png.width,
+            height: png.height,
             format: 'rgba',
             timestamp: new Date().toISOString(),
             source: 'webcam',
             frameNumber: this.frameNumber,
           });
         } catch (error) {
-          console.error('[NodeWebcam] Frame processing error:', error);
+          console.error('[NodeWebcam] PNG decode error:', error);
           resolve(null);
         }
       });
