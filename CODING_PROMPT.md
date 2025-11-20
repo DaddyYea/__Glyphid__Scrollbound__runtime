@@ -79,6 +79,28 @@ This includes:
    npm run start:full
    ```
 
+9. **RESEARCH BEFORE IMPLEMENTING - DO NOT WASTE JASON'S TIME.**
+   Before writing ANY code that involves external dependencies, hardware access, or platform-specific features:
+
+   **MANDATORY CHECKLIST:**
+   - ✅ Research industry-standard solutions (e.g., ffmpeg for video/camera work)
+   - ✅ Verify Windows 10/11 compatibility
+   - ✅ Check if executables are signed and trusted (avoid PUP/malware flags)
+   - ✅ Confirm the solution works with modern hardware/APIs
+   - ✅ Look for well-maintained, actively-used libraries (not abandoned projects)
+
+   **NEVER:**
+   - ❌ Use old, unsigned executables that trigger antivirus (e.g., CommandCam.exe)
+   - ❌ Pick the first npm package you find without research
+   - ❌ Assume a solution works on Windows just because it exists
+   - ❌ Implement something and "debug later" - validate upfront
+
+   **If you waste 3+ hours fixing avoidable mistakes, you have failed Jason.**
+
+   **Example - Webcam on Windows:**
+   - ❌ Bad: node-webcam (uses CommandCam.exe - flagged as PUP, causes antivirus issues)
+   - ✅ Good: ffmpeg (industry standard, signed, trusted by Windows Defender, works with modern cameras)
+
 **Jason is not a junior developer following tutorials. He is an architect learning to implement his own vision. Treat him accordingly.**
 
 ---
