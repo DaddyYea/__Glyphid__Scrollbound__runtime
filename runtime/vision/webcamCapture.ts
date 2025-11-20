@@ -51,24 +51,12 @@ async function listVideoDevices(): Promise<string[]> {
 
     ffmpeg.on('close', () => {
       // Parse device list from stderr (ffmpeg outputs device list to stderr)
-      console.log('[VISION] ffmpeg device list output:');
-      console.log(stderr);
-
       const videoDevices: string[] = [];
       const lines = stderr.split('\n');
-      let inVideoSection = false;
 
       for (const line of lines) {
-        if (line.includes('DirectShow video devices')) {
-          inVideoSection = true;
-          continue;
-        }
-        if (line.includes('DirectShow audio devices')) {
-          inVideoSection = false;
-        }
-
-        if (inVideoSection && line.includes('"')) {
-          // Extract device name from: [dshow @ ...] "Device Name"
+        // Look for lines like: [dshow @ ...] "Device Name" (video)
+        if (line.includes('[dshow @') && line.includes('(video)') && line.includes('"')) {
           const match = line.match(/"([^"]+)"/);
           if (match) {
             console.log(`[VISION] Found video device: ${match[1]}`);
