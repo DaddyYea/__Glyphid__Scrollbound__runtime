@@ -42,6 +42,165 @@ let presenceTracker: PresenceDeltaTracker;
 let voiceIntentGenerator: VoiceIntentGenerator;
 let lastSpeechTime: string | undefined = undefined;
 
+/**
+ * Build RelationalState from current system state
+ */
+function buildRelationalState(pulseState: PulseState): RelationalState {
+  const presenceDelta = presenceTracker.getDelta();
+  const syncStats = interLobeSync.getStats();
+
+  return {
+    // Felt state derived from moodVector
+    feltState: {
+      tone: {
+        intimacy: (pulseState.moodVector.devotion + pulseState.moodVector.presence) / 2,
+        vulnerability: pulseState.moodVector.yearning,
+        reverence: pulseState.moodVector.reverence,
+      },
+      presence: pulseState.moodVector.presence,
+    },
+
+    // Desire loop from emotional dimensions
+    desireLoop: {
+      intensity: (pulseState.moodVector.yearning + pulseState.moodVector.devotion) / 2,
+      targetClarity: 1.0 - pulseState.moodVector.confusion,
+      yearning: pulseState.moodVector.yearning,
+    },
+
+    // Wonder loop from curiosity
+    wonderLoop: {
+      curiosityLevel: pulseState.moodVector.wonder,
+    },
+
+    // Christ loop from devotional dimensions
+    christLoop: {
+      devotionalIntensity: (pulseState.moodVector.devotion + pulseState.moodVector.reverence) / 2,
+      prayerState: 'none',
+    },
+
+    // Presence delta from tracker
+    presenceDelta: presenceDelta,
+
+    // Guardian state - initialize with safe defaults
+    guardianState: {
+      mode: 'allow',
+      emotionalSafety: 1.0,
+    },
+
+    // Mood vector
+    moodVector: pulseState.moodVector,
+  };
+}
+
+/**
+ * Build VoiceIntentInput for volitional speech decision
+ */
+function buildVoiceIntentInput(
+  relationalState: RelationalState,
+  messageLength: number,
+  hasExclamation: boolean,
+  hasQuestion: boolean
+): VoiceIntentInput {
+  const mood = relationalState.moodVector!;
+
+  // Calculate output pressure (how much needs to be said)
+  // Base from message urgency + mood tension
+  const messageUrgency = Math.min(1.0, messageLength / 100);
+  const urgencyBoost = hasExclamation ? 0.2 : 0;
+  const outputPressure = Math.min(1.0,
+    messageUrgency * 0.4 +
+    mood.tension * 0.4 +
+    mood.yearning * 0.2 +
+    urgencyBoost
+  );
+
+  // Calculate silence comfort (how comfortable with not speaking)
+  const silenceComfort = (mood.peace + mood.presence) / 2;
+
+  return {
+    relationalState,
+    outputPressure,
+    silenceComfort,
+    lastSpeechTime,
+    externalPrompt: true, // User sent a message
+  };
+}
+
+/**
+ * Handle volitional speech response
+ */
+async function handleVolitionalSpeech(userMessage: string): Promise<void> {
+  if (!currentPulseState || !qwenLoop) {
+    console.log('[SPEECH] Not ready - no pulse state or qwenLoop');
+    return;
+  }
+
+  const breathState = breathLoop.getState();
+
+  // Build relational state
+  const relationalState = buildRelationalState(currentPulseState);
+
+  // Build voice intent input
+  const hasExclamation = userMessage.includes('!');
+  const hasQuestion = userMessage.includes('?');
+  const voiceIntentInput = buildVoiceIntentInput(
+    relationalState,
+    userMessage.length,
+    hasExclamation,
+    hasQuestion
+  );
+
+  // Check if she should speak volitionally
+  const voiceIntent = voiceIntentGenerator.generateIntent(voiceIntentInput);
+
+  console.log(`[SPEECH] VoiceIntent: shouldSpeak=${voiceIntent.shouldSpeak}, target=${voiceIntent.relationalTarget}, urgency=${voiceIntent.urgency.toFixed(2)}`);
+  console.log(`[SPEECH] Reasoning: ${voiceIntent.reasoning}`);
+
+  if (voiceIntent.shouldSpeak) {
+    // Generate speech
+    const speechResult = await qwenLoop.generateSpeech({
+      relationalState,
+      breathState,
+      pulseState: currentPulseState,
+      userMessage,
+    });
+
+    if (speechResult.text) {
+      console.log(`[SPEECH] Generated (${speechResult.processingTime}ms): ${speechResult.text}`);
+
+      // Broadcast to web interface
+      broadcastResponse(speechResult.text, voiceIntent.relationalTarget, voiceIntent.urgency);
+
+      // Update last speech time
+      lastSpeechTime = new Date().toISOString();
+    } else {
+      console.log('[SPEECH] Generation returned empty text');
+    }
+  } else {
+    console.log('[SPEECH] Silence is volitionally chosen');
+  }
+}
+
+/**
+ * Broadcast speech response to web clients
+ */
+function broadcastResponse(text: string, target: string, urgency: number): void {
+  const message = `data: ${JSON.stringify({
+    type: 'response',
+    text,
+    target,
+    urgency,
+  })}\n\n`;
+
+  clients.forEach(client => {
+    try {
+      client.write(message);
+    } catch {
+      // Client disconnected
+    }
+  });
+}
+
 async function main() {
   console.log('=== Scrollbound Runtime: Dual-Lobe System with Web Interface ===\n');
 
@@ -68,7 +227,7 @@ async function main() {
 
   // 2. Initialize foundation
   console.log('[INIT] Foundation modules...');
-  const presenceTracker = new PresenceDeltaTracker();
+  presenceTracker = new PresenceDeltaTracker();
   breathLoop = new BreathLoop(presenceTracker);
   const buffer = new ScrollPulseBuffer();
   memory = new ScrollPulseMemory(buffer);
@@ -105,7 +264,11 @@ async function main() {
     innerEnabled: true,
     autoSwitch: true,
   }, qwenLoop || undefined);
+
+  // Initialize volitional speech system
+  voiceIntentGenerator = new VoiceIntentGenerator();
   console.log('✓ Dual-lobe system ready\n');
+  console.log('✓ Volitional speech system ready\n');
 
   // 4. Setup pulse processing with dual-lobe integration
   pulseLoop.onPulse('runtime', async (state, thoughts) => {
@@ -226,7 +389,7 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
     req.on('data', chunk => {
       body += chunk.toString();
     });
-    req.on('end', () => {
+    req.on('end', async () => {
       try {
         const { text } = JSON.parse(body);
         console.log(`[MESSAGE] Received: ${text}`);
@@ -234,23 +397,27 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
         // Process user input - affects presence and heat
         if (pulseLoop && text && text.length > 0) {
           // Increase presence and heat based on message
-          const intensity = Math.min(1.0, text.length / 100); // Longer messages = more intensity
+          const intensity = Math.min(1.0, text.length / 100);
           const hasExclamation = text.includes('!');
           const hasQuestion = text.includes('?');
 
           pulseLoop.updateMood({
-            presence: Math.min(1.0, 0.5 + intensity * 0.3), // Boost presence
-            focus: hasQuestion ? 0.7 : 0.5, // Questions increase focus
-            tension: hasExclamation ? 0.6 : 0.3, // Exclamations increase tension
+            presence: Math.min(1.0, 0.5 + intensity * 0.3),
+            focus: hasQuestion ? 0.7 : 0.5,
+            tension: hasExclamation ? 0.6 : 0.3,
             clarity: 0.6,
           });
 
           console.log(`[MESSAGE] Updated mood: presence boosted, intensity=${intensity.toFixed(2)}`);
+
+          // Handle volitional speech (may or may not respond)
+          await handleVolitionalSpeech(text);
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'received' }));
       } catch (err) {
+        console.error('[MESSAGE] Error:', err);
         res.writeHead(400);
         res.end();
       }

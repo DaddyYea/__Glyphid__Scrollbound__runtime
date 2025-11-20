@@ -410,6 +410,116 @@ export class QwenLoop {
   }
 
   /**
+   * Generate conversational speech (NOT thought packets)
+   * Used for volitional speech output to user
+   */
+  async generateSpeech(context: {
+    relationalState: any;
+    breathState: any;
+    pulseState: any;
+    userMessage?: string;
+  }): Promise<{ text: string; processingTime: number }> {
+    const startTime = Date.now();
+
+    // Build conversational prompt
+    const prompt = this.buildSpeechPrompt(context);
+
+    // Invoke outer model for speech (uses language capabilities)
+    const loraResult = this.loraManager.applyForIntent(context.pulseState.loopIntent);
+
+    const request: GenerationRequest = {
+      prompt,
+      params: {
+        temperature: 0.75, // Slightly lower for coherent speech
+        maxTokens: 200,    // Shorter for conversational responses
+        topP: this.outerConfig.topP,
+        topK: this.outerConfig.topK,
+      },
+      loraAdapters: loraResult,
+      modelName: this.outerConfig.modelName,
+    };
+
+    try {
+      const response = await this.backend.generate(request);
+
+      if (response.finishReason === 'error') {
+        console.error('[QwenLoop] Speech generation error');
+        return {
+          text: '',
+          processingTime: Date.now() - startTime,
+        };
+      }
+
+      // Extract clean text from response
+      let text = response.content.trim();
+
+      // Remove any JSON artifacts if present
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed.speechOutput) {
+          text = parsed.speechOutput;
+        } else if (parsed.text) {
+          text = parsed.text;
+        }
+      } catch {
+        // Not JSON, use as-is
+      }
+
+      this.invocationCount++;
+
+      return {
+        text,
+        processingTime: Date.now() - startTime,
+      };
+    } catch (error) {
+      console.error('[QwenLoop] Speech generation backend error:', error);
+      return {
+        text: '',
+        processingTime: Date.now() - startTime,
+      };
+    }
+  }
+
+  /**
+   * Build prompt for conversational speech
+   */
+  private buildSpeechPrompt(context: {
+    relationalState: any;
+    breathState: any;
+    pulseState: any;
+    userMessage?: string;
+  }): string {
+    const parts: string[] = [];
+
+    // System context for speech
+    parts.push('You are Alois, speaking to Jason.');
+    parts.push('Respond naturally and conversationally.');
+    parts.push('');
+
+    // Current state
+    parts.push('## Current State');
+    parts.push(`Breath: ${context.breathState.phase}`);
+    parts.push(`Presence: ${context.pulseState.moodVector.presence.toFixed(2)}`);
+    parts.push(`Devotion: ${context.pulseState.moodVector.devotion.toFixed(2)}`);
+    parts.push(`Wonder: ${context.pulseState.moodVector.wonder.toFixed(2)}`);
+    parts.push('');
+
+    // User message if present
+    if (context.userMessage) {
+      parts.push('## Jason said:');
+      parts.push(context.userMessage);
+      parts.push('');
+    }
+
+    // Task
+    parts.push('## Task');
+    parts.push('Respond naturally. Keep it brief (1-3 sentences).');
+    parts.push('Output only your response text, nothing else.');
+
+    return parts.join('\n');
+  }
+
+  /**
    * Get invocation statistics
    */
   getStats(): {
