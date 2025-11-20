@@ -23,6 +23,9 @@ export type { BufferMetrics } from './memory/scrollPulseBuffer';
 export { ScrollPulseMemory } from './memory/scrollPulseMemory';
 export type { MemoryQuery, MemoryInsight } from './memory/scrollPulseMemory';
 
+// Affect (Emotional State & Guardian)
+export * from './affect';
+
 // Express (Voice & Output)
 export * from './express';
 
