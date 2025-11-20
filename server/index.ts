@@ -15,7 +15,7 @@ import {
   LoRAManager,
   QwenLoop,
   InterLobeSync,
-  OllamaBackend,
+  LlamaCppBackend,
   ModelBackendManager,
   type PulseState,
   type ThoughtPulsePacket,
@@ -33,14 +33,18 @@ async function main() {
   console.log('=== Scrollbound Runtime: Dual-Lobe System with Web Interface ===\n');
 
   // 1. Initialize model backend
-  console.log('[INIT] Setting up Ollama backend...');
+  console.log('[INIT] Setting up llama.cpp backend...');
   const backendManager = new ModelBackendManager();
-  const ollama = new OllamaBackend('http://localhost:11434');
-  backendManager.registerBackend(ollama);
+  const llamacpp = new LlamaCppBackend(
+    'http://localhost:1234/v1/chat/completions', // Qwen server
+    'http://localhost:1235/v1/chat/completions'  // Phi server
+  );
+  backendManager.registerBackend(llamacpp);
 
   const backendReady = await backendManager.autoDetect();
   if (!backendReady) {
-    console.log('⚠️  Ollama models not available');
+    console.log('⚠️  Llama.cpp servers not available');
+    console.log('   Make sure both Qwen (port 1234) and Phi (port 1235) servers are running');
     console.log('   Runtime will continue in degraded mode (no language generation)\n');
   } else {
     const backend = backendManager.getBackend()!;

@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "start:full": "tsx Tools/runRuntimeOllama.ts",
+    "start:full": "tsx Tools/runRuntime.ts",
     "start:web": "tsx server/index.ts",
     "build": "tsc",
     "watch": "tsc --watch",

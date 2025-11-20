@@ -351,6 +351,120 @@ export class MockBackend implements ModelBackend {
 }
 
 /**
+ * Llama.cpp backend implementation
+ * Connects to llama-server instances running GGUF models
+ */
+export class LlamaCppBackend implements ModelBackend {
+  name = 'llamacpp';
+  private qwenEndpoint: string;
+  private phiEndpoint: string;
+
+  constructor(
+    qwenEndpoint: string = 'http://localhost:1234/v1/chat/completions',
+    phiEndpoint: string = 'http://localhost:1235/v1/chat/completions'
+  ) {
+    this.qwenEndpoint = qwenEndpoint;
+    this.phiEndpoint = phiEndpoint;
+  }
+
+  async healthCheck(): Promise<BackendHealth> {
+    try {
+      // Check both Qwen and Phi servers
+      const qwenBaseUrl = this.qwenEndpoint.replace('/v1/chat/completions', '');
+      const phiBaseUrl = this.phiEndpoint.replace('/v1/chat/completions', '');
+
+      const [qwenResponse, phiResponse] = await Promise.all([
+        fetch(`${qwenBaseUrl}/v1/models`).catch(() => null),
+        fetch(`${phiBaseUrl}/v1/models`).catch(() => null),
+      ]);
+
+      const qwenAvailable = qwenResponse?.ok || false;
+      const phiAvailable = phiResponse?.ok || false;
+
+      const loadedModels: string[] = [];
+      if (qwenAvailable) loadedModels.push('qwen1.5-4b-chat');
+      if (phiAvailable) loadedModels.push('phi-2');
+
+      return {
+        available: qwenAvailable && phiAvailable,
+        modelCount: loadedModels.length,
+        loadedModels,
+        error: !qwenAvailable || !phiAvailable
+          ? `Missing servers: ${!qwenAvailable ? 'qwen' : ''} ${!phiAvailable ? 'phi' : ''}`.trim()
+          : undefined,
+      };
+    } catch (error) {
+      return {
+        available: false,
+        modelCount: 0,
+        loadedModels: [],
+        error: String(error),
+      };
+    }
+  }
+
+  async generate(request: GenerationRequest): Promise<GenerationResponse> {
+    const startTime = Date.now();
+
+    // Use Qwen for outer, Phi for inner (based on model name in request)
+    const endpoint = request.modelName.includes('qwen') || request.modelName.includes('outer')
+      ? this.qwenEndpoint
+      : this.phiEndpoint;
+
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: request.modelName,
+          messages: [
+            { role: 'user', content: request.prompt }
+          ],
+          temperature: request.params.temperature,
+          max_tokens: request.params.maxTokens,
+          top_p: request.params.topP,
+          top_k: request.params.topK,
+          stop: request.params.stopSequences,
+          stream: false,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Llama.cpp API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json() as any;
+
+      return {
+        content: data.choices?.[0]?.message?.content || '',
+        tokensGenerated: data.usage?.completion_tokens || 0,
+        finishReason: data.choices?.[0]?.finish_reason === 'stop' ? 'stop' : 'length',
+        processingTimeMs: Date.now() - startTime,
+        modelName: request.modelName,
+      };
+    } catch (error) {
+      return {
+        content: '',
+        tokensGenerated: 0,
+        finishReason: 'error',
+        processingTimeMs: Date.now() - startTime,
+        modelName: request.modelName,
+      };
+    }
+  }
+
+  async listModels(): Promise<string[]> {
+    const health = await this.healthCheck();
+    return health.loadedModels;
+  }
+
+  async isModelLoaded(modelName: string): Promise<boolean> {
+    const models = await this.listModels();
+    return models.some(m => m.includes(modelName));
+  }
+}
+
+/**
  * Model backend manager
  * Handles backend selection and fallback
  */
@@ -397,7 +511,7 @@ export class ModelBackendManager {
     console.log('[ModelBackend] Auto-detecting backends...');
 
     // Try backends in order of preference
-    const priority = ['ollama', 'mock'];
+    const priority = ['llamacpp', 'ollama', 'mock'];
 
     for (const name of priority) {
       const backend = this.backends.get(name);
