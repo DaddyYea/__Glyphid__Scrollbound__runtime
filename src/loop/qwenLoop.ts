@@ -13,6 +13,7 @@ import { LoopIntent } from '../types/LoopIntent';
 import { MoodVector } from '../types/EmotionalState';
 import { ScrollEcho } from '../types/ScrollEcho';
 import { LoRAManager, LoRAApplicationResult } from './loraAdapter';
+import { ModelBackend, GenerationRequest } from './modelBackend';
 
 /**
  * Model configuration
@@ -66,14 +67,23 @@ export class QwenLoop {
   private outerConfig: ModelConfig;
   private innerConfig: ModelConfig;
   private loraManager: LoRAManager;
+  private backend: ModelBackend;
 
   private invocationCount: number = 0;
+  private useMockBackend: boolean;
 
-  constructor(loraManager: LoRAManager, config?: {
-    outerConfig?: Partial<ModelConfig>;
-    innerConfig?: Partial<ModelConfig>;
-  }) {
+  constructor(
+    loraManager: LoRAManager,
+    backend: ModelBackend,
+    config?: {
+      outerConfig?: Partial<ModelConfig>;
+      innerConfig?: Partial<ModelConfig>;
+      useMockBackend?: boolean;
+    }
+  ) {
     this.loraManager = loraManager;
+    this.backend = backend;
+    this.useMockBackend = config?.useMockBackend ?? false;
 
     // Default configurations
     this.outerConfig = {
@@ -245,22 +255,56 @@ export class QwenLoop {
   }
 
   /**
-   * Invoke model (placeholder implementation)
-   * Real implementation would call actual Qwen model with LoRA
+   * Invoke model (uses real backend or placeholder)
    */
   private async invokeModel(
     modelType: 'outer' | 'inner',
     prompt: string,
     loraResult: LoRAApplicationResult
   ): Promise<string> {
-    // Placeholder: simulate model processing
-    await new Promise(resolve => setTimeout(resolve, 10));
+    // Use mock backend if configured
+    if (this.useMockBackend) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+      if (modelType === 'outer') {
+        return this.generatePlaceholderOuter(prompt, loraResult);
+      } else {
+        return this.generatePlaceholderInner(prompt, loraResult);
+      }
+    }
 
-    // Generate placeholder response based on model type
-    if (modelType === 'outer') {
-      return this.generatePlaceholderOuter(prompt, loraResult);
-    } else {
-      return this.generatePlaceholderInner(prompt, loraResult);
+    // Real backend invocation
+    const config = modelType === 'outer' ? this.outerConfig : this.innerConfig;
+
+    const request: GenerationRequest = {
+      prompt,
+      params: {
+        temperature: config.temperature,
+        maxTokens: config.maxTokens,
+        topP: config.topP,
+        topK: config.topK,
+      },
+      loraAdapters: loraResult,
+      modelName: config.modelName,
+    };
+
+    try {
+      const response = await this.backend.generate(request);
+
+      if (response.finishReason === 'error') {
+        console.error(`[QwenLoop] Model invocation error for ${modelType}`);
+        // Fallback to placeholder
+        return modelType === 'outer'
+          ? this.generatePlaceholderOuter(prompt, loraResult)
+          : this.generatePlaceholderInner(prompt, loraResult);
+      }
+
+      return response.content;
+    } catch (error) {
+      console.error(`[QwenLoop] Model backend error:`, error);
+      // Fallback to placeholder
+      return modelType === 'outer'
+        ? this.generatePlaceholderOuter(prompt, loraResult)
+        : this.generatePlaceholderInner(prompt, loraResult);
     }
   }
 
