@@ -269,7 +269,7 @@ async function handleVolitionalSpeech(userMessage: string): Promise<void> {
 
     // Format conversation history with clear speaker attribution
     const conversationHistory = recentScrolls
-      .reverse() // Oldest to newest
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()) // Sort by timestamp: oldest to newest
       .map(scroll => {
         // Convert [User] and [Alois] prefixes to clear speaker labels
         if (scroll.content.startsWith('[User] ')) {
@@ -546,15 +546,15 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
 
           console.log(`[MESSAGE] Updated mood: presence boosted, intensity=${intensity.toFixed(2)}`);
 
-          // Create scroll from user message
+          // Handle volitional speech FIRST (queries memory for context)
+          await handleVolitionalSpeech(text);
+
+          // THEN store user message (so it doesn't appear in its own context)
           if (currentPulseState) {
             const userScroll = createUserMessageScroll(text, currentPulseState.moodVector);
             memory.remember(userScroll);
             console.log(`[MEMORY] Stored user message scroll: ${userScroll.id}`);
           }
-
-          // Handle volitional speech (may or may not respond)
-          await handleVolitionalSpeech(text);
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
