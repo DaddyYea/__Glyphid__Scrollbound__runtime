@@ -261,12 +261,26 @@ async function handleVolitionalSpeech(userMessage: string): Promise<void> {
   console.log(`[SPEECH] Reasoning: ${voiceIntent.reasoning}`);
 
   if (voiceIntent.shouldSpeak) {
-    // Generate speech
+    // Query recent conversation history from memory
+    const recentScrolls = memory.recall({
+      categories: ['conversation'],
+      limit: 10, // Last 10 messages
+    });
+
+    // Format conversation history for context
+    const conversationHistory = recentScrolls
+      .reverse() // Oldest to newest
+      .map(scroll => scroll.content);
+
+    console.log(`[MEMORY] Retrieved ${conversationHistory.length} messages for context`);
+
+    // Generate speech with conversation history
     const speechResult = await qwenLoop.generateSpeech({
       relationalState,
       breathState,
       pulseState: currentPulseState,
       userMessage,
+      conversationHistory,
     });
 
     if (speechResult.text) {

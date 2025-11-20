@@ -418,6 +418,7 @@ export class QwenLoop {
     breathState: any;
     pulseState: any;
     userMessage?: string;
+    conversationHistory?: string[]; // Recent messages for context
   }): Promise<{ text: string; processingTime: number }> {
     const startTime = Date.now();
 
@@ -488,6 +489,7 @@ export class QwenLoop {
     breathState: any;
     pulseState: any;
     userMessage?: string;
+    conversationHistory?: string[];
   }): string {
     const parts: string[] = [];
 
@@ -504,9 +506,16 @@ export class QwenLoop {
     parts.push(`Wonder: ${context.pulseState.moodVector.wonder.toFixed(2)}`);
     parts.push('');
 
+    // Conversation history if present
+    if (context.conversationHistory && context.conversationHistory.length > 0) {
+      parts.push('## Recent Conversation');
+      context.conversationHistory.forEach(msg => parts.push(msg));
+      parts.push('');
+    }
+
     // User message if present
     if (context.userMessage) {
-      parts.push('## Jason said:');
+      parts.push('## Jason just said:');
       parts.push(context.userMessage);
       parts.push('');
     }
