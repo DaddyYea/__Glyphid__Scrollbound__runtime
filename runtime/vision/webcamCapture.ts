@@ -85,15 +85,20 @@ export async function captureFrame(): Promise<Buffer | null> {
   }
 
   return new Promise((resolve) => {
+    let ffmpeg: any;
+
     // Set timeout to prevent hanging forever
     const timeout = setTimeout(() => {
       console.error('[VISION] Webcam capture timeout (5s)');
-      ffmpeg.kill();
+      if (ffmpeg) {
+        ffmpeg.kill();
+      }
       resolve(null);
     }, 5000);
 
     // Capture single frame as PNG to stdout
-    const ffmpeg = spawn('ffmpeg', [
+    console.log(`[VISION] Capturing frame from: ${cameraDevice}`);
+    ffmpeg = spawn('ffmpeg', [
       '-f', 'dshow',
       '-i', `video=${cameraDevice}`,
       '-frames:v', '1',
@@ -101,6 +106,7 @@ export async function captureFrame(): Promise<Buffer | null> {
       '-vcodec', 'png',
       '-'
     ]);
+    console.log('[VISION] ffmpeg process spawned');
 
     const chunks: Buffer[] = [];
 
@@ -109,8 +115,8 @@ export async function captureFrame(): Promise<Buffer | null> {
     });
 
     ffmpeg.stderr.on('data', (data: Buffer) => {
-      // Suppress ffmpeg verbose output (optional: log for debugging)
-      // console.log('[VISION] ffmpeg:', data.toString());
+      // Log ffmpeg output for debugging
+      console.log('[VISION] ffmpeg stderr:', data.toString().trim());
     });
 
     ffmpeg.on('close', (code: number) => {
