@@ -97,7 +97,6 @@ export async function captureFrame(): Promise<Buffer | null> {
     }, 5000);
 
     // Capture single frame as PNG to stdout
-    console.log(`[VISION] Capturing frame from: ${cameraDevice}`);
     ffmpeg = spawn('ffmpeg', [
       '-f', 'dshow',
       '-i', `video=${cameraDevice}`,
@@ -106,7 +105,6 @@ export async function captureFrame(): Promise<Buffer | null> {
       '-vcodec', 'png',
       '-'
     ]);
-    console.log('[VISION] ffmpeg process spawned');
 
     const chunks: Buffer[] = [];
 
@@ -115,8 +113,11 @@ export async function captureFrame(): Promise<Buffer | null> {
     });
 
     ffmpeg.stderr.on('data', (data: Buffer) => {
-      // Log ffmpeg output for debugging
-      console.log('[VISION] ffmpeg stderr:', data.toString().trim());
+      // Only log errors, not the full verbose ffmpeg output
+      const output = data.toString();
+      if (output.includes('error') || output.includes('Error') || output.includes('failed')) {
+        console.error('[VISION] ffmpeg error:', output.trim());
+      }
     });
 
     ffmpeg.on('close', (code: number) => {
