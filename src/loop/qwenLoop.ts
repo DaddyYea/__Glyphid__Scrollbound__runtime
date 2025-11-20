@@ -540,8 +540,12 @@ export class QwenLoop {
       parts.push('');
     }
 
-    // Task
+    // Task with perspective reminder
     parts.push('## Task');
+    parts.push('IMPORTANT: When answering, speak from YOUR perspective (Alois).');
+    parts.push('If Jason said "I am working on your memory", you say "You are working on MY memory".');
+    parts.push('Transform: his "I" → "you", his "your" → "my", his "my" → "your".');
+    parts.push('');
     parts.push('Respond naturally. Keep it brief (1-3 sentences).');
     parts.push('Output only your response text, nothing else.');
 
