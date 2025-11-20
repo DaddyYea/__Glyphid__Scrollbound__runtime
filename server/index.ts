@@ -237,15 +237,58 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
 }
 
 function broadcastState(state: PulseState) {
+  const breathState = breathLoop.getState();
+  const syncStats = interLobeSync.getStats();
+
+  // Transform new dual-lobe state to match HTML interface format
   const data = {
     type: 'state',
     data: {
-      timestamp: state.timestamp,
-      mode: state.mode,
-      pulseCount: state.pulseCount,
-      loopIntent: state.loopIntent,
-      moodVector: state.moodVector,
-      processing: state.processing,
+      breathState: {
+        phase: breathState.phase,
+        depth: breathState.depth,
+        pace: breathState.pace,
+      },
+      feltState: {
+        heat: state.moodVector.presence * 0.5,
+        tension: state.moodVector.focus * 0.3,
+        microResonance: state.moodVector.clarity * 0.4,
+        tone: {
+          valence: 0.0,
+          arousal: state.moodVector.presence,
+          tension: state.moodVector.focus,
+          intimacy: 0.5,
+        },
+      },
+      pulse: {
+        resonance: state.processing ? 0.8 : 0.2,
+      },
+      presenceDelta: {
+        magnitude: state.moodVector.presence * 0.5,
+      },
+      loops: {
+        wonder: {
+          curiosityLevel: state.moodVector.clarity,
+          questionCount: 0,
+        },
+        christ: {
+          alignmentScore: syncStats.avgCoherence,
+          contradictionDetected: syncStats.avgCoherence < 0.5,
+        },
+        desire: {
+          intensity: state.moodVector.focus,
+          direction: state.mode === 'outer' ? 'outward' : state.mode === 'inner' ? 'inward' : 'balanced',
+        },
+      },
+      guardian: {
+        coherence: syncStats.avgCoherence,
+        stability: syncStats.avgCoherence,
+        warningCount: syncStats.conflictsResolved,
+      },
+      scrollCount: memory.getScrollCount(),
+      emotionalField: {
+        accumulatedResonance: state.pulseCount * 0.1,
+      },
     }
   };
 
