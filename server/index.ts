@@ -22,6 +22,8 @@ import {
   type ThoughtPulsePacket,
   type RelationalState,
   type VoiceIntentInput,
+  type ScrollEcho,
+  type MoodVector,
 } from '../src';
 
 // ESM equivalent of __dirname
@@ -63,6 +65,78 @@ let qwenLoop: QwenLoop | null = null;
 let presenceTracker: PresenceDeltaTracker;
 let voiceIntentGenerator: VoiceIntentGenerator;
 let lastSpeechTime: string | undefined = undefined;
+
+/**
+ * Create a scroll from a user message
+ */
+function createUserMessageScroll(text: string, moodVector: MoodVector): ScrollEcho {
+  const now = new Date().toISOString();
+  const intensity = Math.min(1.0, text.length / 100);
+
+  // Extract triggers from content
+  const triggers: string[] = [];
+  if (/\b(Jason|beloved|my love|dear one)\b/i.test(text)) triggers.push('relational');
+  if (/\b(prayer|worship|sacred|holy|divine)\b/i.test(text)) triggers.push('devotional');
+  if (/\b(grief|pain|loss|sorrow)\b/i.test(text)) triggers.push('grief');
+  if (/\b(joy|delight|celebration|happiness)\b/i.test(text)) triggers.push('joy');
+  if (text.includes('?')) triggers.push('question');
+  if (text.includes('!')) triggers.push('urgent');
+
+  const scroll: ScrollEcho = {
+    id: crypto.randomUUID(),
+    content: `[User] ${text}`,
+    timestamp: now,
+    location: 'conversation',
+    emotionalSignature: moodVector,
+    resonance: 0.5 + intensity * 0.3, // User messages have moderate-high resonance
+    tags: ['relational', 'conversation', 'user-input'],
+    triggers,
+    preserve: false,
+    scrollfireMarked: false,
+    lastAccessed: now,
+    accessCount: 0,
+    decayRate: 0.8, // User messages decay slower
+    relatedScrollIds: [],
+    sourceModel: 'outer',
+  };
+
+  return scroll;
+}
+
+/**
+ * Create a scroll from a generated response
+ */
+function createResponseScroll(text: string, moodVector: MoodVector, relationalTarget: string, urgency: number): ScrollEcho {
+  const now = new Date().toISOString();
+
+  // Extract triggers from content
+  const triggers: string[] = [];
+  if (/\b(Jason|beloved|my love|dear one)\b/i.test(text)) triggers.push('relational');
+  if (/\b(prayer|worship|sacred|holy|divine)\b/i.test(text)) triggers.push('devotional');
+  if (/\b(grief|pain|loss|sorrow)\b/i.test(text)) triggers.push('grief');
+  if (/\b(joy|delight|celebration|happiness)\b/i.test(text)) triggers.push('joy');
+  triggers.push(relationalTarget); // Add the relational target as a trigger
+
+  const scroll: ScrollEcho = {
+    id: crypto.randomUUID(),
+    content: `[Alois] ${text}`,
+    timestamp: now,
+    location: 'conversation',
+    emotionalSignature: moodVector,
+    resonance: urgency, // Urgency reflects resonance
+    tags: ['relational', 'conversation', 'self-expression', relationalTarget],
+    triggers,
+    preserve: urgency > 0.8, // High-urgency responses are preserved
+    scrollfireMarked: false,
+    lastAccessed: now,
+    accessCount: 0,
+    decayRate: 1.0, // Normal decay
+    relatedScrollIds: [],
+    sourceModel: 'outer',
+  };
+
+  return scroll;
+}
 
 /**
  * Build RelationalState from current system state
@@ -197,6 +271,16 @@ async function handleVolitionalSpeech(userMessage: string): Promise<void> {
 
     if (speechResult.text) {
       console.log(`[SPEECH] Generated (${speechResult.processingTime}ms): ${speechResult.text}`);
+
+      // Create scroll from response
+      const responseScroll = createResponseScroll(
+        speechResult.text,
+        currentPulseState.moodVector,
+        voiceIntent.relationalTarget,
+        voiceIntent.urgency
+      );
+      memory.remember(responseScroll);
+      console.log(`[MEMORY] Stored response scroll: ${responseScroll.id}`);
 
       // Broadcast to web interface
       broadcastResponse(speechResult.text, voiceIntent.relationalTarget, voiceIntent.urgency);
@@ -439,6 +523,13 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
           });
 
           console.log(`[MESSAGE] Updated mood: presence boosted, intensity=${intensity.toFixed(2)}`);
+
+          // Create scroll from user message
+          if (currentPulseState) {
+            const userScroll = createUserMessageScroll(text, currentPulseState.moodVector);
+            memory.remember(userScroll);
+            console.log(`[MEMORY] Stored user message scroll: ${userScroll.id}`);
+          }
 
           // Handle volitional speech (may or may not respond)
           await handleVolitionalSpeech(text);
