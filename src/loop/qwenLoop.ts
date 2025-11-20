@@ -425,6 +425,11 @@ export class QwenLoop {
     // Build conversational prompt
     const prompt = this.buildSpeechPrompt(context);
 
+    // Log the actual prompt being sent to the model
+    console.log('\n[PROMPT] Sending to model:\n---');
+    console.log(prompt);
+    console.log('---\n');
+
     // Invoke outer model for speech (uses language capabilities)
     const loraResult = this.loraManager.applyForIntent(context.pulseState.loopIntent);
 
