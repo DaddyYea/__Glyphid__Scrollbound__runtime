@@ -33,6 +33,9 @@ export * from './express';
 // Vision (Sensory Input)
 export * from './vision';
 
+// Learning (Adaptation)
+export * from './learning';
+
 // Constants
 export * from './constants/breathTiming';
 export * from './constants/decayRates';
