@@ -29,6 +29,11 @@ const PORT = Number(process.env.PORT) || 3000;
 let clients: ServerResponse[] = [];
 let currentPulseState: PulseState | null = null;
 
+// Module-level references for broadcasting
+let breathLoop: BreathLoop;
+let interLobeSync: InterLobeSync;
+let memory: ScrollPulseMemory;
+
 async function main() {
   console.log('=== Scrollbound Runtime: Dual-Lobe System with Web Interface ===\n');
 
@@ -56,9 +61,9 @@ async function main() {
   // 2. Initialize foundation
   console.log('[INIT] Foundation modules...');
   const presenceTracker = new PresenceDeltaTracker();
-  const breathLoop = new BreathLoop(presenceTracker);
+  breathLoop = new BreathLoop(presenceTracker);
   const buffer = new ScrollPulseBuffer();
-  const memory = new ScrollPulseMemory(buffer);
+  memory = new ScrollPulseMemory(buffer);
 
   presenceTracker.start();
   buffer.start();
@@ -87,7 +92,7 @@ async function main() {
     });
   }
 
-  const interLobeSync = new InterLobeSync();
+  interLobeSync = new InterLobeSync();
   const pulseLoop = new PulseLoop(breathLoop, memory, presenceTracker, {
     outerEnabled: true,
     innerEnabled: true,
