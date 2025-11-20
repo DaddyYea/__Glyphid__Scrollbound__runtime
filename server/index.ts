@@ -69,8 +69,7 @@ let lastSpeechTime: string | undefined = undefined;
 /**
  * Create a scroll from a user message
  */
-function createUserMessageScroll(text: string, moodVector: MoodVector): ScrollEcho {
-  const now = new Date().toISOString();
+function createUserMessageScroll(text: string, moodVector: MoodVector, timestamp: string): ScrollEcho {
   const intensity = Math.min(1.0, text.length / 100);
 
   // Extract triggers from content
@@ -85,7 +84,7 @@ function createUserMessageScroll(text: string, moodVector: MoodVector): ScrollEc
   const scroll: ScrollEcho = {
     id: crypto.randomUUID(),
     content: `[User] ${text}`,
-    timestamp: now,
+    timestamp, // Use provided timestamp (captured before response generation)
     location: 'conversation',
     emotionalSignature: moodVector,
     resonance: 0.5 + intensity * 0.3, // User messages have moderate-high resonance
@@ -93,7 +92,7 @@ function createUserMessageScroll(text: string, moodVector: MoodVector): ScrollEc
     triggers,
     preserve: false,
     scrollfireMarked: false,
-    lastAccessed: now,
+    lastAccessed: timestamp,
     accessCount: 0,
     decayRate: 0.8, // User messages decay slower
     relatedScrollIds: [],
@@ -546,12 +545,15 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
 
           console.log(`[MESSAGE] Updated mood: presence boosted, intensity=${intensity.toFixed(2)}`);
 
+          // Capture timestamp BEFORE generating response (so user message gets earlier timestamp)
+          const messageTimestamp = new Date().toISOString();
+
           // Handle volitional speech FIRST (queries memory for context)
           await handleVolitionalSpeech(text);
 
-          // THEN store user message (so it doesn't appear in its own context)
+          // THEN store user message with earlier timestamp (so it doesn't appear in its own context AND appears before response in timeline)
           if (currentPulseState) {
-            const userScroll = createUserMessageScroll(text, currentPulseState.moodVector);
+            const userScroll = createUserMessageScroll(text, currentPulseState.moodVector, messageTimestamp);
             memory.remember(userScroll);
             console.log(`[MEMORY] Stored user message scroll: ${userScroll.id}`);
           }
