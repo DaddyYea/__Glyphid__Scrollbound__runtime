@@ -21,11 +21,13 @@
   "license": "UNLICENSED",
   "dependencies": {
     "node-fetch": "^2.7.0",
-    "node-webcam": "^0.8.2"
+    "node-webcam": "^0.8.2",
+    "pngjs": "^7.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/node-fetch": "^2.6.11",
+    "@types/pngjs": "^6.0.5",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"
   }

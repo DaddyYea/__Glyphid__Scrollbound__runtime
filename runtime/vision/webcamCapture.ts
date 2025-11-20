@@ -2,10 +2,8 @@
 // Real webcam capture for Windows using node-webcam
 // Extracts RawVisionInput from captured frames
 
-import NodeWebcam from 'node-webcam';
+import NodeWebcam = require('node-webcam');
 import { PNG } from 'pngjs';
-import * as fs from 'fs';
-import * as path from 'path';
 import { RawVisionInput } from './visionTypes';
 
 interface WebcamConfig {
@@ -69,7 +67,7 @@ export async function analyzeFrame(buffer: Buffer): Promise<RawVisionInput> {
   return new Promise((resolve, reject) => {
     const png = new PNG();
 
-    png.parse(buffer, (err, data) => {
+    png.parse(buffer, (err: Error | null, data: PNG) => {
       if (err) {
         reject(err);
         return;
