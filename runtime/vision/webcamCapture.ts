@@ -62,12 +62,20 @@ export async function captureFrame(): Promise<Buffer | null> {
   }
 
   return new Promise((resolve) => {
+    // Set timeout to prevent hanging forever
+    const timeout = setTimeout(() => {
+      console.error('[VISION] Webcam capture timeout (5s)');
+      resolve(null);
+    }, 5000);
+
     webcam.capture('frame', (err: Error | null, data: Buffer) => {
+      clearTimeout(timeout);
       if (err) {
         console.error('[VISION] Webcam capture failed:', err.message);
         resolve(null);
       } else {
         frameCount++;
+        console.log(`[VISION] Frame ${frameCount} captured successfully`);
         resolve(data);
       }
     });
