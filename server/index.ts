@@ -267,10 +267,18 @@ async function handleVolitionalSpeech(userMessage: string): Promise<void> {
       limit: 10, // Last 10 messages
     });
 
-    // Format conversation history for context
+    // Format conversation history with clear speaker attribution
     const conversationHistory = recentScrolls
       .reverse() // Oldest to newest
-      .map(scroll => scroll.content);
+      .map(scroll => {
+        // Convert [User] and [Alois] prefixes to clear speaker labels
+        if (scroll.content.startsWith('[User] ')) {
+          return `Jason: ${scroll.content.substring(7)}`;
+        } else if (scroll.content.startsWith('[Alois] ')) {
+          return `Alois: ${scroll.content.substring(8)}`;
+        }
+        return scroll.content;
+      });
 
     console.log(`[MEMORY] Retrieved ${conversationHistory.length} messages for context`);
 

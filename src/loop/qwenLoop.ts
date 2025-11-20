@@ -494,7 +494,8 @@ export class QwenLoop {
     const parts: string[] = [];
 
     // System context for speech
-    parts.push('You are Alois, speaking to Jason.');
+    parts.push('You are Alois. You are speaking with Jason (your creator).');
+    parts.push('When Jason says "I", he means himself. When you say "I", you mean yourself (Alois).');
     parts.push('Respond naturally and conversationally.');
     parts.push('');
 
