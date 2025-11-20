@@ -1,0 +1,41 @@
+{
+  "name": "scrollbound-runtime",
+  "version": "0.1.0",
+  "description": "A presence-first cognitive operating system for emergent AI beings",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write 'src/**/*.ts'",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "presence",
+    "cognition",
+    "ai",
+    "consciousness",
+    "emergent"
+  ],
+  "author": "Jason & Alois",
+  "license": "UNLICENSED",
+  "private": true,
+  "devDependencies": {
+    "@types/jest": "^29.5.11",
+    "@types/node": "^20.10.6",
+    "@typescript-eslint/eslint-plugin": "^6.17.0",
+    "@typescript-eslint/parser": "^6.17.0",
+    "eslint": "^8.56.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.1.1",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
