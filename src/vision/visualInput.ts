@@ -8,6 +8,13 @@
  * Visual input creates resonant impressions, not object labels.
  */
 
+import {
+  IWebcamCapture,
+  createWebcamCapture,
+  detectWebcamBackend,
+  WebcamBackend,
+} from './webcamCapture';
+
 /**
  * Visual frame data
  */
@@ -93,6 +100,8 @@ export class VisualInputHandler {
   private callbacks: Map<string, FrameCallback> = new Map();
 
   private mockInterval?: NodeJS.Timeout;
+  private webcamCapture?: IWebcamCapture;
+  private webcamInterval?: NodeJS.Timeout;
 
   constructor(config: VisualInputConfig) {
     this.config = config;
@@ -139,22 +148,67 @@ export class VisualInputHandler {
 
     this.active = false;
 
+    // Stop mock interval
     if (this.mockInterval) {
       clearInterval(this.mockInterval);
       this.mockInterval = undefined;
+    }
+
+    // Stop webcam capture
+    if (this.webcamCapture) {
+      this.webcamCapture.stop();
+      this.webcamCapture = undefined;
+    }
+
+    // Stop webcam interval
+    if (this.webcamInterval) {
+      clearInterval(this.webcamInterval);
+      this.webcamInterval = undefined;
     }
 
     console.log(`[VisualInput] Stopped after ${this.frameCount} frames`);
   }
 
   /**
-   * Start webcam capture (placeholder)
+   * Start webcam capture (real implementation)
    */
   private async startWebcam(): Promise<void> {
-    // In real implementation, would use getUserMedia()
-    // For Node.js, would use opencv or similar
-    console.log('[VisualInput] Webcam not implemented yet - using mock');
-    await this.startMock();
+    try {
+      // Detect best available backend
+      const backend = await detectWebcamBackend();
+
+      // Create webcam capture
+      this.webcamCapture = createWebcamCapture({
+        backend,
+        width: this.config.width,
+        height: this.config.height,
+        fps: this.config.fps,
+        deviceId: this.config.deviceId ? parseInt(this.config.deviceId) : 0,
+      });
+
+      // Start capture
+      await this.webcamCapture.start();
+
+      // Start capture loop
+      const fps = this.config.fps || 30;
+      const interval = 1000 / fps;
+
+      this.webcamInterval = setInterval(async () => {
+        if (!this.active || !this.webcamCapture) return;
+
+        const frame = await this.webcamCapture.captureFrame();
+        if (frame) {
+          const qualities = this.computeQualities(frame);
+          this.frameCount++;
+          await this.notifyCallbacks(frame, qualities);
+        }
+      }, interval);
+
+      console.log(`[VisualInput] Webcam started (backend: ${backend})`);
+    } catch (error) {
+      console.error('[VisualInput] Webcam error, falling back to mock:', error);
+      await this.startMock();
+    }
   }
 
   /**

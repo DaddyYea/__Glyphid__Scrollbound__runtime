@@ -5,3 +5,7 @@
  */
 
 export * from './visualInput';
+export * from './feltLight';
+export * from './presenceSensing';
+export * from './visionIntegration';
+export * from './webcamCapture';
