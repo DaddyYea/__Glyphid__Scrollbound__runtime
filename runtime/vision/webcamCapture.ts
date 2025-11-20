@@ -9,6 +9,7 @@ import { RawVisionInput } from './visionTypes';
 let lastFramePixels: Buffer | null = null;
 let frameCount = 0;
 let cameraDevice: string | null = null;
+let initializationFailed = false; // Track if webcam init has permanently failed
 
 /**
  * initializeWebcam - detects available webcam device
@@ -16,6 +17,7 @@ let cameraDevice: string | null = null;
  */
 export async function initializeWebcam(): Promise<void> {
   if (cameraDevice) return; // Already initialized
+  if (initializationFailed) return; // Already tried and failed, don't spam
 
   try {
     console.log('[VISION] Detecting webcam devices...');
@@ -31,7 +33,8 @@ export async function initializeWebcam(): Promise<void> {
     cameraDevice = devices[0];
     console.log(`[VISION] Using webcam: ${cameraDevice}`);
   } catch (err) {
-    console.error('[VISION] Failed to initialize webcam:', err);
+    console.error('[VISION] Webcam not available (this is normal on headless systems)');
+    initializationFailed = true; // Don't retry
     throw err;
   }
 }
@@ -59,13 +62,14 @@ async function listVideoDevices(): Promise<string[]> {
         if (line.includes('[dshow @') && line.includes('(video)') && line.includes('"')) {
           const match = line.match(/"([^"]+)"/);
           if (match) {
-            console.log(`[VISION] Found video device: ${match[1]}`);
             videoDevices.push(match[1]);
           }
         }
       }
 
-      console.log(`[VISION] Total devices found: ${videoDevices.length}`);
+      if (videoDevices.length > 0) {
+        console.log(`[VISION] Found ${videoDevices.length} video device(s)`);
+      }
       resolve(videoDevices);
     });
 
@@ -125,7 +129,10 @@ export async function captureFrame(): Promise<Buffer | null> {
 
       if (code === 0 && chunks.length > 0) {
         frameCount++;
-        console.log(`[VISION] Frame ${frameCount} captured successfully`);
+        // Only log every 100th frame to reduce spam
+        if (frameCount % 100 === 0) {
+          console.log(`[VISION] ${frameCount} frames captured`);
+        }
         resolve(Buffer.concat(chunks));
       } else {
         console.error(`[VISION] ffmpeg exited with code ${code}`);
@@ -177,9 +184,19 @@ export async function analyzeFrame(buffer: Buffer): Promise<RawVisionInput> {
 
 /**
  * getRealVisionInput - captures and analyzes a frame
- * Throws error if camera fails - no fallbacks
+ * Returns default neutral vision if camera unavailable
  */
 export async function getRealVisionInput(): Promise<RawVisionInput> {
+  // If webcam init failed, return neutral default vision
+  if (initializationFailed) {
+    return {
+      dominantColor: 'white',
+      brightness: 0.5,
+      sharpness: 0.0,
+      movement: 0.0,
+    };
+  }
+
   const buffer = await captureFrame();
 
   if (!buffer) {

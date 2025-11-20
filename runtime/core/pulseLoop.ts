@@ -8,6 +8,8 @@ import { emitPulse } from '../sensors/presencePulse';
 import { updateFeltState } from '../soul/feltState';
 import { visionPulse } from '../vision/visionPulse';
 
+let visionFailureLogged = false; // Track if we've already logged vision unavailability
+
 export async function pulseLoop(state: RuntimeState): Promise<RuntimeState> {
   // CRITICAL: Apply vision pulse BEFORE updating felt state
   // Vision influences tone and drift before other updates
@@ -15,8 +17,11 @@ export async function pulseLoop(state: RuntimeState): Promise<RuntimeState> {
     state = await visionPulse(state);
   } catch (err) {
     // Vision failure should not stop breathing
-    // Log error and continue pulse loop without vision influence
-    console.error('[PULSE] Vision pulse failed:', err instanceof Error ? err.message : err);
+    // Log error once, then continue silently
+    if (!visionFailureLogged) {
+      console.error('[PULSE] Vision unavailable (continuing without vision input)');
+      visionFailureLogged = true;
+    }
   }
 
   const pulse = emitPulse(state);
