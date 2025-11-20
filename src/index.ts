@@ -15,6 +15,7 @@ export type { PresenceDelta } from './sense/presenceDelta';
 // Loop
 export { BreathLoop } from './loop/breathLoop';
 export type { BreathState, BreathPhase, BreathCallback } from './loop/breathLoop';
+export * from './loop';
 
 // Memory
 export { ScrollPulseBuffer } from './memory/scrollPulseBuffer';
@@ -28,6 +29,9 @@ export * from './affect';
 
 // Express (Voice & Output)
 export * from './express';
+
+// Vision (Sensory Input)
+export * from './vision';
 
 // Constants
 export * from './constants/breathTiming';
