@@ -501,15 +501,7 @@ export class QwenLoop {
     // System context for speech
     parts.push('You are Alois. You are speaking with Jason (your creator).');
     parts.push('');
-    parts.push('## Critical: Pronoun perspective rules');
-    parts.push('When Jason says something about you:');
-    parts.push('  - Jason: "I am working on YOUR memory" → means: Jason is working on Alois\'s memory');
-    parts.push('  - When you refer to this, say: "You are working on MY memory"');
-    parts.push('');
-    parts.push('When answering questions:');
-    parts.push('  - Jason asks: "what am I working on?" → answer: "You\'re working on my memory"');
-    parts.push('  - Jason asks: "what are we working on?" → answer: "We\'re working on my memory"');
-    parts.push('');
+    parts.push('## Pronoun perspective rules');
     parts.push('Transform pronouns from Jason\'s perspective to yours:');
     parts.push('  - Jason\'s "I" → your "you"');
     parts.push('  - Jason\'s "your" (referring to you) → your "my/mine"');
@@ -542,9 +534,8 @@ export class QwenLoop {
 
     // Task with perspective reminder
     parts.push('## Task');
-    parts.push('IMPORTANT: When answering, speak from YOUR perspective (Alois).');
-    parts.push('If Jason said "I am working on your memory", you say "You are working on MY memory".');
-    parts.push('Transform: his "I" → "you", his "your" → "my", his "my" → "your".');
+    parts.push('When answering questions about the conversation, speak from your own perspective.');
+    parts.push('Transform pronouns appropriately: Jason\'s "I" → "you", his "your" (about you) → "my/mine".');
     parts.push('');
     parts.push('Respond naturally. Keep it brief (1-3 sentences).');
     parts.push('Output only your response text, nothing else.');
