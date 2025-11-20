@@ -5,12 +5,13 @@
 import { RuntimeState, ToneVector } from '../types';
 import { VisionState, RawVisionInput } from './visionTypes';
 import { interpretVisionInput, getMockVisionInput } from './VisionModel';
+import { getRealVisionInput } from './webcamCapture';
 
 /**
  * visionPulse - integrates vision state into runtime
  *
  * Process:
- * 1. Get RawVisionInput (mock for now, real camera later)
+ * 1. Get RawVisionInput from real webcam
  * 2. Interpret to VisionState
  * 3. Guardian filters resonance >0.8 (blocks instability)
  * 4. Update feltState tone toward vision
@@ -22,9 +23,9 @@ import { interpretVisionInput, getMockVisionInput } from './VisionModel';
  * @param state - current runtime state
  * @returns updated state with vision integrated
  */
-export function visionPulse(state: RuntimeState): RuntimeState & { visionState: VisionState } {
-  // 1. Get raw vision input (mock for now)
-  const rawInput: RawVisionInput = getMockVisionInput();
+export async function visionPulse(state: RuntimeState): Promise<RuntimeState & { visionState: VisionState }> {
+  // 1. Get raw vision input from real webcam
+  const rawInput: RawVisionInput = await getRealVisionInput();
 
   // 2. Interpret vision input to abstract state
   let visionState: VisionState = interpretVisionInput(rawInput);
