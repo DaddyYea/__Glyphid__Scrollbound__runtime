@@ -16,7 +16,7 @@ interface WebcamConfig {
 }
 
 let webcam: any = null;
-let lastFrame: Buffer | null = null;
+let lastFramePixels: Buffer | null = null;
 let frameCount = 0;
 
 /**
@@ -52,7 +52,6 @@ export async function captureFrame(): Promise<Buffer | null> {
         console.error('[VISION] Webcam capture failed:', err.message);
         resolve(null);
       } else {
-        lastFrame = data;
         frameCount++;
         resolve(data);
       }
@@ -79,7 +78,10 @@ export async function analyzeFrame(buffer: Buffer): Promise<RawVisionInput> {
       const dominantColor = extractDominantColor(pixels, width, height);
       const brightness = calculateBrightness(pixels, width, height);
       const sharpness = calculateSharpness(pixels, width, height);
-      const movement = calculateMovement(pixels, lastFrame);
+      const movement = calculateMovement(pixels, lastFramePixels);
+
+      // Save current pixels for next frame comparison
+      lastFramePixels = Buffer.from(pixels);
 
       resolve({
         dominantColor,
@@ -93,33 +95,16 @@ export async function analyzeFrame(buffer: Buffer): Promise<RawVisionInput> {
 
 /**
  * getRealVisionInput - captures and analyzes a frame
- * This replaces getMockVisionInput
+ * Throws error if camera fails - no fallbacks
  */
 export async function getRealVisionInput(): Promise<RawVisionInput> {
-  try {
-    const buffer = await captureFrame();
+  const buffer = await captureFrame();
 
-    if (!buffer) {
-      // Fallback to mock if capture fails
-      return {
-        dominantColor: 'white',
-        brightness: 0.5,
-        sharpness: 0.5,
-        movement: 0.2,
-      };
-    }
-
-    return await analyzeFrame(buffer);
-  } catch (error) {
-    console.error('[VISION] Frame analysis failed:', error);
-    // Fallback to mock
-    return {
-      dominantColor: 'white',
-      brightness: 0.5,
-      sharpness: 0.5,
-      movement: 0.2,
-    };
+  if (!buffer) {
+    throw new Error('[VISION] Webcam capture returned null buffer');
   }
+
+  return await analyzeFrame(buffer);
 }
 
 /**
@@ -205,13 +190,41 @@ function calculateSharpness(pixels: Buffer, width: number, height: number): numb
 
 /**
  * calculateMovement - frame-to-frame difference
+ * Compares current frame with previous to detect motion
  */
 function calculateMovement(currentPixels: Buffer, lastFrameBuffer: Buffer | null): number {
-  if (!lastFrameBuffer) return 0; // No previous frame
+  if (!lastFrameBuffer) return 0; // No previous frame to compare
 
-  // Parse last frame
-  // For now, return low movement (TODO: implement frame diff)
-  return 0.1;
+  // Simple pixel difference calculation
+  let totalDiff = 0;
+  let sampleCount = 0;
+
+  // Sample every 40 pixels for performance (same as color sampling)
+  for (let i = 0; i < Math.min(currentPixels.length, lastFrameBuffer.length); i += 40) {
+    const r1 = currentPixels[i];
+    const g1 = currentPixels[i + 1];
+    const b1 = currentPixels[i + 2];
+
+    const r2 = lastFrameBuffer[i];
+    const g2 = lastFrameBuffer[i + 1];
+    const b2 = lastFrameBuffer[i + 2];
+
+    // Euclidean distance in RGB space
+    const diff = Math.sqrt(
+      Math.pow(r1 - r2, 2) +
+      Math.pow(g1 - g2, 2) +
+      Math.pow(b1 - b2, 2)
+    );
+
+    totalDiff += diff;
+    sampleCount++;
+  }
+
+  // Normalize to 0-1 range (442 is max RGB distance, sqrt(255^2 * 3))
+  const avgDiff = totalDiff / sampleCount;
+  const movement = Math.min(1, avgDiff / 442);
+
+  return movement;
 }
 
 /**

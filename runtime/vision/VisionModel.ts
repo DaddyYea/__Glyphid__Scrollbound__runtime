@@ -100,16 +100,3 @@ function calculateResonance(partial: Omit<VisionState, 'resonance'>): number {
 
   return Math.max(0, Math.min(1, resonance));
 }
-
-/**
- * getMockVisionInput - generates mock vision input for testing
- * Returns neutral, balanced input
- */
-export function getMockVisionInput(): RawVisionInput {
-  return {
-    dominantColor: 'white',
-    brightness: 0.5,
-    sharpness: 0.5,
-    movement: 0.2,
-  };
-}

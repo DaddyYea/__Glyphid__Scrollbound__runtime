@@ -4,7 +4,7 @@
 
 import { RuntimeState, ToneVector } from '../types';
 import { VisionState, RawVisionInput } from './visionTypes';
-import { interpretVisionInput, getMockVisionInput } from './VisionModel';
+import { interpretVisionInput } from './VisionModel';
 import { getRealVisionInput } from './webcamCapture';
 
 /**
