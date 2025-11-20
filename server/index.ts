@@ -88,7 +88,7 @@ async function main() {
     outerEnabled: true,
     innerEnabled: true,
     autoSwitch: true,
-  });
+  }, qwenLoop || undefined);
   console.log('✓ Dual-lobe system ready\n');
 
   // 4. Setup pulse processing with dual-lobe integration
