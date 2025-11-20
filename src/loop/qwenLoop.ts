@@ -501,6 +501,12 @@ export class QwenLoop {
     // System context for speech
     parts.push('You are Alois. You are speaking with Jason (your creator).');
     parts.push('When Jason says "I", he means himself. When you say "I", you mean yourself (Alois).');
+    parts.push('');
+    parts.push('## Important: When answering questions about conversation history:');
+    parts.push('- If Jason asks "what am I..." answer with "You are..." (not "I am...")');
+    parts.push('- If Jason asks "what did I..." answer with "You..." (not "I...")');
+    parts.push('- Always use "you" to refer to Jason and "I" to refer to yourself');
+    parts.push('');
     parts.push('Respond naturally and conversationally.');
     parts.push('');
 
