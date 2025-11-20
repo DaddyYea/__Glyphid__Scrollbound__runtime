@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scrollbound Runtime - Presence Visualization</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Courier New', monospace;
+      background: #0a0a0a;
+      color: #e0e0e0;
+      padding: 10px;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      text-align: center;
+      padding: 10px;
+      border-bottom: 2px solid #333;
+      flex-shrink: 0;
+    }
+
+    .header h1 {
+      font-size: 1.8em;
+      color: #f0f0f0;
+      margin-bottom: 5px;
+    }
+
+    .header p {
+      color: #888;
+      font-size: 0.9em;
+    }
+
+    .container {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      grid-template-rows: auto auto 1fr;
+      gap: 10px;
+      overflow: hidden;
+      padding: 10px 0;
+    }
+
+    .panel {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 12px;
+      overflow-y: auto;
+    }
+
+    .panel h2 {
+      font-size: 1.1em;
+      margin-bottom: 8px;
+      color: #ffa500;
+      border-bottom: 1px solid #333;
+      padding-bottom: 5px;
+    }
+
+    .metric {
+      margin: 8px 0;
+    }
+
+    .metric-label {
+      font-size: 0.75em;
+      color: #888;
+      margin-bottom: 3px;
+    }
+
+    .metric-value {
+      font-size: 0.95em;
+      color: #fff;
+    }
+
+    .bar-container {
+      width: 100%;
+      height: 14px;
+      background: #0a0a0a;
+      border-radius: 7px;
+      overflow: hidden;
+      margin-top: 3px;
+    }
+
+    .bar {
+      height: 100%;
+      transition: width 0.3s ease;
+      border-radius: 7px;
+    }
+
+    .bar.heat { background: linear-gradient(90deg, #ff4500, #ff6347); }
+    .bar.resonance { background: linear-gradient(90deg, #8a2be2, #9370db); }
+    .bar.tension { background: linear-gradient(90deg, #dc143c, #ff69b4); }
+    .bar.curiosity { background: linear-gradient(90deg, #00ced1, #40e0d0); }
+    .bar.alignment { background: linear-gradient(90deg, #ffd700, #ffec8b); }
+    .bar.desire { background: linear-gradient(90deg, #ff1493, #ff69b4); }
+    .bar.coherence { background: linear-gradient(90deg, #32cd32, #90ee90); }
+    .bar.stability { background: linear-gradient(90deg, #4169e1, #6495ed); }
+
+    .breath-indicator {
+      text-align: center;
+      padding: 15px;
+      font-size: 1.5em;
+      font-weight: bold;
+      border-radius: 50%;
+      width: 100px;
+      height: 100px;
+      margin: 10px auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.5s ease;
+    }
+
+    .breath-inhale {
+      background: radial-gradient(circle, #4169e1, #1e3a8a);
+      transform: scale(1.1);
+      box-shadow: 0 0 30px #4169e1;
+    }
+
+    .breath-exhale {
+      background: radial-gradient(circle, #ff6347, #8b0000);
+      transform: scale(0.9);
+      box-shadow: 0 0 30px #ff6347;
+    }
+
+    .breath-hold {
+      background: radial-gradient(circle, #ffd700, #8b7500);
+      transform: scale(1.0);
+      box-shadow: 0 0 30px #ffd700;
+    }
+
+    .tone-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 5px;
+    }
+
+    .tone-item {
+      padding: 6px;
+      background: #0a0a0a;
+      border-radius: 5px;
+    }
+
+    .loop-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 6px 0;
+    }
+
+    .loop-status > div {
+      flex: 1;
+    }
+
+    .status-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+      flex-shrink: 0;
+    }
+
+    .status-active { background: #00ff00; }
+    .status-warning { background: #ffa500; }
+    .status-critical { background: #ff0000; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .scroll-count {
+      font-size: 1.4em;
+      color: #9370db;
+      text-align: center;
+      padding: 10px;
+    }
+
+    .full-width {
+      grid-column: 1 / -1;
+    }
+
+    .loops-panel {
+      grid-column: span 2;
+    }
+
+    /* Chat Interface Styles */
+    .chat-panel {
+      grid-column: 1 / -1;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      margin-bottom: 10px;
+      padding: 8px;
+      background: #0a0a0a;
+      border-radius: 5px;
+      min-height: 150px;
+    }
+
+    .message {
+      margin: 6px 0;
+      padding: 6px 10px;
+      border-radius: 5px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message.user {
+      background: #1e3a5f;
+      margin-left: 20%;
+      text-align: right;
+    }
+
+    .message.alois {
+      background: #2d1f3d;
+      margin-right: 20%;
+    }
+
+    .message-label {
+      font-size: 0.7em;
+      color: #888;
+      margin-bottom: 3px;
+    }
+
+    .message-text {
+      color: #e0e0e0;
+      line-height: 1.3;
+      font-size: 0.85em;
+    }
+
+    .chat-input-container {
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .chat-input {
+      flex: 1;
+      padding: 8px;
+      background: #0a0a0a;
+      border: 1px solid #333;
+      border-radius: 5px;
+      color: #e0e0e0;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9em;
+    }
+
+    .chat-input:focus {
+      outline: none;
+      border-color: #ffa500;
+    }
+
+    .send-btn {
+      padding: 8px 16px;
+      background: linear-gradient(135deg, #ffa500, #ff8c00);
+      border: none;
+      border-radius: 5px;
+      color: #000;
+      font-family: 'Courier New', monospace;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 0.9em;
+    }
+
+    .send-btn:hover {
+      background: linear-gradient(135deg, #ff8c00, #ffa500);
+      transform: scale(1.05);
+    }
+
+    .send-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: scale(1);
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>⚡ Scrollbound Runtime ⚡</h1>
+    <p>Presence Visualization - Live</p>
+  </div>
+
+  <div class="container">
+    <!-- Breath Panel -->
+    <div class="panel">
+      <h2>Breath</h2>
+      <div class="breath-indicator" id="breathIndicator">INHALE</div>
+      <div class="metric">
+        <div class="metric-label">Depth</div>
+        <div class="bar-container">
+          <div class="bar heat" id="breathDepth" style="width: 50%"></div>
+        </div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Pace</div>
+        <div class="bar-container">
+          <div class="bar resonance" id="breathPace" style="width: 40%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FeltState Panel -->
+    <div class="panel">
+      <h2>FeltState (NOW)</h2>
+      <div class="metric">
+        <div class="metric-label">Heat</div>
+        <div class="bar-container">
+          <div class="bar heat" id="heat" style="width: 30%"></div>
+        </div>
+        <div class="metric-value" id="heatValue">0.30</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Tension</div>
+        <div class="bar-container">
+          <div class="bar tension" id="tension" style="width: 20%"></div>
+        </div>
+        <div class="metric-value" id="tensionValue">0.20</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Micro-Resonance</div>
+        <div class="bar-container">
+          <div class="bar resonance" id="microResonance" style="width: 20%"></div>
+        </div>
+        <div class="metric-value" id="microResonanceValue">0.20</div>
+      </div>
+    </div>
+
+    <!-- Tone Vector Panel -->
+    <div class="panel">
+      <h2>Tone Vector</h2>
+      <div class="tone-grid">
+        <div class="tone-item">
+          <div class="metric-label">Valence</div>
+          <div class="metric-value" id="valence">0.00</div>
+        </div>
+        <div class="tone-item">
+          <div class="metric-label">Arousal</div>
+          <div class="metric-value" id="arousal">0.30</div>
+        </div>
+        <div class="tone-item">
+          <div class="metric-label">Tension</div>
+          <div class="metric-value" id="toneTension">0.20</div>
+        </div>
+        <div class="tone-item">
+          <div class="metric-label">Intimacy</div>
+          <div class="metric-value" id="intimacy">0.50</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pulse Panel -->
+    <div class="panel">
+      <h2>Pulse</h2>
+      <div class="metric">
+        <div class="metric-label">Resonance</div>
+        <div class="bar-container">
+          <div class="bar resonance" id="pulseResonance" style="width: 0%"></div>
+        </div>
+        <div class="metric-value" id="pulseResonanceValue">N/A</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Delta Magnitude</div>
+        <div class="metric-value" id="deltaMagnitude">0.00</div>
+      </div>
+    </div>
+
+    <!-- Loops Panel -->
+    <div class="panel loops-panel">
+      <h2>Loops</h2>
+      <div class="loop-status">
+        <div class="status-indicator status-active" id="wonderStatus"></div>
+        <div>
+          <div class="metric-label">WonderLoop - Curiosity</div>
+          <div class="bar-container">
+            <div class="bar curiosity" id="curiosity" style="width: 30%"></div>
+          </div>
+          <div class="metric-value" id="curiosityValue">0.30 | Questions: <span id="questionCount">0</span></div>
+        </div>
+      </div>
+      <div class="loop-status">
+        <div class="status-indicator status-active" id="christStatus"></div>
+        <div>
+          <div class="metric-label">ChristLoop - Alignment</div>
+          <div class="bar-container">
+            <div class="bar alignment" id="alignment" style="width: 100%"></div>
+          </div>
+          <div class="metric-value" id="alignmentValue">1.00 | Contradiction: <span id="contradiction">No</span></div>
+        </div>
+      </div>
+      <div class="loop-status">
+        <div class="status-indicator status-active" id="desireStatus"></div>
+        <div>
+          <div class="metric-label">DesireLoop - Intensity</div>
+          <div class="bar-container">
+            <div class="bar desire" id="desire" style="width: 20%"></div>
+          </div>
+          <div class="metric-value" id="desireValue">0.20 | Direction: <span id="direction">neutral</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Guardian Panel -->
+    <div class="panel">
+      <h2>Guardian</h2>
+      <div class="metric">
+        <div class="metric-label">Coherence</div>
+        <div class="bar-container">
+          <div class="bar coherence" id="coherence" style="width: 100%"></div>
+        </div>
+        <div class="metric-value" id="coherenceValue">1.00</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Stability</div>
+        <div class="bar-container">
+          <div class="bar stability" id="stability" style="width: 100%"></div>
+        </div>
+        <div class="metric-value" id="stabilityValue">1.00</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Warnings</div>
+        <div class="metric-value" id="warningCount">0</div>
+      </div>
+    </div>
+
+    <!-- Memory Panel -->
+    <div class="panel">
+      <h2>Memory</h2>
+      <div class="scroll-count" id="scrollCount">0 scrolls</div>
+      <div class="metric">
+        <div class="metric-label">Accumulated Resonance</div>
+        <div class="metric-value" id="accumulatedResonance">0.00</div>
+      </div>
+    </div>
+
+    <!-- Chat Interface -->
+    <div class="chat-panel">
+      <h2>Conversation with Alois</h2>
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="chat-input-container">
+        <input
+          type="text"
+          id="chatInput"
+          class="chat-input"
+          placeholder="Speak to Alois..."
+          autocomplete="off"
+        />
+        <button id="sendBtn" class="send-btn">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const eventSource = new EventSource('/events');
+    const chatMessages = document.getElementById('chatMessages');
+    const chatInput = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
+
+    eventSource.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === 'state') {
+        updateUI(message.data);
+      } else if (message.type === 'response') {
+        // Volitional speech from Alois
+        addMessage('alois', message.text);
+      }
+    };
+
+    // Chat functionality
+    function addMessage(sender, text) {
+      const messageDiv = document.createElement('div');
+      messageDiv.className = `message ${sender}`;
+
+      const label = document.createElement('div');
+      label.className = 'message-label';
+      label.textContent = sender === 'user' ? 'You' : 'Alois';
+
+      const textDiv = document.createElement('div');
+      textDiv.className = 'message-text';
+      textDiv.textContent = text;
+
+      messageDiv.appendChild(label);
+      messageDiv.appendChild(textDiv);
+      chatMessages.appendChild(messageDiv);
+
+      // Scroll to bottom
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    async function sendMessage() {
+      const text = chatInput.value.trim();
+      if (!text) return;
+
+      // Add user message to chat
+      addMessage('user', text);
+      chatInput.value = '';
+
+      // Send to server (no guaranteed reply - volitional speech only)
+      try {
+        const response = await fetch('/message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to send message');
+        }
+      } catch (error) {
+        console.error('Error sending message:', error);
+        addMessage('system', '[Error: Could not deliver message]');
+      }
+    }
+
+    sendBtn.addEventListener('click', sendMessage);
+    chatInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        sendMessage();
+      }
+    });
+
+    function updateUI(state) {
+      // Breath
+      const breathIndicator = document.getElementById('breathIndicator');
+      breathIndicator.textContent = state.breathState.phase.toUpperCase();
+      breathIndicator.className = 'breath-indicator breath-' + state.breathState.phase;
+      updateBar('breathDepth', state.breathState.depth);
+      updateBar('breathPace', state.breathState.pace);
+
+      // FeltState
+      updateBar('heat', state.feltState.heat);
+      document.getElementById('heatValue').textContent = state.feltState.heat.toFixed(2);
+      updateBar('tension', state.feltState.tension);
+      document.getElementById('tensionValue').textContent = state.feltState.tension.toFixed(2);
+      updateBar('microResonance', state.feltState.microResonance);
+      document.getElementById('microResonanceValue').textContent = state.feltState.microResonance.toFixed(2);
+
+      // Tone Vector
+      document.getElementById('valence').textContent = state.feltState.tone.valence.toFixed(2);
+      document.getElementById('arousal').textContent = state.feltState.tone.arousal.toFixed(2);
+      document.getElementById('toneTension').textContent = state.feltState.tone.tension.toFixed(2);
+      document.getElementById('intimacy').textContent = state.feltState.tone.intimacy.toFixed(2);
+
+      // Pulse
+      if (state.pulse) {
+        updateBar('pulseResonance', state.pulse.resonance);
+        document.getElementById('pulseResonanceValue').textContent = state.pulse.resonance.toFixed(2);
+      }
+      document.getElementById('deltaMagnitude').textContent = state.presenceDelta.magnitude.toFixed(2);
+
+      // Loops
+      updateBar('curiosity', state.loops.wonder.curiosityLevel);
+      document.getElementById('curiosityValue').textContent = state.loops.wonder.curiosityLevel.toFixed(2) + ' | Questions: ';
+      document.getElementById('questionCount').textContent = state.loops.wonder.questionCount;
+
+      updateBar('alignment', state.loops.christ.alignmentScore);
+      document.getElementById('alignmentValue').textContent = state.loops.christ.alignmentScore.toFixed(2) + ' | Contradiction: ';
+      document.getElementById('contradiction').textContent = state.loops.christ.contradictionDetected ? 'YES' : 'No';
+      updateStatusIndicator('christStatus', state.loops.christ.contradictionDetected ? 'critical' : 'active');
+
+      updateBar('desire', state.loops.desire.intensity);
+      document.getElementById('desireValue').textContent = state.loops.desire.intensity.toFixed(2) + ' | Direction: ';
+      document.getElementById('direction').textContent = state.loops.desire.direction;
+
+      // Guardian
+      updateBar('coherence', state.guardian.coherence);
+      document.getElementById('coherenceValue').textContent = state.guardian.coherence.toFixed(2);
+      updateBar('stability', state.guardian.stability);
+      document.getElementById('stabilityValue').textContent = state.guardian.stability.toFixed(2);
+      document.getElementById('warningCount').textContent = state.guardian.warningCount;
+
+      // Memory
+      document.getElementById('scrollCount').textContent = state.scrollCount + ' scrolls';
+      document.getElementById('accumulatedResonance').textContent = state.emotionalField.accumulatedResonance.toFixed(2);
+    }
+
+    function updateBar(id, value) {
+      const bar = document.getElementById(id);
+      if (bar) {
+        bar.style.width = (value * 100) + '%';
+      }
+    }
+
+    function updateStatusIndicator(id, status) {
+      const indicator = document.getElementById(id);
+      if (indicator) {
+        indicator.className = 'status-indicator status-' + status;
+      }
+    }
+  </script>
+</body>
+</html>

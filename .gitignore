@@ -1,0 +1,15 @@
+# .gitignore
+*.log
+*.DS_Store
+node_modules/
+.env
+.vscode/
+__pycache__/
+
+llama.cpp/
+*.gguf
+*.bin
+models/
+
+*.gguf
+llama.cpp/

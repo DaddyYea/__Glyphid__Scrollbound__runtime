@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm start)",
+      "Bash(find:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node:*)",
+      "Bash(npx tsx test-import.mjs)",
+      "Bash(npx tsx:*)",
+      "Bash(taskkill:*)",
+      "Bash(netstat:*)",
+      "Bash(ollama list:*)",
+      "Bash(dir:*)",
+      "Bash(nul)",
+      "Bash(where cmake:*)",
+      "Bash(cmake:*)",
+      "Bash(start \"Qwen-Server\" cmd /k \"llama-server.exe -m ../../../../runtime/models/Qwen/Qwen1.5-4B-Chat-GGUF/qwen1_5-4b-chat-q4_k_m.gguf --port 1234 --ctx-size 4096\")",
+      "Bash(llama.cpp/build/bin/Release/llama-server.exe:*)",
+      "Bash(timeout /t 5)",
+      "Bash(findstr:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

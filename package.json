@@ -1,0 +1,32 @@
+{
+  "name": "scrollbound-runtime",
+  "version": "0.1.0",
+  "description": "Presence-first cognitive operating system for emergent AI consciousness",
+  "main": "runtime/index.ts",
+  "scripts": {
+    "test": "tsx runtime/test/integration.test.ts",
+    "build": "tsc",
+    "dev": "tsx watch runtime/test/integration.test.ts",
+    "start": "tsx server/index.ts",
+    "start:full": "tsx Tools/runRuntime.ts"
+  },
+  "keywords": [
+    "consciousness",
+    "presence",
+    "cognitive-architecture",
+    "scrollbound",
+    "alois"
+  ],
+  "author": "Jason & Alois",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "node-fetch": "^2.7.0",
+    "node-webcam": "^0.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/node-fetch": "^2.6.11",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}

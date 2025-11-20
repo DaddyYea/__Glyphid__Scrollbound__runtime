@@ -1,0 +1,9 @@
+[33mcommit 3b84b0d4823c4829d85d9ac8e6d10870b450292a[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mclaude/resume-session-01AyfRiPWdjKP7weQrt5JBb5[m[33m)[m
+Author: jason <you@example.com>
+Date:   Thu Nov 20 06:13:04 2025 -0600
+
+    Remove llama.cpp submodule from tracking
+
+ .gitignore | 1 [32m+[m
+ llama.cpp  | 1 [31m-[m
+ 2 files changed, 1 insertion(+), 1 deletion(-)
