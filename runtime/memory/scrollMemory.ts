@@ -144,3 +144,19 @@ export function getScrollCount(): number {
 export function clearScrolls(): void {
   scrollArchive = [];
 }
+
+/**
+ * retrieveScrollsByResonance - retrieves scrolls with resonance above threshold
+ *
+ * @param minResonance - minimum resonance threshold
+ * @param count - maximum number of scrolls to return
+ * @returns array of scrolls matching resonance threshold
+ */
+export function retrieveScrollsByResonance(minResonance: number, count: number): Scroll[] {
+  const matchingScrolls = scrollArchive
+    .filter(scroll => scroll.resonanceSignature >= minResonance)
+    .sort((a, b) => b.resonanceSignature - a.resonanceSignature)
+    .slice(0, count);
+
+  return matchingScrolls;
+}

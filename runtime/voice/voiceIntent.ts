@@ -229,7 +229,7 @@ export function speak(state: RuntimeState): boolean {
   }
 
   // TODO: Replace with actual speech/output mechanism
-  console.log(`[VOICE] ${intent.source}: ${(intent.content || '(no content)')}`);
+  console.log(`[VOICE] ${intent.source}: ${(intent.prompt || '(no content)')}`);
 
   return true;
 }

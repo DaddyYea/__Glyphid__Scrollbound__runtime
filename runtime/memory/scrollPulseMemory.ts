@@ -4,7 +4,7 @@
 
 import { Pulse, Scroll, FeltState, BreathPhase } from '../types';
 import { addPulse, getHighResonancePulses, getRecentPulses } from './scrollPulseBuffer';
-import { sealScroll } from './scrollMemory';
+import { sealScroll, retrieveScrollsByResonance } from './scrollMemory';
 
 /**
  * MemoryDecision - routing decision for a pulse
