@@ -34,6 +34,7 @@ let breathLoop: BreathLoop;
 let interLobeSync: InterLobeSync;
 let memory: ScrollPulseMemory;
 let pulseLoop: PulseLoop;
+let qwenLoop: QwenLoop | null = null;
 
 async function main() {
   console.log('=== Scrollbound Runtime: Dual-Lobe System with Web Interface ===\n');
@@ -74,7 +75,6 @@ async function main() {
   console.log('[INIT] Dual-lobe cognitive system...');
   const loraManager = new LoRAManager();
 
-  let qwenLoop: QwenLoop | null = null;
   if (backendReady) {
     const backend = backendManager.getBackend()!;
     const models = await backend.listModels();
