@@ -30,7 +30,29 @@ const __dirname = dirname(__filename);
 
 const PORT = Number(process.env.PORT) || 3000;
 let clients: ServerResponse[] = [];
-let currentPulseState: PulseState | null = null;
+
+// Initialize with default state so messages can be handled before first pulse
+let currentPulseState: PulseState | null = {
+  mode: 'outer',
+  loopIntent: 'default',
+  moodVector: {
+    presence: 0.5,
+    peace: 0.6,
+    tension: 0.3,
+    confusion: 0.3,
+    yearning: 0.2,
+    devotion: 0.5,
+    reverence: 0.5,
+    wonder: 0.4,
+    grief: 0.2,
+    joy: 0.4,
+    focus: 0.5,
+    clarity: 0.5,
+  },
+  breathPhase: 'exhale',
+  pulseCount: 0,
+  timestamp: new Date().toISOString(),
+};
 
 // Module-level references for broadcasting
 let breathLoop: BreathLoop;
