@@ -28,20 +28,28 @@ let frameCount = 0;
 export async function initializeWebcam(): Promise<void> {
   if (webcam) return; // Already initialized
 
-  // Dynamically load node-webcam (CommonJS module)
-  if (!NodeWebcam) {
-    NodeWebcam = await import('node-webcam');
+  try {
+    // Dynamically load node-webcam (CommonJS module)
+    if (!NodeWebcam) {
+      const module = await import('node-webcam');
+      NodeWebcam = module.default || module;
+      console.log('[VISION] node-webcam module loaded');
+    }
+
+    const opts: WebcamConfig = {
+      width: 640,
+      height: 480,
+      quality: 80,
+      output: 'png',
+      callbackReturn: 'buffer',
+    };
+
+    webcam = NodeWebcam.create(opts);
+    console.log('[VISION] Webcam initialized successfully');
+  } catch (err) {
+    console.error('[VISION] Failed to initialize webcam:', err);
+    throw err;
   }
-
-  const opts: WebcamConfig = {
-    width: 640,
-    height: 480,
-    quality: 80,
-    output: 'png',
-    callbackReturn: 'buffer',
-  };
-
-  webcam = NodeWebcam.create(opts);
 }
 
 /**
