@@ -15,6 +15,7 @@ interface WebcamConfig {
   output: 'jpeg' | 'png';
   device?: string;
   callbackReturn: 'location' | 'buffer';
+  verbose?: boolean;
 }
 
 let webcam: any = null;
@@ -42,12 +43,32 @@ export async function initializeWebcam(): Promise<void> {
       quality: 80,
       output: 'png',
       callbackReturn: 'buffer',
+      verbose: true,
     };
 
     webcam = NodeWebcam.create(opts);
-    console.log('[VISION] Webcam initialized successfully');
+    console.log('[VISION] Webcam created, testing capture...');
+
+    // Test capture to verify camera works
+    await new Promise<void>((resolve, reject) => {
+      const testTimeout = setTimeout(() => {
+        reject(new Error('Camera test capture timeout - CommandCam.exe may be missing on Windows'));
+      }, 3000);
+
+      webcam.capture('test', (err: Error | null, data: any) => {
+        clearTimeout(testTimeout);
+        if (err) {
+          reject(new Error(`Camera test failed: ${err.message}`));
+        } else {
+          console.log('[VISION] Camera test successful');
+          resolve();
+        }
+      });
+    });
   } catch (err) {
     console.error('[VISION] Failed to initialize webcam:', err);
+    console.error('[VISION] On Windows, node-webcam requires CommandCam.exe in PATH');
+    console.error('[VISION] Download from: http://batchloaf.wordpress.com/commandcam/');
     throw err;
   }
 }
