@@ -242,8 +242,14 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
 }
 
 function broadcastState(state: PulseState) {
+  if (!breathLoop || !interLobeSync || !memory) {
+    console.warn('[broadcastState] Not initialized yet, skipping broadcast');
+    return;
+  }
+
   const breathState = breathLoop.getState();
   const syncStats = interLobeSync.getStats();
+  const archiveStats = memory.getArchive().getStats();
 
   // Transform new dual-lobe state to match HTML interface format
   const data = {
@@ -290,7 +296,7 @@ function broadcastState(state: PulseState) {
         stability: syncStats.avgCoherence,
         warningCount: syncStats.conflictsResolved,
       },
-      scrollCount: memory.getScrollCount(),
+      scrollCount: archiveStats.totalScrolls,
       emotionalField: {
         accumulatedResonance: state.pulseCount * 0.1,
       },
