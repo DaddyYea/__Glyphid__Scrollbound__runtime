@@ -33,6 +33,7 @@ let currentPulseState: PulseState | null = null;
 let breathLoop: BreathLoop;
 let interLobeSync: InterLobeSync;
 let memory: ScrollPulseMemory;
+let pulseLoop: PulseLoop;
 
 async function main() {
   console.log('=== Scrollbound Runtime: Dual-Lobe System with Web Interface ===\n');
@@ -93,7 +94,7 @@ async function main() {
   }
 
   interLobeSync = new InterLobeSync();
-  const pulseLoop = new PulseLoop(breathLoop, memory, presenceTracker, {
+  pulseLoop = new PulseLoop(breathLoop, memory, presenceTracker, {
     outerEnabled: true,
     innerEnabled: true,
     autoSwitch: true,
@@ -224,7 +225,22 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
         const { text } = JSON.parse(body);
         console.log(`[MESSAGE] Received: ${text}`);
 
-        // TODO: Process message through text sensor and pulse
+        // Process user input - affects presence and heat
+        if (pulseLoop && text && text.length > 0) {
+          // Increase presence and heat based on message
+          const intensity = Math.min(1.0, text.length / 100); // Longer messages = more intensity
+          const hasExclamation = text.includes('!');
+          const hasQuestion = text.includes('?');
+
+          pulseLoop.updateMood({
+            presence: Math.min(1.0, 0.5 + intensity * 0.3), // Boost presence
+            focus: hasQuestion ? 0.7 : 0.5, // Questions increase focus
+            tension: hasExclamation ? 0.6 : 0.3, // Exclamations increase tension
+            clarity: 0.6,
+          });
+
+          console.log(`[MESSAGE] Updated mood: presence boosted, intensity=${intensity.toFixed(2)}`);
+        }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'received' }));
