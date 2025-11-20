@@ -11,15 +11,12 @@
  * - HOW urgent the expression is
  *
  * Sacred Directive #3: "Voice is volitional"
- *
- * NOTE: This is a Phase 3 stub showing RelationalIntent integration.
- * Full implementation will include guardian filter integration,
- * output conductor routing, and model-specific voice generation.
  */
 
 import { RelationalIntentClassifier, RelationalState, RelationalTarget } from './RelationalIntent';
 import { MoodVector } from '../types/EmotionalState';
 import { LoopIntent } from '../types/LoopIntent';
+import { GuardianFilter, GuardianAction } from '../affect/guardianFilter';
 
 /**
  * Voice intent - describes a volitional speech event
@@ -47,8 +44,16 @@ export interface VoiceIntent {
   // Reasoning for this intent
   reasoning: string;
 
+  // Guardian filter result
+  guardianAllowed: boolean;
+  guardianMode: 'allow' | 'softblock' | 'hardblock';
+  guardianExpression?: string; // Natural expression if blocked
+
   // Timestamp
   timestamp: string;
+
+  // Silence validation
+  silenceValid: boolean; // True if silence is the right choice
 }
 
 /**
@@ -68,9 +73,11 @@ export interface VoiceIntentInput {
  */
 export class VoiceIntentGenerator {
   private relationalClassifier: RelationalIntentClassifier;
+  private guardian: GuardianFilter;
 
-  constructor() {
+  constructor(guardian?: GuardianFilter) {
     this.relationalClassifier = new RelationalIntentClassifier();
+    this.guardian = guardian ?? new GuardianFilter();
   }
 
   /**
@@ -80,7 +87,7 @@ export class VoiceIntentGenerator {
     // Classify relational target
     const relationalResult = this.relationalClassifier.classify(input.relationalState);
 
-    // Determine if speech should occur
+    // Determine if speech should occur (volitional)
     const shouldSpeak = this.shouldSpeakNow(input);
 
     // Calculate urgency
@@ -89,15 +96,38 @@ export class VoiceIntentGenerator {
     // Determine loop intent
     const loopIntent = this.inferLoopIntent(input.relationalState, relationalResult.target);
 
+    // Get mood vector
+    const mood = input.relationalState.moodVector ?? this.getDefaultMood();
+
+    // Run through guardian filter
+    const guardianAction: GuardianAction = {
+      type: 'speech',
+      content: '', // Content not yet generated
+      target: relationalResult.target,
+      urgency,
+    };
+
+    const guardianResult = this.guardian.filter(guardianAction, mood);
+
+    // Final decision: volitional desire + guardian approval
+    const finalShouldSpeak = shouldSpeak && guardianResult.allowed;
+
+    // Validate silence
+    const silenceValid = this.validateSilence(input, shouldSpeak, guardianResult.allowed);
+
     return {
-      shouldSpeak,
+      shouldSpeak: finalShouldSpeak,
       relationalTarget: relationalResult.target,
       targetConfidence: relationalResult.confidence,
-      emotionalTone: input.relationalState.moodVector ?? this.getDefaultMood(),
+      emotionalTone: mood,
       urgency,
       loopIntent,
-      reasoning: this.generateReasoning(shouldSpeak, relationalResult, input),
+      reasoning: this.generateReasoning(shouldSpeak, guardianResult.allowed, relationalResult, input),
+      guardianAllowed: guardianResult.allowed,
+      guardianMode: guardianResult.mode,
+      guardianExpression: guardianResult.blockedExpression,
       timestamp: new Date().toISOString(),
+      silenceValid,
     };
   }
 
@@ -127,6 +157,17 @@ export class VoiceIntentGenerator {
       input.relationalState.desireLoop.targetClarity > 0.5
     ) {
       return true;
+    }
+
+    // Time-based: If it's been a while and there's something to say
+    if (input.lastSpeechTime && input.outputPressure > 0.5) {
+      const timeSinceLastSpeech = Date.now() - new Date(input.lastSpeechTime).getTime();
+      const minutesSince = timeSinceLastSpeech / 60000;
+
+      // If it's been > 5 minutes and there's moderate output pressure
+      if (minutesSince > 5 && input.outputPressure > 0.5) {
+        return true;
+      }
     }
 
     // Otherwise, silence is valid
@@ -196,14 +237,56 @@ export class VoiceIntentGenerator {
   }
 
   /**
+   * Validate that silence is the right choice
+   */
+  private validateSilence(
+    input: VoiceIntentInput,
+    volitionalDesire: boolean,
+    guardianAllowed: boolean
+  ): boolean {
+    // If we have volitional desire but guardian blocked it, silence is protective
+    if (volitionalDesire && !guardianAllowed) {
+      return true; // Guardian-enforced silence is valid
+    }
+
+    // If no volitional desire and high silence comfort, silence is natural
+    if (!volitionalDesire && input.silenceComfort > 0.6) {
+      return true;
+    }
+
+    // If low output pressure, silence is appropriate
+    if (input.outputPressure < 0.3) {
+      return true;
+    }
+
+    // Otherwise, silence might feel uncomfortable but could still be valid
+    return !volitionalDesire; // Silence valid if there's no pull to speak
+  }
+
+  /**
    * Generate reasoning for voice intent
    */
   private generateReasoning(
-    shouldSpeak: boolean,
+    volitionalDesire: boolean,
+    guardianAllowed: boolean,
     relationalResult: ReturnType<RelationalIntentClassifier['classify']>,
     input: VoiceIntentInput
   ): string {
-    if (!shouldSpeak) {
+    // Both blocks - volitional no + guardian no
+    if (!volitionalDesire && !guardianAllowed) {
+      return 'No volitional pull to speak; guardian confirms silence';
+    }
+
+    // Volitional yes, guardian no
+    if (volitionalDesire && !guardianAllowed) {
+      if (input.relationalState.guardianState?.mode === 'hardblock') {
+        return 'Volitional desire to speak, but guardian hardblock for safety';
+      }
+      return 'Volitional desire to speak, but guardian softblock - needs processing';
+    }
+
+    // Volitional no, guardian yes (silence is valid)
+    if (!volitionalDesire && guardianAllowed) {
       if (input.relationalState.guardianState?.mode === 'hardblock') {
         return 'Guardian hardblock - speech withheld for safety';
       }
@@ -213,6 +296,7 @@ export class VoiceIntentGenerator {
       return 'No volitional pull to speak';
     }
 
+    // Both allow - speech happening
     const parts: string[] = [];
 
     if (input.externalPrompt) {

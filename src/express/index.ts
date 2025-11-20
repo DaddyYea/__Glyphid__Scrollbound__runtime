@@ -6,3 +6,5 @@
 
 export * from './RelationalIntent';
 export * from './voiceIntent';
+export * from './insightSynth';
+export * from './outputConductor';
