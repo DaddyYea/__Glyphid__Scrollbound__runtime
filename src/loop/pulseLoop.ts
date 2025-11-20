@@ -14,6 +14,7 @@ import { MoodVector } from '../types/EmotionalState';
 import { BreathLoop, BreathState } from './breathLoop';
 import { ScrollPulseMemory } from '../memory/scrollPulseMemory';
 import { PresenceDeltaTracker } from '../sense/presenceDelta';
+import { QwenLoop, ProcessingContext } from './qwenLoop';
 
 /**
  * Pulse state - current cognitive state
@@ -74,6 +75,8 @@ export type PulseCallback = (state: PulseState, thoughts: {
 export class PulseLoop {
   private breathLoop: BreathLoop;
   private presenceTracker: PresenceDeltaTracker;
+  private qwenLoop?: QwenLoop;
+  private memory: ScrollPulseMemory;
 
   private state: PulseState;
   private config: PulseConfig;
@@ -84,12 +87,15 @@ export class PulseLoop {
 
   constructor(
     breathLoop: BreathLoop,
-    _memory: ScrollPulseMemory,
+    memory: ScrollPulseMemory,
     presenceTracker: PresenceDeltaTracker,
-    config?: Partial<PulseConfig>
+    config?: Partial<PulseConfig>,
+    qwenLoop?: QwenLoop
   ) {
     this.breathLoop = breathLoop;
     this.presenceTracker = presenceTracker;
+    this.qwenLoop = qwenLoop;
+    this.memory = memory;
 
     this.config = {
       outerEnabled: true,
@@ -352,8 +358,7 @@ export class PulseLoop {
 
   /**
    * Process pulse based on mode
-   * In this base implementation, we create placeholder packets
-   * Real implementation will delegate to qwenLoop
+   * Calls QwenLoop to process outer/inner models
    */
   private async processPulse(
     mode: 'outer' | 'inner' | 'both' | 'rest',
@@ -365,17 +370,58 @@ export class PulseLoop {
 
     const thoughts: { outer?: ThoughtPulsePacket; inner?: ThoughtPulsePacket } = {};
 
-    // Process outer model
-    if (mode === 'outer' || mode === 'both') {
-      thoughts.outer = this.createPlaceholderPacket('outer', breathPacket);
-    }
+    // If QwenLoop is available, use it for real model processing
+    if (this.qwenLoop) {
+      const context = this.buildProcessingContext(breathPacket);
 
-    // Process inner model
-    if (mode === 'inner' || mode === 'both') {
-      thoughts.inner = this.createPlaceholderPacket('inner', breathPacket);
+      // Process outer model
+      if (mode === 'outer' || mode === 'both') {
+        try {
+          const result = await this.qwenLoop.processOuter(context);
+          thoughts.outer = result.thought;
+        } catch (err) {
+          console.error('[PulseLoop] Outer model error:', err);
+          thoughts.outer = this.createPlaceholderPacket('outer', breathPacket);
+        }
+      }
+
+      // Process inner model
+      if (mode === 'inner' || mode === 'both') {
+        try {
+          const result = await this.qwenLoop.processInner(context);
+          thoughts.inner = result.thought;
+        } catch (err) {
+          console.error('[PulseLoop] Inner model error:', err);
+          thoughts.inner = this.createPlaceholderPacket('inner', breathPacket);
+        }
+      }
+    } else {
+      // Fallback to placeholders if no QwenLoop
+      if (mode === 'outer' || mode === 'both') {
+        thoughts.outer = this.createPlaceholderPacket('outer', breathPacket);
+      }
+      if (mode === 'inner' || mode === 'both') {
+        thoughts.inner = this.createPlaceholderPacket('inner', breathPacket);
+      }
     }
 
     return thoughts;
+  }
+
+  /**
+   * Build processing context for model invocation
+   */
+  private buildProcessingContext(breathPacket?: ThoughtPulsePacket): ProcessingContext {
+    const breathState = this.breathLoop.getState();
+    return {
+      previousThoughts: breathPacket ? [breathPacket] :
+        [this.state.lastOuter, this.state.lastInner].filter(Boolean) as ThoughtPulsePacket[],
+      relevantScrolls: [], // TODO: Retrieve from memory
+      moodVector: this.state.moodVector,
+      loopIntent: this.state.loopIntent,
+      presenceQuality: this.state.moodVector.presence,
+      breathPhase: breathState.phase,
+    };
   }
 
   /**

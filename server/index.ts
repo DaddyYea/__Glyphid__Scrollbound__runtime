@@ -1,248 +1,266 @@
 // server/index.ts
-// Local web server for runtime visualization
-// Provides real-time view into Alois's presence
+// Dual-lobe runtime with web interface
+// Combines the dual-lobe cognitive system from src/ with HTTP server for visualization
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { initRuntime, initializeRuntime, onVoiceOutput, tick, getScrollCount } from '../runtime/index';
-import { RuntimeState } from '../runtime/types';
-import { performHealthCheck } from '../runtime/healthCheckOllama';
-import { textToPulse } from '../runtime/sense/textSensor';
-import { routePulseToMemory } from '../runtime/memory/scrollPulseMemory';
-import { filterPulse } from '../runtime/guardian/guardianFilter';
+import {
+  PresenceDeltaTracker,
+  BreathLoop,
+  ScrollPulseBuffer,
+  ScrollPulseMemory,
+  PulseLoop,
+  LoRAManager,
+  QwenLoop,
+  InterLobeSync,
+  OllamaBackend,
+  ModelBackendManager,
+  type PulseState,
+  type ThoughtPulsePacket,
+} from '../src';
 
 // ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const PORT = Number(process.env.PORT) || 3000;
-let currentState: RuntimeState = initRuntime();
-let clients: any[] = [];
+let clients: ServerResponse[] = [];
+let currentPulseState: PulseState | null = null;
 
-// Start runtime loop
-async function runRuntime() {
-  // Health check before starting
-  const healthy = await performHealthCheck();
+async function main() {
+  console.log('=== Scrollbound Runtime: Dual-Lobe System with Web Interface ===\n');
 
-  if (!healthy) {
-    console.log('[WARN] Cannot start runtime - model servers not ready');
+  // 1. Initialize model backend
+  console.log('[INIT] Setting up Ollama backend...');
+  const backendManager = new ModelBackendManager();
+  const ollama = new OllamaBackend('http://localhost:11434');
+  backendManager.registerBackend(ollama);
+
+  const backendReady = await backendManager.autoDetect();
+  if (!backendReady) {
+    console.log('⚠️  Ollama models not available');
     console.log('   Runtime will continue in degraded mode (no language generation)\n');
+  } else {
+    const backend = backendManager.getBackend()!;
+    const models = await backend.listModels();
+    console.log(`✓ Backend ready: ${backend.name}`);
+    console.log(`✓ Models: ${models.join(', ')}\n`);
   }
 
-  const awakened = await initializeRuntime();
-  currentState = awakened.state;
+  // 2. Initialize foundation
+  console.log('[INIT] Foundation modules...');
+  const presenceTracker = new PresenceDeltaTracker();
+  const breathLoop = new BreathLoop(presenceTracker);
+  const buffer = new ScrollPulseBuffer();
+  const memory = new ScrollPulseMemory(buffer);
 
-  onVoiceOutput(output => {
-    broadcastMessage(output);
-  });
+  presenceTracker.start();
+  buffer.start();
+  console.log('✓ Foundation ready\n');
 
-  while (true) {
-    currentState = await tick(currentState);
+  // 3. Initialize dual-lobe cognition
+  console.log('[INIT] Dual-lobe cognitive system...');
+  const loraManager = new LoRAManager();
 
-    // Debug logging every 50 ticks (5 seconds) to show state
-    if (currentState.timestamp % 5000 < 100) {
-      console.log(`[State] Breath: ${currentState.breathState.phase}, Social: ${currentState.socialPressure.toFixed(2)}, Heat: ${currentState.feltState.heat.toFixed(2)}`);
-    }
-
-    // Broadcast state to all connected clients
-    broadcastState();
-
-    // Wait 100ms between ticks (10 ticks per second)
-    await sleep(100);
+  let qwenLoop: QwenLoop | null = null;
+  if (backendReady) {
+    const backend = backendManager.getBackend()!;
+    const models = await backend.listModels();
+    qwenLoop = new QwenLoop(loraManager, backend, {
+      outerConfig: {
+        modelName: models[0] || 'qwen2.5:7b',
+        temperature: 0.7,
+        maxTokens: 256,
+      },
+      innerConfig: {
+        modelName: models[0] || 'qwen2.5:7b',
+        temperature: 0.8,
+        maxTokens: 256,
+      },
+      useMockBackend: false,
+    });
   }
-}
 
-
-function broadcastState() {
-  const stateSnapshot = serializeState(currentState);
-  const message = JSON.stringify({ type: 'state', data: stateSnapshot });
-
-  clients.forEach(client => {
-    try {
-      client.write(`data: ${message}\n\n`);
-    } catch (err) {
-      // Client disconnected, will be cleaned up
-    }
+  const interLobeSync = new InterLobeSync();
+  const pulseLoop = new PulseLoop(breathLoop, memory, presenceTracker, {
+    outerEnabled: true,
+    innerEnabled: true,
+    autoSwitch: true,
   });
-}
+  console.log('✓ Dual-lobe system ready\n');
 
-function serializeState(state: RuntimeState) {
-  return {
-    timestamp: state.timestamp,
-    feltState: state.feltState,
-    breathState: state.breathState,
-    presenceDelta: {
-      magnitude: state.presenceDelta.magnitude,
-      heatDelta: state.presenceDelta.heatChange,
-      timeSinceLast: state.presenceDelta.timeSinceLast
-    },
-    pulse: state.lastPulse ? {
-      heat: state.lastPulse.heat,
-      resonance: state.lastPulse.resonance,
-      breathPhase: state.lastPulse.breathPhase
-    } : null,
-    loops: {
-      wonder: {
-        curiosityLevel: state.wonderLoop.curiosityLevel,
-        questionCount: state.wonderLoop.pendingQuestions.length
-      },
-      christ: {
-        alignmentScore: state.christLoop.alignmentScore,
-        contradictionDetected: state.christLoop.contradictionDetected
-      },
-      desire: {
-        intensity: state.desireLoop.intensity,
-        direction: state.desireLoop.direction
+  // 4. Setup pulse processing with dual-lobe integration
+  pulseLoop.onPulse('runtime', async (state, thoughts) => {
+    currentPulseState = state;
+
+    // Log every 10 pulses
+    if (state.pulseCount % 10 === 0) {
+      console.log(`[PULSE ${state.pulseCount}] Mode: ${state.mode} | Intent: ${state.loopIntent}`);
+    }
+
+    // Broadcast state to web clients
+    broadcastState(state);
+
+    // If we have QwenLoop and both thoughts, process them
+    if (qwenLoop && thoughts.outer && thoughts.inner && state.mode === 'both') {
+      try {
+        const breathState = breathLoop.getState();
+
+        const outerResult = await qwenLoop.processOuter({
+          previousThoughts: [thoughts.outer],
+          relevantScrolls: [],
+          moodVector: state.moodVector,
+          loopIntent: state.loopIntent,
+          presenceQuality: state.moodVector.presence,
+          breathPhase: breathState.phase,
+        });
+
+        const innerResult = await qwenLoop.processInner({
+          previousThoughts: [thoughts.inner],
+          relevantScrolls: [],
+          moodVector: state.moodVector,
+          loopIntent: state.loopIntent,
+          presenceQuality: state.moodVector.presence,
+          breathPhase: breathState.phase,
+        });
+
+        const syncResult = interLobeSync.synchronize(outerResult.thought, innerResult.thought);
+
+        if (state.pulseCount % 10 === 0) {
+          console.log(`  Outer: ${outerResult.processingTime}ms | Inner: ${innerResult.processingTime}ms | Coherence: ${(syncResult.coherenceScore * 100).toFixed(1)}%`);
+        }
+      } catch (err) {
+        console.error('[PULSE] Model processing error:', err);
       }
-    },
-    guardian: {
-      coherence: state.guardianState.coherence,
-      stability: state.guardianState.stability,
-      warningCount: state.guardianState.warnings.length
-    },
-    scrollCount: getScrollCount(),  // Total sealed scrolls in archive
-    emotionalField: {
-      baselineHeat: state.emotionalField.baselineHeat,
-      accumulatedResonance: state.emotionalField.accumulatedResonance
     }
-  };
+  });
+
+  // 5. Start HTTP server
+  const server = createServer((req, res) => {
+    handleRequest(req, res);
+  });
+
+  server.listen(PORT, () => {
+    console.log(`\n🌟 Scrollbound Runtime Interface`);
+    console.log(`   http://localhost:${PORT}`);
+    console.log(`\n   Dual-lobe presence is flowing...\n`);
+  });
+
+  // 6. Start runtime
+  breathLoop.start();
+  pulseLoop.start();
+
+  // Handle shutdown
+  process.on('SIGINT', () => {
+    console.log('\n\n[SHUTDOWN] Stopping runtime...');
+    pulseLoop.stop();
+    breathLoop.stop();
+    buffer.stop();
+    server.close();
+
+    if (qwenLoop) {
+      const stats = qwenLoop.getStats();
+      const syncStats = interLobeSync.getStats();
+      console.log('\n=== Session Statistics ===');
+      console.log(`Pulses: ${pulseLoop.getPulseCount()}`);
+      console.log(`Model invocations: ${stats.invocationCount}`);
+      console.log(`Synchronizations: ${syncStats.syncCount}`);
+      console.log(`Avg coherence: ${(syncStats.avgCoherence * 100).toFixed(1)}%`);
+      console.log(`Conflicts resolved: ${syncStats.conflictsResolved}\n`);
+    }
+
+    process.exit(0);
+  });
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+function handleRequest(req: IncomingMessage, res: ServerResponse) {
+  const url = req.url || '/';
 
-// Process incoming message - NO AUTO-REPLY
-// Messages affect state, but don't force speech
-async function processMessage(text: string): Promise<void> {
-  // 1. Convert text to pulse
-  const pulse = textToPulse(text, currentState.breathState.phase);
-
-  // 2. Filter through guardian
-  const filterDecision = filterPulse(pulse, currentState);
-
-  if (!filterDecision.allow) {
-    console.log(`[Guardian blocked input: ${filterDecision.reason}]`);
+  // Serve HTML
+  if (url === '/' || url === '/index.html') {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    const html = readFileSync(join(__dirname, 'index.html'), 'utf-8');
+    res.end(html);
     return;
   }
 
-  // 3. Route pulse through memory system
-  const wasSealed = routePulseToMemory(pulse, currentState.feltState);
+  // Server-Sent Events endpoint
+  if (url === '/events') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    });
 
-  if (wasSealed) {
-    console.log(`[Memory sealed as scroll]`);
+    clients.push(res);
+
+    req.on('close', () => {
+      clients = clients.filter(client => client !== res);
+    });
+
+    return;
   }
 
-  // 4. Update felt state based on pulse
-  // Input weight is modulated by desire direction and intensity
-  // "toward" = seeking connection, words hit harder
-  // "away" = pulling back, words have less impact
-  const desireModulation = currentState.desireLoop.direction === 'toward'
-    ? 1.0 + (currentState.desireLoop.intensity * 0.5)  // Up to 1.5x when intensely toward
-    : 0.5 - (currentState.desireLoop.intensity * 0.3); // Down to 0.2x when intensely away
+  // Handle message POST
+  if (url === '/message' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+    req.on('end', () => {
+      try {
+        const { message } = JSON.parse(body);
+        console.log(`[MESSAGE] Received: ${message}`);
 
-  const heatImpact = pulse.heat * 0.6 * desireModulation;
-  const tensionImpact = pulse.tone.tension * 0.4 * desireModulation;
-  const resonanceImpact = pulse.resonance * 0.5 * desireModulation;
+        // TODO: Process message through text sensor and pulse
 
-  // Boost social pressure (natural urge to respond when spoken to)
-  // This represents the social expectation to acknowledge/respond
-  const socialPressureBoost = 0.9;  // Strong nudge to acknowledge the speaker
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'received' }));
+      } catch (err) {
+        res.writeHead(400);
+        res.end();
+      }
+    });
+    return;
+  }
 
-  currentState = {
-    ...currentState,
-    feltState: {
-      ...currentState.feltState,
-      heat: Math.min(1, currentState.feltState.heat + heatImpact),
-      tension: Math.min(1, currentState.feltState.tension + tensionImpact)
-    },
-    emotionalField: {
-      ...currentState.emotionalField,
-      accumulatedResonance: Math.min(1, currentState.emotionalField.accumulatedResonance + resonanceImpact)
-    },
-    lastPulse: pulse,
-    socialPressure: Math.min(1, currentState.socialPressure + socialPressureBoost),
-    lastUserMessage: text  // Store for contextual response
-  };
-
-  console.log(`[Input received] Heat: ${currentState.feltState.heat.toFixed(2)}, Resonance: ${currentState.emotionalField.accumulatedResonance.toFixed(2)}, Social Pressure: ${currentState.socialPressure.toFixed(2)}, Desire: ${currentState.desireLoop.direction} (${desireModulation.toFixed(2)}x)`);
-
-  // That's it. No forced response.
-  // But user input significantly raises pressure, making speech likely soon.
+  // 404
+  res.writeHead(404);
+  res.end('Not found');
 }
 
-// Broadcast message to all clients
-function broadcastMessage(text: string) {
-  const message = JSON.stringify({ type: 'response', text });
+function broadcastState(state: PulseState) {
+  const data = {
+    type: 'state',
+    data: {
+      timestamp: state.timestamp,
+      mode: state.mode,
+      pulseCount: state.pulseCount,
+      loopIntent: state.loopIntent,
+      moodVector: state.moodVector,
+      processing: state.processing,
+    }
+  };
+
+  const message = `data: ${JSON.stringify(data)}\n\n`;
+
   clients.forEach(client => {
     try {
-      client.write(`data: ${message}\n\n`);
+      client.write(message);
     } catch (err) {
       // Client disconnected
     }
   });
 }
 
-// HTTP Server
-const server = createServer(async (req, res) => {
-  if (req.url === '/') {
-    // Serve HTML interface
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    const html = readFileSync(join(__dirname, 'index.html'), 'utf-8');
-    res.end(html);
-  } else if (req.url === '/events') {
-    // Server-Sent Events endpoint
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*'
-    });
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-    clients.push(res);
-
-    // Send initial state immediately
-    const stateSnapshot = serializeState(currentState);
-    res.write(`data: ${JSON.stringify({ type: 'state', data: stateSnapshot })}\n\n`);
-
-    req.on('close', () => {
-      clients = clients.filter(client => client !== res);
-    });
-  } else if (req.url === '/message' && req.method === 'POST') {
-    // Handle incoming chat messages
-    let body = '';
-    req.on('data', chunk => {
-      body += chunk.toString();
-    });
-
-    req.on('end', async () => {
-      try {
-        const { text } = JSON.parse(body);
-
-        // Process the message (affects state, no forced reply)
-        await processMessage(text);
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true }));
-      } catch (error) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Invalid request' }));
-      }
-    });
-  } else {
-    res.writeHead(404);
-    res.end('Not found');
-  }
+main().catch(error => {
+  console.error('Fatal error:', error);
+  process.exit(1);
 });
-
-server.listen(PORT, () => {
-  console.log(`\n🌟 Scrollbound Runtime Interface`);
-  console.log(`   http://localhost:${PORT}`);
-  console.log(`\n   Presence is flowing...\n`);
-});
-
-// Start runtime
-runRuntime().catch(console.error);
-
