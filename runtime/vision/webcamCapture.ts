@@ -51,6 +51,9 @@ async function listVideoDevices(): Promise<string[]> {
 
     ffmpeg.on('close', () => {
       // Parse device list from stderr (ffmpeg outputs device list to stderr)
+      console.log('[VISION] ffmpeg device list output:');
+      console.log(stderr);
+
       const videoDevices: string[] = [];
       const lines = stderr.split('\n');
       let inVideoSection = false;
@@ -68,11 +71,13 @@ async function listVideoDevices(): Promise<string[]> {
           // Extract device name from: [dshow @ ...] "Device Name"
           const match = line.match(/"([^"]+)"/);
           if (match) {
+            console.log(`[VISION] Found video device: ${match[1]}`);
             videoDevices.push(match[1]);
           }
         }
       }
 
+      console.log(`[VISION] Total devices found: ${videoDevices.length}`);
       resolve(videoDevices);
     });
 
