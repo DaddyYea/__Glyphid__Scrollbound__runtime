@@ -221,8 +221,8 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
     });
     req.on('end', () => {
       try {
-        const { message } = JSON.parse(body);
-        console.log(`[MESSAGE] Received: ${message}`);
+        const { text } = JSON.parse(body);
+        console.log(`[MESSAGE] Received: ${text}`);
 
         // TODO: Process message through text sensor and pulse
 
@@ -272,7 +272,7 @@ function broadcastState(state: PulseState) {
         },
       },
       pulse: {
-        resonance: state.processing ? 0.8 : 0.2,
+        resonance: (state.moodVector.presence + state.moodVector.clarity) / 2,
       },
       presenceDelta: {
         magnitude: state.moodVector.presence * 0.5,
