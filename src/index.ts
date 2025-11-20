@@ -36,6 +36,9 @@ export * from './vision';
 // Learning (Adaptation)
 export * from './learning';
 
+// Persistence (Session Continuity)
+export * from './persistence';
+
 // Constants
 export * from './constants/breathTiming';
 export * from './constants/decayRates';
