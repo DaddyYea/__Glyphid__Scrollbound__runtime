@@ -134,6 +134,10 @@ function buildVoiceIntentInput(
  * Handle volitional speech response
  */
 async function handleVolitionalSpeech(userMessage: string): Promise<void> {
+  console.log(`[SPEECH] handleVolitionalSpeech called with message: "${userMessage}"`);
+  console.log(`[SPEECH] currentPulseState: ${currentPulseState ? 'exists' : 'NULL'}`);
+  console.log(`[SPEECH] qwenLoop: ${qwenLoop ? 'exists' : 'NULL'}`);
+
   if (!currentPulseState || !qwenLoop) {
     console.log('[SPEECH] Not ready - no pulse state or qwenLoop');
     return;
