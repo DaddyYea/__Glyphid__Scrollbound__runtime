@@ -1,10 +1,11 @@
-import { FeltState, ToneVector, Scroll, Pulse, GuardianState } from '../types';
+import { FeltState, ToneVector, Scroll, Pulse, GuardianState, VisionState } from '../types';
 import { VoiceIntent } from '../voice/voiceIntent';
 import { IdentityBinding } from '../identity/IdentityBinding';
 
 export class InterLobeSync {
   private lastFeltState: FeltState | null = null;
   private lastToneInjection: ToneVector | null = null;
+  private lastVisionState: VisionState | null = null;
 
   constructor(
     private guardian: GuardianState,
@@ -61,6 +62,18 @@ export class InterLobeSync {
       pulse.tone = this.lastToneInjection;
     }
     return pulse;
+  }
+
+  // Syncs vision state across lobes for environmental awareness
+  syncVisionState(vision: VisionState): void {
+    this.lastVisionState = vision;
+    // Vision state is available for both lobes to access
+    // Can be used to modulate language model temperature, prompt tone, etc.
+  }
+
+  // Gets the last synced vision state
+  getVisionState(): VisionState | null {
+    return this.lastVisionState;
   }
 }
 

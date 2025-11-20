@@ -6,8 +6,13 @@ import { RuntimeState } from '../types';
 import { retrieveScrolls } from '../memory/scrollMemory';
 import { emitPulse } from '../sensors/presencePulse';
 import { updateFeltState } from '../soul/feltState';
+import { visionPulse } from '../vision/visionPulse';
 
 export async function pulseLoop(state: RuntimeState): Promise<RuntimeState> {
+  // CRITICAL: Apply vision pulse BEFORE updating felt state
+  // Vision influences tone and drift before other updates
+  state = visionPulse(state);
+
   const pulse = emitPulse(state);
   const scrolls = await retrieveScrolls(pulse);
   const updatedFelt = updateFeltState(state.feltState, scrolls, pulse);

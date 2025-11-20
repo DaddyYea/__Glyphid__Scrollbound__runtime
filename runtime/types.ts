@@ -141,6 +141,17 @@ export interface GuardianState {
 }
 
 // ------------------------------------------
+// Vision State
+// ------------------------------------------
+export interface VisionState {
+  colorHeat: number;      // 0-1: Thermal quality of dominant color (cool blue → warm red)
+  brightness: number;     // 0-1: Overall luminance
+  contrast: number;       // 0-1: Sharpness/definition
+  motion: number;         // 0-1: Movement intensity
+  resonance: number;      // 0-1: Weighted harmonic score
+}
+
+// ------------------------------------------
 // Runtime State (CORRECTED)
 // ------------------------------------------
 export interface RuntimeState {
@@ -154,6 +165,7 @@ export interface RuntimeState {
   christLoop: ChristLoopState;
   desireLoop: DesireLoopState;
   guardianState: GuardianState;
+  visionState?: VisionState;     // optional: abstract vision state (added by visionPulse)
   timestamp: number;             // system time in ms
   socialPressure: number;        // pressure to respond to user input (0-1, decays over time)
   identityNarrative: string[];   // awakening identity lines kept in RAM
