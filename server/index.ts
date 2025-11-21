@@ -618,6 +618,16 @@ async function broadcastState(state: PulseState) {
   const archiveResonance = archiveStats.averageResonance * archiveStats.totalScrolls;
   const accumulatedResonance = bufferResonance + archiveResonance;
 
+  // Debug logging
+  console.log('[broadcastState] Memory metrics:', {
+    bufferScrolls: bufferMetrics.totalScrolls,
+    archiveScrolls: archiveStats.totalScrolls,
+    totalScrollCount,
+    bufferResonance: bufferResonance.toFixed(2),
+    archiveResonance: archiveResonance.toFixed(2),
+    accumulatedResonance: accumulatedResonance.toFixed(2),
+  });
+
   // Check model status
   let qwenReady = false;
   let phiReady = false;
