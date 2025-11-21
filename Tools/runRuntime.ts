@@ -83,8 +83,15 @@ function startLobe(config: LobeConfig) {
     modelPath,
     '--port',
     config.port.toString(),
+    '--n-gpu-layers',
+    '35',
     '--ctx-size',
-    '4096'
+    '4096',
+    '--threads',
+    '10',
+    '--batch-size',
+    '64',
+    '--mlock'
   ];
 
   if (config.extraArgs) {
