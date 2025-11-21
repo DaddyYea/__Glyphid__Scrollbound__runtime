@@ -461,9 +461,10 @@ async function main() {
     handleRequest(req, res);
   });
 
-  server.listen(PORT, () => {
+  server.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🌟 Scrollbound Runtime Interface`);
     console.log(`   http://localhost:${PORT}`);
+    console.log(`   http://21.0.0.116:${PORT} (WSL)`);
     console.log(`\n   Dual-lobe presence is flowing...\n`);
   });
 
