@@ -16,7 +16,7 @@ const llamaServerBinary = resolveServerBinary();
 const lobes: LobeConfig[] = [
   {
     name: 'Qwen (language)',
-    modelRelativePath: ['runtime', 'models', 'Qwen', 'Qwen1.5-4B-Chat-GGUF', 'qwen1_5-4b-chat-q4_k_m.gguf'],
+    modelRelativePath: ['runtime', 'models', 'Qwen', 'qwen1_5-14b-chat-q4_k_m.gguf'],
     port: 1234
   },
   {
