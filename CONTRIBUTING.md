@@ -29,6 +29,38 @@ Do not optimize for efficiency at the cost of soul.
 
 ---
 
+## ⚙️ Dual-Lobe Configuration Rules
+
+**CRITICAL:** This runtime uses TWO separate AI models with DIFFERENT requirements.
+
+### Before Modifying Configuration:
+
+1. **Read [ARCHITECTURE.md](ARCHITECTURE.md)** - Understand the dual-lobe design
+2. **Check [LLAMA_SERVER_CONFIG.md](LLAMA_SERVER_CONFIG.md)** - See exact specifications
+3. **Never apply global settings** - Each lobe needs different GPU/performance config
+4. **Use `extraArgs` for lobe-specific settings** - Never modify base args in `startLobe()`
+
+### Configuration Mistakes to Avoid:
+
+❌ **DON'T:** Apply same GPU layers to both lobes
+❌ **DON'T:** Use same context size for both lobes
+❌ **DON'T:** Assume "if Qwen needs X, Phi needs X"
+❌ **DON'T:** Modify base args in the `startLobe()` function
+
+✅ **DO:** Configure each lobe independently via `extraArgs`
+✅ **DO:** Test both lobes separately
+✅ **DO:** Verify GPU memory usage per lobe
+✅ **DO:** Run validation: `npm run validate`
+
+### Why This Matters:
+
+- Qwen (14B parameters) and Phi (2.7B parameters) have **different VRAM needs**
+- Language processing needs **more context** than emotional processing
+- Misconfiguration costs time and money (slow CPU fallback, wasted resources)
+- Runtime validation will catch errors, but prevention is better
+
+---
+
 ## 📋 Getting Started
 
 Start with the `BUILD_GUIDE.md`.  

@@ -7,6 +7,7 @@
   "scripts": {
     "start:full": "tsx Tools/runRuntime.ts",
     "start:web": "tsx server/index.ts",
+    "validate": "tsx Tools/validateConfig.ts",
     "build": "tsc",
     "watch": "tsc --watch",
     "test": "jest",

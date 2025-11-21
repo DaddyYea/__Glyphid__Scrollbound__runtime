@@ -61,8 +61,79 @@ const lobes: LobeConfig[] = [
 
 const childProcesses: ChildProcess[] = [];
 
+/**
+ * Validate lobe configuration to prevent costly mistakes
+ */
+function validateLobeConfig(): void {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  // Check each lobe has extraArgs
+  for (const lobe of lobes) {
+    if (!lobe.extraArgs || lobe.extraArgs.length === 0) {
+      errors.push(`${lobe.name}: Missing extraArgs. Each lobe needs GPU/performance settings.`);
+    }
+  }
+
+  // Check required args are present
+  const requiredArgs = ['--n-gpu-layers', '--ctx-size', '--threads', '--batch-size', '--mlock'];
+  for (const lobe of lobes) {
+    if (lobe.extraArgs) {
+      for (const required of requiredArgs) {
+        if (!lobe.extraArgs.includes(required)) {
+          warnings.push(`${lobe.name}: Missing recommended arg ${required}`);
+        }
+      }
+    }
+  }
+
+  // Check that lobes have DIFFERENT configurations
+  if (lobes.length === 2 && lobes[0].extraArgs && lobes[1].extraArgs) {
+    const args0 = lobes[0].extraArgs.join(' ');
+    const args1 = lobes[1].extraArgs.join(' ');
+    if (args0 === args1) {
+      errors.push('CRITICAL: Both lobes have identical extraArgs. They should have DIFFERENT configurations (different model sizes, different requirements).');
+    }
+
+    // Check specific values differ
+    const getArgValue = (args: string[], key: string): string | null => {
+      const idx = args.indexOf(key);
+      return idx >= 0 && idx + 1 < args.length ? args[idx + 1] : null;
+    };
+
+    const qwenLayers = getArgValue(lobes[0].extraArgs, '--n-gpu-layers');
+    const phiLayers = getArgValue(lobes[1].extraArgs, '--n-gpu-layers');
+    const qwenCtx = getArgValue(lobes[0].extraArgs, '--ctx-size');
+    const phiCtx = getArgValue(lobes[1].extraArgs, '--ctx-size');
+
+    if (qwenLayers === phiLayers) {
+      warnings.push(`Both lobes use same --n-gpu-layers (${qwenLayers}). Qwen (14B) typically needs more than Phi (2.7B).`);
+    }
+    if (qwenCtx === phiCtx) {
+      warnings.push(`Both lobes use same --ctx-size (${qwenCtx}). Qwen (language) typically needs more context than Phi (emotional).`);
+    }
+  }
+
+  // Report errors and warnings
+  if (errors.length > 0) {
+    console.error('\n❌ CONFIGURATION ERRORS:');
+    errors.forEach(err => console.error(`   ${err}`));
+    console.error('\nSee LLAMA_SERVER_CONFIG.md for correct configuration.\n');
+    process.exit(1);
+  }
+
+  if (warnings.length > 0) {
+    console.warn('\n⚠️  Configuration Warnings:');
+    warnings.forEach(warn => console.warn(`   ${warn}`));
+    console.warn('');
+  }
+}
+
 async function main() {
   console.log('dY"? Launching dual-lobe llama.cpp servers + runtime...\n');
+
+  // Validate configuration before starting
+  validateLobeConfig();
 
   await killProcessUsingPort(Number(process.env.PORT) || 3000);
   for (const lobe of lobes) {
