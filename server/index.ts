@@ -260,6 +260,13 @@ async function handleVolitionalSpeech(userMessage: string): Promise<void> {
   console.log(`[SPEECH] Reasoning: ${voiceIntent.reasoning}`);
 
   if (voiceIntent.shouldSpeak) {
+    // Check if model is actually ready (prevents 503 errors during warmup)
+    const modelReady = await qwenLoop.isModelReady();
+    if (!modelReady) {
+      console.log('[SPEECH] Model not ready yet, skipping generation');
+      return;
+    }
+
     // Query recent conversation history from memory
     const recentScrolls = memory.recall({
       categories: ['conversation'],

@@ -562,6 +562,24 @@ export class QwenLoop {
   }
 
   /**
+   * Get backend instance
+   */
+  getBackend(): ModelBackend {
+    return this.backend;
+  }
+
+  /**
+   * Check if outer model is ready
+   */
+  async isModelReady(): Promise<boolean> {
+    try {
+      return await this.backend.isModelLoaded(this.outerConfig.modelName);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Update model configuration
    */
   updateConfig(type: 'outer' | 'inner', updates: Partial<ModelConfig>): void {
