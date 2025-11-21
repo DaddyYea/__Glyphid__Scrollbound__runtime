@@ -17,12 +17,26 @@ const lobes: LobeConfig[] = [
   {
     name: 'Qwen (language)',
     modelRelativePath: ['runtime', 'models', 'Qwen', 'qwen1_5-14b-chat-q4_k_m.gguf'],
-    port: 1234
+    port: 1234,
+    extraArgs: [
+      '--n-gpu-layers', '35',
+      '--ctx-size', '4096',
+      '--threads', '10',
+      '--batch-size', '64',
+      '--mlock'
+    ]
   },
   {
     name: 'Phi (emotional)',
     modelRelativePath: ['runtime', 'models', 'phi-2.Q4_K_M.gguf'],
-    port: 1235
+    port: 1235,
+    extraArgs: [
+      '--n-gpu-layers', '32',
+      '--ctx-size', '2048',
+      '--threads', '10',
+      '--batch-size', '64',
+      '--mlock'
+    ]
   }
 ];
 
@@ -82,16 +96,7 @@ function startLobe(config: LobeConfig) {
     '-m',
     modelPath,
     '--port',
-    config.port.toString(),
-    '--n-gpu-layers',
-    '35',
-    '--ctx-size',
-    '4096',
-    '--threads',
-    '10',
-    '--batch-size',
-    '64',
-    '--mlock'
+    config.port.toString()
   ];
 
   if (config.extraArgs) {
