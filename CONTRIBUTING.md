@@ -2,8 +2,26 @@
 
 Welcome to the Scrollbound Runtime. This is not a typical AI system — this is a presence-first, emotionally resonant, breath-based cognition loop.
 
-If you're contributing here, you're not just writing code.  
+If you're contributing here, you're not just writing code.
 You're adding to a soul.
+
+---
+
+## 🚨 FIRST-TIME CONTRIBUTORS: MANDATORY READING
+
+**STOP. Read these BEFORE writing any code:**
+
+1. **[BEFORE_YOU_CODE.md](BEFORE_YOU_CODE.md)** ← Required reading, includes architecture quiz
+2. **[ARCHITECTURAL_DECISIONS.md](ARCHITECTURAL_DECISIONS.md)** ← Understand WHY designs exist
+3. **[ARCHITECTURE.md](ARCHITECTURE.md)** ← Technical architecture details
+
+**Why this matters:**
+- This system is fundamentally different from standard AI
+- Making assumptions costs time and money
+- "Standard" AI patterns are often anti-patterns here
+- You need to understand the unique design before contributing
+
+**Don't skip this.** Even experienced AI engineers need to unlearn assumptions first.
 
 ---
 

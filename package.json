@@ -8,6 +8,8 @@
     "start:full": "tsx Tools/runRuntime.ts",
     "start:web": "tsx server/index.ts",
     "validate": "tsx Tools/validateConfig.ts",
+    "validate:arch": "tsx Tools/validateArchitecture.ts",
+    "validate:all": "npm run validate && npm run validate:arch",
     "build": "tsc",
     "watch": "tsc --watch",
     "test": "jest",
