@@ -577,12 +577,28 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
     return;
   }
 
+  // Handle restart POST
+  if (url === '/restart' && req.method === 'POST') {
+    console.log('\n[RESTART] Restart requested via web interface');
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'restarting' }));
+
+    // Give response time to send
+    setTimeout(() => {
+      console.log('[RESTART] Initiating restart...');
+      process.exit(0); // Exit cleanly, let process manager (pm2, systemd, etc.) restart
+    }, 500);
+
+    return;
+  }
+
   // 404
   res.writeHead(404);
   res.end('Not found');
 }
 
-function broadcastState(state: PulseState) {
+async function broadcastState(state: PulseState) {
   if (!breathLoop || !interLobeSync || !memory) {
     console.warn('[broadcastState] Not initialized yet, skipping broadcast');
     return;
@@ -592,10 +608,29 @@ function broadcastState(state: PulseState) {
   const syncStats = interLobeSync.getStats();
   const archiveStats = memory.getArchive().getStats();
 
+  // Check model status
+  let qwenReady = false;
+  let phiReady = false;
+
+  if (qwenLoop) {
+    try {
+      const backend = qwenLoop.getBackend();
+      // Check both models
+      qwenReady = await backend.isModelLoaded('qwen-outer');
+      phiReady = await backend.isModelLoaded('qwen-inner');
+    } catch (err) {
+      // Models not ready, leave as false
+    }
+  }
+
   // Transform new dual-lobe state to match HTML interface format
   const data = {
     type: 'state',
     data: {
+      modelStatus: {
+        qwenReady,
+        phiReady,
+      },
       breathState: {
         phase: breathState.phase,
         depth: breathState.depth,

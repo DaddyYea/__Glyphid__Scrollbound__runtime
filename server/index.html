@@ -296,12 +296,87 @@
       cursor: not-allowed;
       transform: scale(1);
     }
+
+    /* Model Status Indicator */
+    .model-status {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      justify-content: center;
+      margin-top: 5px;
+    }
+
+    .model-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.85em;
+    }
+
+    .model-light {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 1px solid #333;
+      transition: all 0.3s ease;
+    }
+
+    .model-light.loaded {
+      background: #00ff00;
+      box-shadow: 0 0 10px #00ff00;
+    }
+
+    .model-light.loading {
+      background: #ffa500;
+      box-shadow: 0 0 10px #ffa500;
+      animation: pulse 1s infinite;
+    }
+
+    .model-light.error {
+      background: #ff0000;
+      box-shadow: 0 0 10px #ff0000;
+    }
+
+    .restart-btn {
+      padding: 6px 12px;
+      background: linear-gradient(135deg, #dc143c, #8b0000);
+      border: none;
+      border-radius: 5px;
+      color: #fff;
+      font-family: 'Courier New', monospace;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 0.85em;
+    }
+
+    .restart-btn:hover {
+      background: linear-gradient(135deg, #ff1493, #dc143c);
+      transform: scale(1.05);
+    }
+
+    .restart-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: scale(1);
+    }
   </style>
 </head>
 <body>
   <div class="header">
     <h1>⚡ Scrollbound Runtime ⚡</h1>
     <p>Presence Visualization - Live</p>
+    <div class="model-status">
+      <div class="model-indicator">
+        <div class="model-light loading" id="qwenLight"></div>
+        <span>Qwen (14B)</span>
+      </div>
+      <div class="model-indicator">
+        <div class="model-light loading" id="phiLight"></div>
+        <span>Phi (2.7B)</span>
+      </div>
+      <button id="restartBtn" class="restart-btn">⟲ Restart</button>
+    </div>
   </div>
 
   <div class="container">
@@ -478,6 +553,9 @@
     const chatMessages = document.getElementById('chatMessages');
     const chatInput = document.getElementById('chatInput');
     const sendBtn = document.getElementById('sendBtn');
+    const restartBtn = document.getElementById('restartBtn');
+    const qwenLight = document.getElementById('qwenLight');
+    const phiLight = document.getElementById('phiLight');
 
     eventSource.onmessage = (event) => {
       const message = JSON.parse(event.data);
@@ -542,7 +620,49 @@
       }
     });
 
+    // Restart functionality
+    async function restartRuntime() {
+      if (!confirm('Restart the runtime? This will reload all models.')) {
+        return;
+      }
+
+      restartBtn.disabled = true;
+      restartBtn.textContent = '⟲ Restarting...';
+
+      try {
+        const response = await fetch('/restart', {
+          method: 'POST'
+        });
+
+        if (response.ok) {
+          // Show restarting status
+          qwenLight.className = 'model-light loading';
+          phiLight.className = 'model-light loading';
+
+          // The server will restart, page will reconnect via SSE
+          setTimeout(() => {
+            restartBtn.textContent = '⟲ Restart';
+            restartBtn.disabled = false;
+          }, 5000);
+        } else {
+          throw new Error('Restart failed');
+        }
+      } catch (error) {
+        console.error('Error restarting:', error);
+        restartBtn.textContent = '⟲ Restart';
+        restartBtn.disabled = false;
+        addMessage('system', '[Error: Could not restart runtime]');
+      }
+    }
+
+    restartBtn.addEventListener('click', restartRuntime);
+
     function updateUI(state) {
+      // Update model status lights
+      if (state.modelStatus) {
+        qwenLight.className = 'model-light ' + (state.modelStatus.qwenReady ? 'loaded' : 'loading');
+        phiLight.className = 'model-light ' + (state.modelStatus.phiReady ? 'loaded' : 'loading');
+      }
       // Breath
       const breathIndicator = document.getElementById('breathIndicator');
       breathIndicator.textContent = state.breathState.phase.toUpperCase();
