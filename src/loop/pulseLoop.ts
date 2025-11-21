@@ -11,6 +11,7 @@
 import { ThoughtPulsePacket } from '../types/ThoughtPulsePacket';
 import { LoopIntent } from '../types/LoopIntent';
 import { MoodVector } from '../types/EmotionalState';
+import { ScrollCategory, ScrollEcho } from '../types/ScrollEcho';
 import { BreathLoop, BreathState } from './breathLoop';
 import { ScrollPulseMemory } from '../memory/scrollPulseMemory';
 import { PresenceDeltaTracker } from '../sense/presenceDelta';
@@ -76,7 +77,7 @@ export class PulseLoop {
   private breathLoop: BreathLoop;
   private presenceTracker: PresenceDeltaTracker;
   private qwenLoop?: QwenLoop;
-  private _memory: ScrollPulseMemory; // Prefixed with _ - reserved for future use
+  private memory: ScrollPulseMemory; // Active memory system
 
   private state: PulseState;
   private config: PulseConfig;
@@ -96,7 +97,7 @@ export class PulseLoop {
     this.breathLoop = breathLoop;
     this.presenceTracker = presenceTracker;
     this.qwenLoop = qwenLoop;
-    this._memory = memory;
+    this.memory = memory;
 
     this.config = {
       outerEnabled: true,
@@ -219,6 +220,9 @@ export class PulseLoop {
     }
 
     this.state.timestamp = new Date().toISOString();
+
+    // Remember thoughts as scrolls (close the memory loop!)
+    await this.rememberThoughts(thoughts);
 
     // Notify callbacks
     await this.notifyCallbacks(thoughts);
@@ -435,10 +439,14 @@ export class PulseLoop {
    */
   private buildProcessingContext(breathPacket?: ThoughtPulsePacket): ProcessingContext {
     const breathState = this.breathLoop.getState();
+
+    // Retrieve relevant scrolls from memory
+    const scrolls = this.retrieveRelevantScrolls();
+
     return {
       previousThoughts: breathPacket ? [breathPacket] :
         [this.state.lastOuter, this.state.lastInner].filter(Boolean) as ThoughtPulsePacket[],
-      relevantScrolls: [], // TODO: Retrieve from memory
+      relevantScrolls: scrolls,
       moodVector: this.state.moodVector,
       loopIntent: this.state.loopIntent,
       presenceQuality: this.state.moodVector.presence,
@@ -538,9 +546,142 @@ export class PulseLoop {
   }
 
   /**
-   * Get memory instance (reserved for future scroll retrieval)
+   * Get memory instance
    */
   getMemory(): ScrollPulseMemory {
-    return this._memory;
+    return this.memory;
+  }
+
+  /**
+   * Retrieve relevant scrolls from memory based on current state
+   */
+  private retrieveRelevantScrolls(): ScrollEcho[] {
+    const mood = this.state.moodVector;
+    const intent = this.state.loopIntent;
+
+    // Build triggers from current state
+    const triggers: string[] = [];
+
+    // Add loop intent as trigger
+    triggers.push(`intent:${intent}`);
+
+    // Add dominant emotion as trigger
+    const dominant = this.getDominantEmotion(mood);
+    if (dominant) {
+      triggers.push(`emotion:${dominant}`);
+    }
+
+    // Query memory for relevant scrolls
+    const scrolls = this.memory.recall({
+      triggers,
+      minResonance: 0.3, // Only retrieve scrolls with some resonance
+      limit: 5, // Top 5 most relevant
+    });
+
+    return scrolls;
+  }
+
+  /**
+   * Create and remember scrolls from thought packets
+   */
+  private async rememberThoughts(thoughts: {
+    outer?: ThoughtPulsePacket;
+    inner?: ThoughtPulsePacket;
+  }): Promise<void> {
+    // Create scroll from outer thought
+    if (thoughts.outer) {
+      const category = this.inferScrollCategory(thoughts.outer);
+      const scroll = this.memory.createScrollFromPacket(thoughts.outer, category);
+      this.memory.remember(scroll);
+
+      console.log(
+        `[PulseLoop] Remembered outer scroll: ${scroll.id.substring(0, 8)}... ` +
+          `(${category}, resonance: ${scroll.resonance.toFixed(2)})`
+      );
+    }
+
+    // Create scroll from inner thought
+    if (thoughts.inner) {
+      const category = this.inferScrollCategory(thoughts.inner);
+      const scroll = this.memory.createScrollFromPacket(thoughts.inner, category);
+      this.memory.remember(scroll);
+
+      console.log(
+        `[PulseLoop] Remembered inner scroll: ${scroll.id.substring(0, 8)}... ` +
+          `(${category}, resonance: ${scroll.resonance.toFixed(2)})`
+      );
+    }
+
+    // Apply mood influence on memory decay
+    this.memory.applyMoodInfluence(this.state.moodVector);
+  }
+
+  /**
+   * Infer scroll category from thought packet
+   */
+  private inferScrollCategory(packet: ThoughtPulsePacket): ScrollCategory {
+    // Check loop intent first
+    switch (packet.loopIntent) {
+      case 'express':
+        return packet.moodVector.devotion > 0.6
+          ? ScrollCategory.DEVOTIONAL
+          : ScrollCategory.RELATIONAL;
+
+      case 'reflect':
+        return ScrollCategory.REFLECTIVE;
+
+      case 'wonder':
+        return ScrollCategory.DISCOVERY;
+
+      case 'drift':
+        return ScrollCategory.DREAM;
+
+      case 'protect':
+        return packet.moodVector.grief > 0.5
+          ? ScrollCategory.PAINFUL
+          : ScrollCategory.EMBODIED;
+
+      default:
+        break;
+    }
+
+    // Check emotional dominance
+    const mood = packet.moodVector;
+
+    if (mood.grief > 0.6) {
+      return ScrollCategory.PAINFUL;
+    }
+
+    if (mood.joy > 0.7) {
+      return ScrollCategory.JOYFUL;
+    }
+
+    if (mood.devotion > 0.7 || mood.reverence > 0.7) {
+      return ScrollCategory.DEVOTIONAL;
+    }
+
+    if (mood.wonder > 0.6) {
+      return ScrollCategory.DISCOVERY;
+    }
+
+    // Check for prayer indicators (high devotion + yearning)
+    if (mood.devotion > 0.6 && mood.yearning > 0.5) {
+      return ScrollCategory.PRAYER;
+    }
+
+    // Default based on source model
+    return packet.sourceModel === 'outer'
+      ? ScrollCategory.SENSORY
+      : ScrollCategory.REFLECTIVE;
+  }
+
+  /**
+   * Get dominant emotion from mood vector
+   */
+  private getDominantEmotion(mood: MoodVector): keyof MoodVector | null {
+    const entries = Object.entries(mood) as Array<[keyof MoodVector, number]>;
+    const sorted = entries.sort((a, b) => b[1] - a[1]);
+
+    return sorted.length > 0 && sorted[0][1] > 0.3 ? sorted[0][0] : null;
   }
 }
