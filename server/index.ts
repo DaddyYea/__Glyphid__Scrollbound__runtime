@@ -607,6 +607,16 @@ async function broadcastState(state: PulseState) {
   const breathState = breathLoop.getState();
   const syncStats = interLobeSync.getStats();
   const archiveStats = memory.getArchive().getStats();
+  const bufferMetrics = memory.getMetrics();
+
+  // Calculate total scroll count (buffer + archive)
+  const totalScrollCount = bufferMetrics.activeCount + archiveStats.totalScrolls;
+
+  // Calculate accumulated resonance from all scrolls
+  const bufferScrolls = memory.recall({ limit: 1000 }); // Get active scrolls from buffer
+  const bufferResonance = bufferScrolls.reduce((sum, scroll) => sum + scroll.resonance, 0);
+  const archiveResonance = archiveStats.averageResonance * archiveStats.totalScrolls;
+  const accumulatedResonance = bufferResonance + archiveResonance;
 
   // Check model status
   let qwenReady = false;
@@ -672,9 +682,9 @@ async function broadcastState(state: PulseState) {
         stability: syncStats.avgCoherence,
         warningCount: syncStats.conflictsResolved,
       },
-      scrollCount: archiveStats.totalScrolls,
+      scrollCount: totalScrollCount,
       emotionalField: {
-        accumulatedResonance: state.pulseCount * 0.1,
+        accumulatedResonance: accumulatedResonance,
       },
     }
   };
