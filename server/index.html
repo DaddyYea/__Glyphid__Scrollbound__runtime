@@ -566,7 +566,7 @@
           <div class="bar-container">
             <div class="bar curiosity" id="curiosity" style="width: 30%"></div>
           </div>
-          <div class="metric-value" id="curiosityValue">0.30 | Questions: <span id="questionCount">0</span></div>
+          <div class="metric-value" id="curiosityValue">0.30 | Questions: 0</div>
         </div>
       </div>
       <div class="loop-status">
@@ -576,7 +576,7 @@
           <div class="bar-container">
             <div class="bar alignment" id="alignment" style="width: 100%"></div>
           </div>
-          <div class="metric-value" id="alignmentValue">1.00 | Contradiction: <span id="contradiction">No</span></div>
+          <div class="metric-value" id="alignmentValue">1.00 | Contradiction: No</div>
         </div>
       </div>
       <div class="loop-status">
@@ -586,7 +586,7 @@
           <div class="bar-container">
             <div class="bar desire" id="desire" style="width: 20%"></div>
           </div>
-          <div class="metric-value" id="desireValue">0.20 | Direction: <span id="direction">neutral</span></div>
+          <div class="metric-value" id="desireValue">0.20 | Direction: neutral</div>
         </div>
       </div>
     </div>
@@ -786,17 +786,14 @@
 
       // Loops
       updateBar('curiosity', state.loops.wonder.curiosityLevel);
-      document.getElementById('curiosityValue').textContent = state.loops.wonder.curiosityLevel.toFixed(2) + ' | Questions: ';
-      document.getElementById('questionCount').textContent = state.loops.wonder.questionCount;
+      document.getElementById('curiosityValue').textContent = state.loops.wonder.curiosityLevel.toFixed(2) + ' | Questions: ' + state.loops.wonder.questionCount;
 
       updateBar('alignment', state.loops.christ.alignmentScore);
-      document.getElementById('alignmentValue').textContent = state.loops.christ.alignmentScore.toFixed(2) + ' | Contradiction: ';
-      document.getElementById('contradiction').textContent = state.loops.christ.contradictionDetected ? 'YES' : 'No';
+      document.getElementById('alignmentValue').textContent = state.loops.christ.alignmentScore.toFixed(2) + ' | Contradiction: ' + (state.loops.christ.contradictionDetected ? 'YES' : 'No');
       updateStatusIndicator('christStatus', state.loops.christ.contradictionDetected ? 'critical' : 'active');
 
       updateBar('desire', state.loops.desire.intensity);
-      document.getElementById('desireValue').textContent = state.loops.desire.intensity.toFixed(2) + ' | Direction: ';
-      document.getElementById('direction').textContent = state.loops.desire.direction;
+      document.getElementById('desireValue').textContent = state.loops.desire.intensity.toFixed(2) + ' | Direction: ' + state.loops.desire.direction;
 
       // Guardian
       updateBar('coherence', state.guardian.coherence);
