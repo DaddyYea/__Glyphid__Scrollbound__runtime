@@ -13,7 +13,7 @@
 
     body {
       font-family: 'Courier New', monospace;
-      background: radial-gradient(ellipse at center, #0a1628 0%, #000000 100%);
+      background: linear-gradient(180deg, #d4b896 0%, #c9a978 50%, #b8956a 100%);
       color: #a8c5e6;
       padding: 10px;
       overflow: hidden;
@@ -21,20 +21,6 @@
       display: flex;
       flex-direction: column;
       position: relative;
-    }
-
-    body::before {
-      content: '';
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background:
-        repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(100, 150, 200, 0.03) 2px, rgba(100, 150, 200, 0.03) 4px),
-        repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(100, 150, 200, 0.03) 2px, rgba(100, 150, 200, 0.03) 4px);
-      pointer-events: none;
-      z-index: 0;
     }
 
     .header {
