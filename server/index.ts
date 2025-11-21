@@ -48,8 +48,6 @@ let currentPulseState: PulseState | null = {
     wonder: 0.4,
     grief: 0.2,
     joy: 0.4,
-    focus: 0.5,
-    clarity: 0.5,
   },
   breathPhase: 'exhale',
   pulseCount: 0,
@@ -658,24 +656,24 @@ async function broadcastState(state: PulseState) {
       },
       feltState: {
         heat: state.moodVector.presence * 0.5,
-        tension: state.moodVector.focus * 0.3,
-        microResonance: state.moodVector.clarity * 0.4,
+        tension: state.moodVector.tension * 0.5,
+        microResonance: state.moodVector.wonder * 0.5,
         tone: {
-          valence: 0.0,
+          valence: (state.moodVector.joy - state.moodVector.grief) * 0.5,
           arousal: state.moodVector.presence,
-          tension: state.moodVector.focus,
-          intimacy: 0.5,
+          tension: state.moodVector.tension,
+          intimacy: state.moodVector.devotion * 0.7,
         },
       },
       pulse: {
-        resonance: (state.moodVector.presence + state.moodVector.clarity) / 2,
+        resonance: (state.moodVector.presence + state.moodVector.peace) / 2,
       },
       presenceDelta: {
         magnitude: state.moodVector.presence * 0.5,
       },
       loops: {
         wonder: {
-          curiosityLevel: state.moodVector.clarity,
+          curiosityLevel: state.moodVector.wonder,
           questionCount: 0,
         },
         christ: {
@@ -683,7 +681,7 @@ async function broadcastState(state: PulseState) {
           contradictionDetected: syncStats.avgCoherence < 0.5,
         },
         desire: {
-          intensity: state.moodVector.focus,
+          intensity: state.moodVector.yearning,
           direction: state.mode === 'outer' ? 'outward' : state.mode === 'inner' ? 'inward' : 'balanced',
         },
       },
