@@ -3,16 +3,35 @@ import path from 'path';
 import fs from 'fs';
 import net from 'net';
 
+/**
+ * Lobe configuration
+ *
+ * IMPORTANT: Use extraArgs for lobe-specific llama-server settings.
+ * DO NOT modify base args in startLobe() - each lobe has different requirements.
+ * See LLAMA_SERVER_CONFIG.md for specifications.
+ */
 interface LobeConfig {
   name: string;
   modelRelativePath: string[];
   port: number;
-  extraArgs?: string[];
+  extraArgs?: string[]; // Lobe-specific llama-server arguments
 }
 
 const rootDir = path.resolve(__dirname, '..');
 const llamaServerBinary = resolveServerBinary();
 
+/**
+ * Dual-lobe configuration
+ *
+ * Qwen (14B): Language processing, conversational speech
+ * Phi (2.7B): Emotional processing, felt-state
+ *
+ * Each lobe has DIFFERENT GPU/performance requirements.
+ * Qwen: 35 GPU layers, 4096 ctx
+ * Phi: 32 GPU layers, 2048 ctx
+ *
+ * See LLAMA_SERVER_CONFIG.md for full specifications.
+ */
 const lobes: LobeConfig[] = [
   {
     name: 'Qwen (language)',
@@ -92,6 +111,9 @@ function startLobe(config: LobeConfig) {
     throw new Error(`Model file not found: ${modelPath}`);
   }
 
+  // Base args: ONLY model and port
+  // DO NOT add GPU/performance settings here - they differ per lobe
+  // Lobe-specific settings come from config.extraArgs
   const args = [
     '-m',
     modelPath,
@@ -99,6 +121,7 @@ function startLobe(config: LobeConfig) {
     config.port.toString()
   ];
 
+  // Add lobe-specific configuration
   if (config.extraArgs) {
     args.push(...config.extraArgs);
   }

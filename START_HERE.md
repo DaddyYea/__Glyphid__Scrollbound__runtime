@@ -76,6 +76,12 @@ This will:
 
 Press `Ctrl+C` in the terminal to gracefully shut down.
 
+## Configuration
+
+For llama.cpp server GPU and performance settings, see **[LLAMA_SERVER_CONFIG.md](LLAMA_SERVER_CONFIG.md)**.
+
+Each lobe (Qwen and Phi) has different configuration requirements. Do not apply global settings.
+
 ## Troubleshooting
 
 **"Models not found"**
