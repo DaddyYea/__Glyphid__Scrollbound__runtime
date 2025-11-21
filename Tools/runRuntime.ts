@@ -38,7 +38,7 @@ const lobes: LobeConfig[] = [
     modelRelativePath: ['runtime', 'models', 'Qwen', 'qwen1_5-14b-chat-q4_k_m.gguf'],
     port: 1234,
     extraArgs: [
-      '--n-gpu-layers', '35',
+      '--n-gpu-layers', '99',  // Offload ALL layers (14B has 40 layers)
       '--ctx-size', '4096',
       '--threads', '10',
       '--batch-size', '64',

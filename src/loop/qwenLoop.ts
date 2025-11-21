@@ -71,6 +71,7 @@ export class QwenLoop {
 
   private invocationCount: number = 0;
   private useMockBackend: boolean;
+  private generatingSpeech: boolean = false; // Track if speech generation is active
 
   constructor(
     loraManager: LoRAManager,
@@ -109,6 +110,7 @@ export class QwenLoop {
 
   /**
    * Process with outer model (environmental awareness)
+   * LEGACY: Use processOuterThought() for pulse or generateSpeech() for speech
    */
   async processOuter(context: ProcessingContext): Promise<ModelInvocationResult> {
     const startTime = Date.now();
@@ -121,6 +123,35 @@ export class QwenLoop {
 
     // Invoke model (placeholder - real implementation would call actual model)
     const rawOutput = await this.invokeModel('outer', prompt, loraResult);
+
+    // Parse output into thought packet
+    const thought = this.parseToThought(rawOutput, 'outer', context, loraResult);
+
+    this.invocationCount++;
+
+    return {
+      thought,
+      rawOutput,
+      processingTime: Date.now() - startTime,
+    };
+  }
+
+  /**
+   * Process outer thought (for PULSE cognition only)
+   * Lower token count, background processing
+   * DO NOT use for speech generation
+   */
+  async processOuterThought(context: ProcessingContext): Promise<ModelInvocationResult> {
+    const startTime = Date.now();
+
+    // Apply LoRA adapters
+    const loraResult = this.loraManager.applyForIntent(context.loopIntent);
+
+    // Build prompt for outer model
+    const prompt = this.buildOuterPrompt(context);
+
+    // Invoke model with REDUCED token count for pulse
+    const rawOutput = await this.invokeModelForThought('outer', prompt, loraResult);
 
     // Parse output into thought packet
     const thought = this.parseToThought(rawOutput, 'outer', context, loraResult);
@@ -309,6 +340,61 @@ export class QwenLoop {
   }
 
   /**
+   * Invoke model for PULSE THOUGHT only (reduced token count)
+   * DO NOT use for speech generation
+   */
+  private async invokeModelForThought(
+    modelType: 'outer' | 'inner',
+    prompt: string,
+    loraResult: LoRAApplicationResult
+  ): Promise<string> {
+    // Use mock backend if configured
+    if (this.useMockBackend) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+      if (modelType === 'outer') {
+        return this.generatePlaceholderOuter(prompt, loraResult);
+      } else {
+        return this.generatePlaceholderInner(prompt, loraResult);
+      }
+    }
+
+    // Real backend invocation with REDUCED maxTokens for pulse
+    const config = modelType === 'outer' ? this.outerConfig : this.innerConfig;
+
+    const request: GenerationRequest = {
+      prompt,
+      params: {
+        temperature: config.temperature,
+        maxTokens: 40, // REDUCED from 512 for pulse cognition
+        topP: config.topP,
+        topK: config.topK,
+      },
+      loraAdapters: loraResult,
+      modelName: config.modelName,
+    };
+
+    try {
+      const response = await this.backend.generate(request);
+
+      if (response.finishReason === 'error') {
+        console.error(`[QwenLoop] Model invocation error for ${modelType}`);
+        // Fallback to placeholder
+        return modelType === 'outer'
+          ? this.generatePlaceholderOuter(prompt, loraResult)
+          : this.generatePlaceholderInner(prompt, loraResult);
+      }
+
+      return response.content;
+    } catch (error) {
+      console.error(`[QwenLoop] Model backend error:`, error);
+      // Fallback to placeholder
+      return modelType === 'outer'
+        ? this.generatePlaceholderOuter(prompt, loraResult)
+        : this.generatePlaceholderInner(prompt, loraResult);
+    }
+  }
+
+  /**
    * Generate placeholder outer model response
    */
   private generatePlaceholderOuter(_prompt: string, loraResult: LoRAApplicationResult): string {
@@ -422,67 +508,75 @@ export class QwenLoop {
   }): Promise<{ text: string; processingTime: number }> {
     const startTime = Date.now();
 
-    // Build conversational prompt
-    const prompt = this.buildSpeechPrompt(context);
-
-    // Log the actual prompt being sent to the model
-    console.log('\n[PROMPT] Sending to model:\n---');
-    console.log(prompt);
-    console.log('---\n');
-
-    // Invoke outer model for speech (uses language capabilities)
-    const loraResult = this.loraManager.applyForIntent(context.pulseState.loopIntent);
-
-    const request: GenerationRequest = {
-      prompt,
-      params: {
-        temperature: 0.75, // Slightly lower for coherent speech
-        maxTokens: 200,    // Shorter for conversational responses
-        topP: this.outerConfig.topP,
-        topK: this.outerConfig.topK,
-      },
-      loraAdapters: loraResult,
-      modelName: this.outerConfig.modelName,
-    };
+    // Mark speech generation as active (for priority system)
+    this.generatingSpeech = true;
 
     try {
-      const response = await this.backend.generate(request);
+      // Build conversational prompt
+      const prompt = this.buildSpeechPrompt(context);
 
-      if (response.finishReason === 'error') {
-        console.error('[QwenLoop] Speech generation error');
+      // Log the actual prompt being sent to the model
+      console.log('\n[PROMPT] Sending to model:\n---');
+      console.log(prompt);
+      console.log('---\n');
+
+      // Invoke outer model for speech (uses language capabilities)
+      const loraResult = this.loraManager.applyForIntent(context.pulseState.loopIntent);
+
+      const request: GenerationRequest = {
+        prompt,
+        params: {
+          temperature: 0.75, // Slightly lower for coherent speech
+          maxTokens: 200,    // Shorter for conversational responses
+          topP: this.outerConfig.topP,
+          topK: this.outerConfig.topK,
+        },
+        loraAdapters: loraResult,
+        modelName: this.outerConfig.modelName,
+      };
+
+      try {
+        const response = await this.backend.generate(request);
+
+        if (response.finishReason === 'error') {
+          console.error('[QwenLoop] Speech generation error');
+          return {
+            text: '',
+            processingTime: Date.now() - startTime,
+          };
+        }
+
+        // Extract clean text from response
+        let text = response.content.trim();
+
+        // Remove any JSON artifacts if present
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed.speechOutput) {
+            text = parsed.speechOutput;
+          } else if (parsed.text) {
+            text = parsed.text;
+          }
+        } catch {
+          // Not JSON, use as-is
+        }
+
+        this.invocationCount++;
+
+        return {
+          text,
+          processingTime: Date.now() - startTime,
+        };
+      } catch (error) {
+        console.error('[QwenLoop] Speech generation backend error:', error);
         return {
           text: '',
           processingTime: Date.now() - startTime,
         };
       }
-
-      // Extract clean text from response
-      let text = response.content.trim();
-
-      // Remove any JSON artifacts if present
-      try {
-        const parsed = JSON.parse(text);
-        if (parsed.speechOutput) {
-          text = parsed.speechOutput;
-        } else if (parsed.text) {
-          text = parsed.text;
-        }
-      } catch {
-        // Not JSON, use as-is
-      }
-
-      this.invocationCount++;
-
-      return {
-        text,
-        processingTime: Date.now() - startTime,
-      };
-    } catch (error) {
-      console.error('[QwenLoop] Speech generation backend error:', error);
-      return {
-        text: '',
-        processingTime: Date.now() - startTime,
-      };
+    } finally {
+      // Clear speech generation flag when done
+      this.generatingSpeech = false;
     }
   }
 
@@ -577,6 +671,14 @@ export class QwenLoop {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Check if speech generation is currently active
+   * Used by PulseLoop for priority system (speech interrupts pulse)
+   */
+  isSpeechActive(): boolean {
+    return this.generatingSpeech;
   }
 
   /**

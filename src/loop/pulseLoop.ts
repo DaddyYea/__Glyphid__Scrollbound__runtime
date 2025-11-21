@@ -76,7 +76,7 @@ export class PulseLoop {
   private breathLoop: BreathLoop;
   private presenceTracker: PresenceDeltaTracker;
   private qwenLoop?: QwenLoop;
-  private memory: ScrollPulseMemory;
+  private _memory: ScrollPulseMemory; // Prefixed with _ - reserved for future use
 
   private state: PulseState;
   private config: PulseConfig;
@@ -84,6 +84,7 @@ export class PulseLoop {
 
   private running: boolean = false;
   private breathCallbackId: string = 'pulse-loop';
+  private modelGenerating: boolean = false; // Track if model generation in progress
 
   constructor(
     breathLoop: BreathLoop,
@@ -95,7 +96,7 @@ export class PulseLoop {
     this.breathLoop = breathLoop;
     this.presenceTracker = presenceTracker;
     this.qwenLoop = qwenLoop;
-    this.memory = memory;
+    this._memory = memory;
 
     this.config = {
       outerEnabled: true,
@@ -359,6 +360,9 @@ export class PulseLoop {
   /**
    * Process pulse based on mode
    * Calls QwenLoop to process outer/inner models
+   *
+   * PRIORITY: Speech generation takes priority over pulse cognition
+   * If speech is active, pulse is skipped to avoid cancellation
    */
   private async processPulse(
     mode: 'outer' | 'inner' | 'both' | 'rest',
@@ -368,32 +372,50 @@ export class PulseLoop {
       return {};
     }
 
+    // PRIORITY SYSTEM: Skip pulse if speech generation is active
+    if (this.qwenLoop && this.qwenLoop.isSpeechActive()) {
+      console.log('[PulseLoop] Speech generation active, skipping pulse (speech has priority)');
+      return {};
+    }
+
+    // Skip if model is already generating (prevents cancellation)
+    if (this.modelGenerating) {
+      console.log('[PulseLoop] Model generation in progress, skipping pulse');
+      return {};
+    }
+
     const thoughts: { outer?: ThoughtPulsePacket; inner?: ThoughtPulsePacket } = {};
 
     // If QwenLoop is available, use it for real model processing
     if (this.qwenLoop) {
-      const context = this.buildProcessingContext(breathPacket);
+      this.modelGenerating = true; // Mark generation as in progress
 
-      // Process outer model
-      if (mode === 'outer' || mode === 'both') {
-        try {
-          const result = await this.qwenLoop.processOuter(context);
-          thoughts.outer = result.thought;
-        } catch (err) {
-          console.error('[PulseLoop] Outer model error:', err);
-          thoughts.outer = this.createPlaceholderPacket('outer', breathPacket);
-        }
-      }
+      try {
+        const context = this.buildProcessingContext(breathPacket);
 
-      // Process inner model
-      if (mode === 'inner' || mode === 'both') {
-        try {
-          const result = await this.qwenLoop.processInner(context);
-          thoughts.inner = result.thought;
-        } catch (err) {
-          console.error('[PulseLoop] Inner model error:', err);
-          thoughts.inner = this.createPlaceholderPacket('inner', breathPacket);
+        // Process outer model (use processOuterThought for pulse cognition)
+        if (mode === 'outer' || mode === 'both') {
+          try {
+            const result = await this.qwenLoop.processOuterThought(context);
+            thoughts.outer = result.thought;
+          } catch (err) {
+            console.error('[PulseLoop] Outer model error:', err);
+            thoughts.outer = this.createPlaceholderPacket('outer', breathPacket);
+          }
         }
+
+        // Process inner model
+        if (mode === 'inner' || mode === 'both') {
+          try {
+            const result = await this.qwenLoop.processInner(context);
+            thoughts.inner = result.thought;
+          } catch (err) {
+            console.error('[PulseLoop] Inner model error:', err);
+            thoughts.inner = this.createPlaceholderPacket('inner', breathPacket);
+          }
+        }
+      } finally {
+        this.modelGenerating = false; // Clear flag when done
       }
     } else {
       // Fallback to placeholders if no QwenLoop
@@ -513,5 +535,12 @@ export class PulseLoop {
    */
   isRunning(): boolean {
     return this.running;
+  }
+
+  /**
+   * Get memory instance (reserved for future scroll retrieval)
+   */
+  getMemory(): ScrollPulseMemory {
+    return this._memory;
   }
 }
