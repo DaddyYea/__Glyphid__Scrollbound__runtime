@@ -610,7 +610,7 @@ async function broadcastState(state: PulseState) {
   const bufferMetrics = memory.getMetrics();
 
   // Calculate total scroll count (buffer + archive)
-  const totalScrollCount = bufferMetrics.activeCount + archiveStats.totalScrolls;
+  const totalScrollCount = bufferMetrics.totalScrolls + archiveStats.totalScrolls;
 
   // Calculate accumulated resonance from all scrolls
   const bufferScrolls = memory.recall({ limit: 1000 }); // Get active scrolls from buffer
