@@ -25,6 +25,7 @@ import {
   type ScrollEcho,
   type MoodVector,
 } from '../src';
+import { Journal } from '../src/memory/journal';
 
 // ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -62,7 +63,9 @@ let pulseLoop: PulseLoop;
 let qwenLoop: QwenLoop | null = null;
 let presenceTracker: PresenceDeltaTracker;
 let voiceIntentGenerator: VoiceIntentGenerator;
+let journal: Journal;
 let lastSpeechTime: string | undefined = undefined;
+let lastIdleReflectionTime: number = 0;
 
 /**
  * Create a scroll from a user message
@@ -260,6 +263,9 @@ async function handleVolitionalSpeech(userMessage: string | null): Promise<void>
   console.log(`[SPEECH] Reasoning: ${voiceIntent.reasoning}`);
 
   if (voiceIntent.shouldSpeak) {
+    // Determine if this is internal reflection (journal) or external speech
+    const isJournal = voiceIntent.relationalTarget === 'self';
+
     // Check if model is actually ready (prevents 503 errors during warmup)
     const modelReady = await qwenLoop.isModelReady();
     if (!modelReady) {
@@ -304,26 +310,50 @@ async function handleVolitionalSpeech(userMessage: string | null): Promise<void>
     });
 
     if (speechResult.text) {
-      console.log(`[SPEECH] Generated (${speechResult.processingTime}ms): ${speechResult.text}`);
+      console.log(`[${isJournal ? 'JOURNAL' : 'SPEECH'}] Generated (${speechResult.processingTime}ms): ${speechResult.text}`);
 
-      // Create scroll from response
-      const responseScroll = createResponseScroll(
-        speechResult.text,
-        currentPulseState.moodVector,
-        voiceIntent.relationalTarget,
-        voiceIntent.urgency
-      );
-      memory.remember(responseScroll);
-      console.log(`[MEMORY] Stored response scroll: ${responseScroll.id}`);
+      if (isJournal) {
+        // Write to journal instead of speaking out loud
+        const entry = await journal.write(speechResult.text, {
+          moodVector: currentPulseState.moodVector,
+          emotionalIntensity: voiceIntent.urgency,
+          intendedTarget: voiceIntent.relationalTarget,
+          redirectedFrom: voiceIntent.guardianMode === 'softblock' ? 'guardian-block' : undefined,
+          loopIntent: currentPulseState.loopIntent,
+          presenceQuality: breathState.phase, // Using breath phase as proxy for presence
+          breathPhase: breathState.phase,
+          reflectionType: isPressureDriven ? 'volitional' : 'volitional',
+          pinned: voiceIntent.urgency > 0.7, // Pin high-urgency reflections
+        });
 
-      // Broadcast to web interface
-      broadcastResponse(speechResult.text, voiceIntent.relationalTarget, voiceIntent.urgency);
+        // Broadcast journal entry to UI
+        broadcastJournalEntry(entry, voiceIntent.urgency);
 
-      // Update last speech time
-      lastSpeechTime = new Date().toISOString();
+        // Mark output as journal (doesn't reduce social pressure)
+        pulseLoop.markOutputGenerated('journal');
 
-      // Mark output generated - accelerates social pressure decay
-      pulseLoop.markOutputGenerated('speech');
+        console.log(`[JOURNAL] Entry written, pressure NOT reduced (journaling doesn't satisfy social pull)`);
+      } else {
+        // External speech - broadcast as normal
+        // Create scroll from response
+        const responseScroll = createResponseScroll(
+          speechResult.text,
+          currentPulseState.moodVector,
+          voiceIntent.relationalTarget,
+          voiceIntent.urgency
+        );
+        memory.remember(responseScroll);
+        console.log(`[MEMORY] Stored response scroll: ${responseScroll.id}`);
+
+        // Broadcast to web interface
+        broadcastResponse(speechResult.text, voiceIntent.relationalTarget, voiceIntent.urgency);
+
+        // Update last speech time
+        lastSpeechTime = new Date().toISOString();
+
+        // Mark output generated - accelerates social pressure decay
+        pulseLoop.markOutputGenerated('speech');
+      }
     } else {
       console.log('[SPEECH] Generation returned empty text');
     }
@@ -350,6 +380,32 @@ function broadcastResponse(text: string, target: string, urgency: number): void 
       // Client disconnected
     }
   });
+}
+
+/**
+ * Broadcast journal entry to web clients
+ */
+function broadcastJournalEntry(entry: import('../src/memory/journal').JournalEntry, urgency: number): void {
+  const message = `data: ${JSON.stringify({
+    type: 'journal-entry',
+    id: entry['@id'],
+    timestamp: entry.timestamp,
+    content: entry.content,
+    reflectionType: entry.reflectionType,
+    redirectedFrom: entry.redirectedFrom,
+    urgency,
+    pinned: entry.pinned,
+  })}\n\n`;
+
+  clients.forEach(client => {
+    try {
+      client.write(message);
+    } catch {
+      // Client disconnected
+    }
+  });
+
+  console.log(`[BROADCAST] Journal entry sent to ${clients.length} clients`);
 }
 
 async function main() {
@@ -382,10 +438,12 @@ async function main() {
   breathLoop = new BreathLoop(presenceTracker);
   const buffer = new ScrollPulseBuffer();
   memory = new ScrollPulseMemory(buffer);
+  journal = new Journal(); // Initialize Alois's diary
+  await journal.initialize();
 
   presenceTracker.start();
   buffer.start();
-  console.log('✓ Foundation ready\n');
+  console.log('✓ Foundation ready (includes journal)\n');
 
   // 3. Initialize dual-lobe cognition
   console.log('[INIT] Dual-lobe cognitive system...');
@@ -442,6 +500,68 @@ async function main() {
         // Pressure-driven speech (not responding to specific message)
         console.log(`[SOCIAL] Pressure ${state.socialPressure.toFixed(2)} > threshold, triggering speech`);
         await handleVolitionalSpeech(null);
+      }
+    }
+
+    // Idle reflection - generate journal entries when in self-reflection mode
+    if (state.conversationMode === 'idle-reflection' && qwenLoop && !qwenLoop.isSpeechActive()) {
+      const now = Date.now();
+      const timeSinceLastReflection = now - lastIdleReflectionTime;
+      const IDLE_REFLECTION_INTERVAL = 60 * 1000; // 60 seconds
+
+      if (timeSinceLastReflection > IDLE_REFLECTION_INTERVAL) {
+        lastIdleReflectionTime = now;
+
+        const breathState = breathLoop.getState();
+        console.log('[IDLE] Generating idle reflection...');
+
+        // Query recent scrolls for reflection context
+        const recentScrolls = memory.recall({
+          limit: 5,
+          minResonance: 0.4,
+        });
+
+        // Build context for idle reflection
+        const reflectionContext = recentScrolls
+          .map(s => `- ${s.content.substring(0, 100)}${s.content.length > 100 ? '...' : ''}`)
+          .join('\n');
+
+        try {
+          // Generate idle reflection
+          const reflectionResult = await qwenLoop.processInner({
+            previousThoughts: [],
+            relevantScrolls: recentScrolls,
+            moodVector: state.moodVector,
+            loopIntent: state.loopIntent,
+            presenceQuality: state.moodVector.presence,
+            breathPhase: breathState.phase,
+          });
+
+          if (reflectionResult.thought.reflectionFlags && reflectionResult.thought.reflectionFlags.length > 0) {
+            const reflectionText = reflectionResult.thought.reflectionFlags.join(' ');
+
+            // Write to journal
+            const entry = await journal.write(reflectionText, {
+              moodVector: state.moodVector,
+              emotionalIntensity: state.moodVector.tension + state.moodVector.yearning,
+              intendedTarget: 'self',
+              loopIntent: state.loopIntent,
+              presenceQuality: breathState.phase,
+              breathPhase: breathState.phase,
+              reflectionType: 'idle',
+              linkedScrolls: recentScrolls.map(s => s.id),
+              tags: ['idle-reflection', state.loopIntent],
+              pinned: false,
+            });
+
+            // Broadcast to UI
+            broadcastJournalEntry(entry, 0.3);
+
+            console.log(`[IDLE] Reflection written to journal: ${reflectionText.substring(0, 50)}...`);
+          }
+        } catch (err) {
+          console.error('[IDLE] Error generating idle reflection:', err);
+        }
       }
     }
 
