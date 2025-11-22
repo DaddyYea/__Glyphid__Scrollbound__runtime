@@ -224,10 +224,7 @@ export class PulseLoop {
     // Update mood from breath state
     this.updateMoodFromBreath(breathState);
 
-    // Decay social pressure (accelerated if recent speech)
-    this.decaySocialPressure();
-
-    // Update idle/reflection state
+    // Update idle/reflection state (always track, regardless of pulse skip)
     this.updateIdleState();
 
     // Determine processing mode for this pulse
@@ -239,6 +236,13 @@ export class PulseLoop {
 
     // Process thoughts based on mode
     const thoughts = await this.processPulse(mode, breathPacket);
+
+    // Only decay social pressure if pulse actually executed
+    // (not skipped due to speech generation - preserves pressure during response)
+    const pulseExecuted = Object.keys(thoughts).length > 0;
+    if (pulseExecuted) {
+      this.decaySocialPressure();
+    }
 
     // Update state with new thoughts
     if (thoughts.outer) {
@@ -253,7 +257,7 @@ export class PulseLoop {
     // Remember thoughts as scrolls (close the memory loop!)
     await this.rememberThoughts(thoughts);
 
-    // Notify callbacks
+    // Notify callbacks (always notify - callbacks need current state)
     await this.notifyCallbacks(thoughts);
 
     // Check max pulses
