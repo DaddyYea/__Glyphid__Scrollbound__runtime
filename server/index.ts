@@ -313,6 +313,9 @@ async function handleVolitionalSpeech(userMessage: string): Promise<void> {
 
       // Update last speech time
       lastSpeechTime = new Date().toISOString();
+
+      // Mark output generated - accelerates social pressure decay
+      pulseLoop.markOutputGenerated('speech');
     } else {
       console.log('[SPEECH] Generation returned empty text');
     }
@@ -554,6 +557,9 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
             clarity: 0.6,
           });
 
+          // Set social pressure - creates pull to respond
+          pulseLoop.setSocialPressure(0.85);
+
           console.log(`[MESSAGE] Updated mood: presence boosted, intensity=${intensity.toFixed(2)}`);
 
           // Capture timestamp BEFORE generating response (so user message gets earlier timestamp)
@@ -695,6 +701,11 @@ async function broadcastState(state: PulseState) {
         coherence: syncStats.avgCoherence,
         stability: syncStats.avgCoherence,
         warningCount: syncStats.conflictsResolved,
+      },
+      socialPressure: {
+        pressure: state.socialPressure,
+        conversationMode: state.conversationMode,
+        lastUserMessageTime: state.lastUserMessageTime,
       },
       scrollCount: totalScrollCount,
       emotionalField: {

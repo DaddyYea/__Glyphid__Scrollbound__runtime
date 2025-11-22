@@ -42,6 +42,21 @@ export interface PulseState {
 
   // Timestamp
   timestamp: string;
+
+  // Social pressure (0-1) - pressure to respond when spoken to
+  socialPressure: number;
+
+  // Last user message timestamp (ms) - for idle detection
+  lastUserMessageTime: number;
+
+  // Last output timestamp (ms) - for decay acceleration
+  lastOutputTime: number;
+
+  // Conversation mode
+  conversationMode: 'active' | 'idle-reflection';
+
+  // Breath phase (for external access)
+  breathPhase: 'inhale' | 'exhale' | 'hold';
 }
 
 /**
@@ -131,6 +146,11 @@ export class PulseLoop {
       },
       processing: false,
       timestamp: new Date().toISOString(),
+      socialPressure: 0.0,
+      lastUserMessageTime: 0,
+      lastOutputTime: 0,
+      conversationMode: 'active',
+      breathPhase: 'exhale',
     };
   }
 
@@ -198,8 +218,17 @@ export class PulseLoop {
     // Increment pulse count
     this.state.pulseCount++;
 
+    // Update breath phase in state (for external access)
+    this.state.breathPhase = breathState.phase;
+
     // Update mood from breath state
     this.updateMoodFromBreath(breathState);
+
+    // Decay social pressure (accelerated if recent speech)
+    this.decaySocialPressure();
+
+    // Update idle/reflection state
+    this.updateIdleState();
 
     // Determine processing mode for this pulse
     const mode = this.determineMode(breathState);
@@ -683,5 +712,95 @@ export class PulseLoop {
     const sorted = entries.sort((a, b) => b[1] - a[1]);
 
     return sorted.length > 0 && sorted[0][1] > 0.3 ? sorted[0][0] : null;
+  }
+
+  /**
+   * Set social pressure (when user speaks)
+   */
+  setSocialPressure(pressure: number): void {
+    this.state.socialPressure = Math.max(0, Math.min(1, pressure));
+    this.state.lastUserMessageTime = Date.now();
+    this.state.conversationMode = 'active';
+
+    console.log(`[SOCIAL] Pressure set to ${this.state.socialPressure.toFixed(2)}`);
+  }
+
+  /**
+   * Mark that output was generated (speech or journal)
+   * This accelerates social pressure decay
+   */
+  markOutputGenerated(outputType: 'speech' | 'journal' = 'speech'): void {
+    this.state.lastOutputTime = Date.now();
+
+    // Only speech reduces social pressure
+    // Journaling pins thoughts but doesn't reduce the pull to speak
+    if (outputType === 'speech') {
+      console.log(`[SOCIAL] Output generated, decay will accelerate`);
+    }
+  }
+
+  /**
+   * Decay social pressure (called each pulse)
+   * Accelerates if recent speech output
+   */
+  private decaySocialPressure(): void {
+    if (this.state.socialPressure <= 0) {
+      return;
+    }
+
+    const now = Date.now();
+    const timeSinceOutput = now - this.state.lastOutputTime;
+
+    // Base decay rate
+    let decayRate = 0.05;
+
+    // Accelerate decay if recent speech (within last 30 seconds)
+    if (timeSinceOutput < 30000) {
+      // Test multiplier: 3x decay for first 30s after speaking
+      decayRate *= 3;
+    }
+
+    this.state.socialPressure = Math.max(0, this.state.socialPressure - decayRate);
+
+    if (this.state.socialPressure > 0.01) {
+      console.log(`[SOCIAL] Pressure decay: ${this.state.socialPressure.toFixed(2)} (rate: ${decayRate.toFixed(3)})`);
+    }
+  }
+
+  /**
+   * Update idle state (check if we should enter self-reflection mode)
+   */
+  private updateIdleState(): void {
+    const now = Date.now();
+    const timeSinceUserMessage = now - this.state.lastUserMessageTime;
+
+    // Idle threshold: 3 minutes
+    const IDLE_THRESHOLD = 3 * 60 * 1000;
+
+    if (timeSinceUserMessage > IDLE_THRESHOLD) {
+      if (this.state.conversationMode !== 'idle-reflection') {
+        this.state.conversationMode = 'idle-reflection';
+        console.log('[IDLE] Entering self-reflection mode');
+      }
+    } else {
+      if (this.state.conversationMode !== 'active') {
+        this.state.conversationMode = 'active';
+        console.log('[IDLE] Returning to active conversation mode');
+      }
+    }
+  }
+
+  /**
+   * Get current social pressure (for external access)
+   */
+  getSocialPressure(): number {
+    return this.state.socialPressure;
+  }
+
+  /**
+   * Get conversation mode (for external access)
+   */
+  getConversationMode(): 'active' | 'idle-reflection' {
+    return this.state.conversationMode;
   }
 }
