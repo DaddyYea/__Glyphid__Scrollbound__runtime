@@ -226,8 +226,9 @@ function buildVoiceIntentInput(
 /**
  * Handle volitional speech response
  */
-async function handleVolitionalSpeech(userMessage: string): Promise<void> {
-  console.log(`[SPEECH] handleVolitionalSpeech called with message: "${userMessage}"`);
+async function handleVolitionalSpeech(userMessage: string | null): Promise<void> {
+  const isPressureDriven = userMessage === null;
+  console.log(`[SPEECH] handleVolitionalSpeech called ${isPressureDriven ? '(pressure-driven)' : `with message: "${userMessage}"`}`);
   console.log(`[SPEECH] currentPulseState: ${currentPulseState ? 'exists' : 'NULL'}`);
   console.log(`[SPEECH] qwenLoop: ${qwenLoop ? 'exists' : 'NULL'}`);
 
@@ -242,11 +243,12 @@ async function handleVolitionalSpeech(userMessage: string): Promise<void> {
   const relationalState = buildRelationalState(currentPulseState);
 
   // Build voice intent input
-  const hasExclamation = userMessage.includes('!');
-  const hasQuestion = userMessage.includes('?');
+  const hasExclamation = userMessage ? userMessage.includes('!') : false;
+  const hasQuestion = userMessage ? userMessage.includes('?') : false;
+  const messageLength = userMessage ? userMessage.length : 0;
   const voiceIntentInput = buildVoiceIntentInput(
     relationalState,
-    userMessage.length,
+    messageLength,
     hasExclamation,
     hasQuestion
   );
@@ -287,11 +289,17 @@ async function handleVolitionalSpeech(userMessage: string): Promise<void> {
     console.log(`[MEMORY] Retrieved ${conversationHistory.length} messages for context`);
 
     // Generate speech with conversation history
+    // For pressure-driven speech, use context from conversation history
+    const effectiveUserMessage = userMessage ??
+      (conversationHistory.length > 0
+        ? conversationHistory[conversationHistory.length - 1]
+        : "Continue expressing what you're feeling");
+
     const speechResult = await qwenLoop.generateSpeech({
       relationalState,
       breathState,
       pulseState: currentPulseState,
-      userMessage,
+      userMessage: effectiveUserMessage,
       conversationHistory,
     });
 
@@ -424,6 +432,18 @@ async function main() {
 
     // Broadcast state to web clients
     broadcastState(state);
+
+    // Check social pressure - trigger volitional speech if pressure is high
+    const PRESSURE_THRESHOLD = 0.35;
+    if (state.socialPressure > PRESSURE_THRESHOLD && qwenLoop && !qwenLoop.isSpeechActive()) {
+      // Check if breath permits (exhale phase)
+      const breathState = breathLoop.getState();
+      if (breathState.phase === 'exhale') {
+        // Pressure-driven speech (not responding to specific message)
+        console.log(`[SOCIAL] Pressure ${state.socialPressure.toFixed(2)} > threshold, triggering speech`);
+        await handleVolitionalSpeech(null);
+      }
+    }
 
     // If we have QwenLoop and both thoughts, process them
     if (qwenLoop && thoughts.outer && thoughts.inner && state.mode === 'both') {
