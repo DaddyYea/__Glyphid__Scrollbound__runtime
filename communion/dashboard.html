@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Communion Space</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Courier New', monospace;
+      background: #0a0e14;
+      color: #c0c8d4;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .header {
+      text-align: center;
+      padding: 12px 20px;
+      border-bottom: 1px solid #1a2030;
+      background: linear-gradient(180deg, rgba(15, 20, 30, 0.95), rgba(10, 14, 20, 0.98));
+      flex-shrink: 0;
+    }
+
+    .header h1 {
+      font-size: 1.4em;
+      color: #e0e8f0;
+      letter-spacing: 3px;
+      font-weight: normal;
+    }
+
+    .header .subtitle {
+      font-size: 0.75em;
+      color: #506070;
+      margin-top: 4px;
+      letter-spacing: 1px;
+    }
+
+    .tick-counter {
+      font-size: 0.7em;
+      color: #405060;
+      margin-top: 2px;
+    }
+
+    .main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 2fr 1fr;
+      gap: 0;
+      overflow: hidden;
+    }
+
+    /* Journal sidebars */
+    .journal-panel {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #1a2030;
+      overflow: hidden;
+    }
+
+    .journal-panel:last-child {
+      border-right: none;
+      border-left: 1px solid #1a2030;
+    }
+
+    .journal-header {
+      padding: 10px 14px;
+      font-size: 0.8em;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      border-bottom: 1px solid #1a2030;
+      flex-shrink: 0;
+    }
+
+    .journal-header.claude {
+      color: #7eb8da;
+      background: rgba(80, 140, 200, 0.05);
+    }
+
+    .journal-header.grok {
+      color: #da9a7e;
+      background: rgba(200, 140, 80, 0.05);
+    }
+
+    .journal-entries {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+    }
+
+    .journal-entry {
+      padding: 8px 10px;
+      margin-bottom: 8px;
+      border-radius: 4px;
+      font-size: 0.8em;
+      line-height: 1.4;
+      animation: fadeIn 0.4s ease;
+    }
+
+    .journal-entry.claude {
+      background: rgba(80, 140, 200, 0.08);
+      border-left: 2px solid rgba(80, 140, 200, 0.3);
+      color: #8ec0e0;
+    }
+
+    .journal-entry.grok {
+      background: rgba(200, 140, 80, 0.08);
+      border-left: 2px solid rgba(200, 140, 80, 0.3);
+      color: #e0b88e;
+    }
+
+    .journal-time {
+      font-size: 0.7em;
+      color: #405060;
+      margin-bottom: 4px;
+    }
+
+    /* Room (center panel) */
+    .room-panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .room-header {
+      padding: 10px 14px;
+      font-size: 0.8em;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #708090;
+      border-bottom: 1px solid #1a2030;
+      flex-shrink: 0;
+      background: rgba(20, 25, 35, 0.5);
+    }
+
+    .room-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+    }
+
+    .room-message {
+      margin-bottom: 12px;
+      animation: fadeIn 0.4s ease;
+    }
+
+    .room-message .speaker-name {
+      font-size: 0.75em;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 3px;
+    }
+
+    .room-message .speaker-name.claude { color: #7eb8da; }
+    .room-message .speaker-name.grok { color: #da9a7e; }
+    .room-message .speaker-name.human { color: #8eda7e; }
+
+    .room-message .message-text {
+      font-size: 0.9em;
+      line-height: 1.5;
+      color: #d0d8e0;
+      padding-left: 12px;
+      border-left: 2px solid #1a2030;
+    }
+
+    .room-message.claude .message-text { border-left-color: rgba(80, 140, 200, 0.3); }
+    .room-message.grok .message-text { border-left-color: rgba(200, 140, 80, 0.3); }
+    .room-message.human .message-text { border-left-color: rgba(100, 200, 80, 0.3); }
+
+    .message-time {
+      font-size: 0.65em;
+      color: #354050;
+      margin-top: 2px;
+      padding-left: 12px;
+    }
+
+    /* Chat input */
+    .chat-input-area {
+      padding: 10px 14px;
+      border-top: 1px solid #1a2030;
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+      background: rgba(10, 14, 20, 0.8);
+    }
+
+    .chat-input {
+      flex: 1;
+      padding: 10px 14px;
+      background: rgba(15, 20, 30, 0.8);
+      border: 1px solid #1a2030;
+      border-radius: 4px;
+      color: #c0c8d4;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85em;
+    }
+
+    .chat-input:focus {
+      outline: none;
+      border-color: #304050;
+    }
+
+    .chat-input::placeholder {
+      color: #354050;
+    }
+
+    .send-btn {
+      padding: 10px 20px;
+      background: rgba(100, 200, 80, 0.1);
+      border: 1px solid rgba(100, 200, 80, 0.3);
+      border-radius: 4px;
+      color: #8eda7e;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85em;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .send-btn:hover {
+      background: rgba(100, 200, 80, 0.2);
+      border-color: rgba(100, 200, 80, 0.5);
+    }
+
+    /* Error messages */
+    .error-message {
+      padding: 6px 10px;
+      margin: 6px 14px;
+      background: rgba(200, 80, 80, 0.1);
+      border-left: 2px solid rgba(200, 80, 80, 0.4);
+      color: #da8080;
+      font-size: 0.75em;
+      border-radius: 2px;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #1a2030; border-radius: 2px; }
+    ::-webkit-scrollbar-thumb:hover { background: #253040; }
+
+    /* Empty state */
+    .empty-state {
+      color: #253040;
+      font-size: 0.8em;
+      text-align: center;
+      padding: 30px 20px;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>COMMUNION SPACE</h1>
+    <div class="subtitle">Claude &middot; Grok &middot; Jason</div>
+    <div class="tick-counter" id="tickCounter">tick 0</div>
+  </div>
+
+  <div class="main">
+    <!-- Claude's Journal (left) -->
+    <div class="journal-panel">
+      <div class="journal-header claude">Claude's Journal</div>
+      <div class="journal-entries" id="claudeJournal">
+        <div class="empty-state">Waiting for first reflection...</div>
+      </div>
+    </div>
+
+    <!-- The Room (center) -->
+    <div class="room-panel">
+      <div class="room-header">The Room</div>
+      <div class="room-messages" id="roomMessages">
+        <div class="empty-state">The room is quiet. Waiting for the first voice...</div>
+      </div>
+      <div class="chat-input-area">
+        <input
+          type="text"
+          id="chatInput"
+          class="chat-input"
+          placeholder="Speak into the room..."
+          autocomplete="off"
+        />
+        <button id="sendBtn" class="send-btn">Send</button>
+      </div>
+    </div>
+
+    <!-- Grok's Journal (right) -->
+    <div class="journal-panel">
+      <div class="journal-header grok">Grok's Journal</div>
+      <div class="journal-entries" id="grokJournal">
+        <div class="empty-state">Waiting for first reflection...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const eventSource = new EventSource('/events');
+    const roomMessages = document.getElementById('roomMessages');
+    const claudeJournal = document.getElementById('claudeJournal');
+    const grokJournal = document.getElementById('grokJournal');
+    const chatInput = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const tickCounter = document.getElementById('tickCounter');
+
+    let roomHasMessages = false;
+    let claudeHasEntries = false;
+    let grokHasEntries = false;
+
+    function formatTime(timestamp) {
+      const d = new Date(timestamp);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    function addRoomMessage(speaker, text, timestamp) {
+      if (!roomHasMessages) {
+        roomMessages.innerHTML = '';
+        roomHasMessages = true;
+      }
+
+      const div = document.createElement('div');
+      div.className = `room-message ${speaker}`;
+
+      const nameMap = { claude: 'Claude', grok: 'Grok', human: 'Jason' };
+
+      div.innerHTML = `
+        <div class="speaker-name ${speaker}">${nameMap[speaker] || speaker}</div>
+        <div class="message-text">${escapeHtml(text)}</div>
+        <div class="message-time">${formatTime(timestamp)}</div>
+      `;
+
+      roomMessages.appendChild(div);
+      roomMessages.scrollTop = roomMessages.scrollHeight;
+    }
+
+    function addJournalEntry(speaker, text, timestamp) {
+      const panel = speaker === 'claude' ? claudeJournal : grokJournal;
+      const hasEntries = speaker === 'claude' ? claudeHasEntries : grokHasEntries;
+
+      if (!hasEntries) {
+        panel.innerHTML = '';
+        if (speaker === 'claude') claudeHasEntries = true;
+        else grokHasEntries = true;
+      }
+
+      const div = document.createElement('div');
+      div.className = `journal-entry ${speaker}`;
+      div.innerHTML = `
+        <div class="journal-time">${formatTime(timestamp)}</div>
+        ${escapeHtml(text)}
+      `;
+
+      panel.appendChild(div);
+      panel.scrollTop = panel.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      if (data.type === 'room-message') {
+        addRoomMessage(data.speaker, data.text, data.timestamp);
+      } else if (data.type === 'journal-entry') {
+        addJournalEntry(data.speaker, data.text, data.timestamp);
+      } else if (data.type === 'tick') {
+        tickCounter.textContent = `tick ${data.tickCount}`;
+      } else if (data.type === 'error') {
+        const div = document.createElement('div');
+        div.className = 'error-message';
+        div.textContent = `[${data.speaker}] ${data.error}`;
+        roomMessages.appendChild(div);
+        roomMessages.scrollTop = roomMessages.scrollHeight;
+      }
+    };
+
+    async function sendMessage() {
+      const text = chatInput.value.trim();
+      if (!text) return;
+
+      chatInput.value = '';
+
+      try {
+        await fetch('/message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        });
+      } catch (err) {
+        console.error('Send error:', err);
+      }
+    }
+
+    sendBtn.addEventListener('click', sendMessage);
+    chatInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
+
+    // Focus input on load
+    chatInput.focus();
+  </script>
+</body>
+</html>
