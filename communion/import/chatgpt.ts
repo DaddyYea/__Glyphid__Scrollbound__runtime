@@ -84,17 +84,47 @@ export function parseChatGPTExport(
   options: ImportOptions = {}
 ): { conversations: ImportedConversation[]; result: ImportResult } {
   const raw = readFileSync(filePath, 'utf-8');
-  let data: ChatGPTConversation[];
+  let parsed: unknown;
 
   try {
-    data = JSON.parse(raw);
+    parsed = JSON.parse(raw);
   } catch (err) {
     throw new Error(`Failed to parse ${filePath}: ${err}`);
   }
 
-  if (!Array.isArray(data)) {
-    throw new Error(`Expected an array of conversations, got ${typeof data}`);
+  // Handle both formats:
+  // - Direct array: [ { title, mapping, ... }, ... ]
+  // - Wrapped object: { conversations: [...] } or similar
+  let data: ChatGPTConversation[];
+
+  if (Array.isArray(parsed)) {
+    data = parsed;
+  } else if (parsed && typeof parsed === 'object') {
+    const obj = parsed as Record<string, unknown>;
+    // Try common wrapper keys
+    if (Array.isArray(obj.conversations)) {
+      data = obj.conversations;
+    } else if (Array.isArray(obj.data)) {
+      data = obj.data;
+    } else if (Array.isArray(obj.items)) {
+      data = obj.items;
+    } else {
+      // Maybe it's a single conversation object with a mapping field
+      if ('mapping' in obj && 'current_node' in obj) {
+        data = [parsed as ChatGPTConversation];
+      } else {
+        const keys = Object.keys(obj).slice(0, 10).join(', ');
+        throw new Error(
+          `Expected an array of conversations or an object with a "conversations" key. ` +
+          `Got object with keys: [${keys}]. Check your export format.`
+        );
+      }
+    }
+  } else {
+    throw new Error(`Expected JSON array or object, got ${typeof parsed}`);
   }
+
+  console.log(`[CHATGPT PARSER] Found ${data.length} conversations to process`);
 
   const result: ImportResult = {
     source: 'chatgpt' as ImportSource,
