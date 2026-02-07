@@ -6,7 +6,7 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, createWriteStream } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { CommunionLoop, CommunionEvent } from './communionLoop';
@@ -449,7 +449,6 @@ async function main() {
       const tmpPath = join(dataDir, `_import-upload-${Date.now()}.json`);
 
       // Stream request body directly to temp file (no memory buffering)
-      const { createWriteStream } = await import('fs');
       const ws = createWriteStream(tmpPath);
       let totalBytes = 0;
       const MAX_UPLOAD = 500 * 1024 * 1024; // 500MB limit
