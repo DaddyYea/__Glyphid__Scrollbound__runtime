@@ -6,11 +6,14 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { CommunionLoop, CommunionEvent } from './communionLoop';
 import { CommunionConfig, AgentConfig } from './types';
+import { parseChatGPTExport } from './import/chatgpt';
+import { ingestConversations } from './import/ingest';
+import type { ImportOptions } from './import/types';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -126,6 +129,126 @@ function loadConfig(): CommunionConfig {
     dataDir: process.env.DATA_DIR || 'data/communion',
     documentsDir: process.env.DOCUMENTS_DIR || 'communion-docs',
   };
+}
+
+/**
+ * Collect request body with size limit
+ */
+function collectBody(req: IncomingMessage, maxBytes: number, cb: (err: Error | null, body: string) => void): void {
+  let body = '';
+  let bytes = 0;
+  req.on('data', (chunk: Buffer) => {
+    bytes += chunk.length;
+    if (bytes > maxBytes) {
+      req.destroy();
+      cb(new Error(`Upload too large (max ${Math.round(maxBytes / 1024 / 1024)}MB)`), '');
+      return;
+    }
+    body += chunk.toString();
+  });
+  req.on('end', () => cb(null, body));
+  req.on('error', (err) => cb(err, ''));
+}
+
+/**
+ * Handle /import endpoint
+ * Expects JSON body: { source: 'chatgpt', data: <raw file contents as string>, options?: ImportOptions }
+ */
+async function handleImport(body: string, config: CommunionConfig, res: ServerResponse): Promise<void> {
+  try {
+    const payload = JSON.parse(body);
+    const { source, data, options = {} } = payload as {
+      source: string;
+      data: string;
+      options?: ImportOptions & { agentId?: string; agentName?: string };
+    };
+
+    if (!source || !data) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing "source" or "data" field' }));
+      return;
+    }
+
+    broadcast({ type: 'import-status', status: 'parsing', source });
+
+    // Write temp file for parser (parsers expect file paths)
+    const dataDir = config.dataDir || 'data/communion';
+    if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
+    const tmpPath = join(dataDir, `_import-tmp-${Date.now()}.json`);
+
+    let conversations;
+    let result;
+
+    try {
+      writeFileSync(tmpPath, data, 'utf-8');
+
+      switch (source) {
+        case 'chatgpt':
+        case 'openai': {
+          const parsed = parseChatGPTExport(tmpPath, {
+            skipSystem: options.skipSystem ?? true,
+            skipTool: options.skipTool ?? true,
+            userName: options.userName || config.humanName,
+            assistantName: options.assistantName || 'ChatGPT',
+            ...options,
+          });
+          conversations = parsed.conversations;
+          result = parsed.result;
+          break;
+        }
+        default:
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Unknown source: "${source}". Supported: chatgpt` }));
+          return;
+      }
+    } finally {
+      // Clean up temp file
+      try { const { unlinkSync } = await import('fs'); unlinkSync(tmpPath); } catch {}
+    }
+
+    broadcast({
+      type: 'import-status',
+      status: 'parsed',
+      source,
+      totalConversations: result.totalConversations,
+      totalMessages: result.totalMessages,
+    });
+
+    // Ingest
+    broadcast({ type: 'import-status', status: 'ingesting', source });
+
+    const agentId = (options as any).agentId || (source === 'chatgpt' ? 'chatgpt' : source);
+    const agentName = (options as any).agentName || (source === 'chatgpt' ? 'ChatGPT' : source);
+
+    const ingestResult = await ingestConversations(conversations, {
+      dataDir,
+      agentId,
+      agentName,
+      humanName: options.userName || config.humanName,
+      journalAssistantMessages: true,
+    });
+
+    const summary = {
+      source,
+      conversations: result.totalConversations,
+      messages: result.totalMessages,
+      scrollsCreated: ingestResult.scrollsCreated,
+      journalEntries: ingestResult.journalEntries,
+      dateRange: result.dateRange,
+      errors: result.errors,
+    };
+
+    broadcast({ type: 'import-status', status: 'complete', ...summary });
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(summary));
+
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    broadcast({ type: 'import-status', status: 'error', error: msg });
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: msg }));
+  }
 }
 
 async function main() {
@@ -264,6 +387,19 @@ async function main() {
         scrollCount: communion.getMemory().getMetrics().totalScrolls,
         archiveCount: communion.getArchive().getStats().totalScrolls,
       }));
+      return;
+    }
+
+    // Import chat history
+    if (url === '/import' && req.method === 'POST') {
+      collectBody(req, 50 * 1024 * 1024, (err, body) => {
+        if (err) {
+          res.writeHead(413, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err.message }));
+          return;
+        }
+        handleImport(body, config, res);
+      });
       return;
     }
 

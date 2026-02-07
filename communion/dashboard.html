@@ -230,6 +230,181 @@
       padding: 30px 20px;
       font-style: italic;
     }
+
+    /* Import button in header */
+    .import-btn {
+      position: absolute;
+      right: 20px;
+      top: 12px;
+      padding: 6px 14px;
+      background: rgba(126, 184, 218, 0.08);
+      border: 1px solid rgba(126, 184, 218, 0.25);
+      border-radius: 4px;
+      color: #7eb8da;
+      font-family: 'Courier New', monospace;
+      font-size: 0.75em;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: all 0.2s ease;
+    }
+    .import-btn:hover {
+      background: rgba(126, 184, 218, 0.15);
+      border-color: rgba(126, 184, 218, 0.4);
+    }
+    .header { position: relative; }
+
+    /* Modal overlay */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 100;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-overlay.active { display: flex; }
+
+    .modal {
+      background: #0f1420;
+      border: 1px solid #1a2030;
+      border-radius: 8px;
+      padding: 24px 28px;
+      min-width: 440px;
+      max-width: 540px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    }
+
+    .modal h2 {
+      font-size: 1em;
+      color: #e0e8f0;
+      letter-spacing: 2px;
+      margin-bottom: 18px;
+      font-weight: normal;
+      text-transform: uppercase;
+    }
+
+    .modal label {
+      display: block;
+      font-size: 0.75em;
+      color: #607080;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+      margin-top: 14px;
+    }
+    .modal label:first-of-type { margin-top: 0; }
+
+    .modal select, .modal input[type="file"] {
+      width: 100%;
+      padding: 8px 12px;
+      background: rgba(15, 20, 30, 0.8);
+      border: 1px solid #1a2030;
+      border-radius: 4px;
+      color: #c0c8d4;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85em;
+    }
+    .modal select:focus, .modal input[type="file"]:focus {
+      outline: none;
+      border-color: #304050;
+    }
+    .modal select option { background: #0f1420; }
+
+    .modal input[type="file"] {
+      padding: 10px 12px;
+      cursor: pointer;
+    }
+    .modal input[type="file"]::file-selector-button {
+      background: rgba(126, 184, 218, 0.1);
+      border: 1px solid rgba(126, 184, 218, 0.3);
+      border-radius: 3px;
+      color: #7eb8da;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9em;
+      padding: 4px 10px;
+      margin-right: 10px;
+      cursor: pointer;
+    }
+
+    .modal-actions {
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .modal-actions button {
+      padding: 8px 18px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.8em;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-cancel {
+      background: transparent;
+      border: 1px solid #1a2030;
+      color: #506070;
+    }
+    .btn-cancel:hover { border-color: #304050; color: #708090; }
+
+    .btn-import {
+      background: rgba(126, 184, 218, 0.1);
+      border: 1px solid rgba(126, 184, 218, 0.3);
+      color: #7eb8da;
+    }
+    .btn-import:hover {
+      background: rgba(126, 184, 218, 0.2);
+      border-color: rgba(126, 184, 218, 0.5);
+    }
+    .btn-import:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Import progress */
+    .import-progress {
+      display: none;
+      margin-top: 16px;
+      padding: 12px;
+      background: rgba(15, 20, 30, 0.6);
+      border-radius: 4px;
+      border: 1px solid #1a2030;
+    }
+    .import-progress.active { display: block; }
+
+    .import-progress .status-line {
+      font-size: 0.8em;
+      color: #7eb8da;
+      margin-bottom: 6px;
+    }
+    .import-progress .status-line.error { color: #da8080; }
+    .import-progress .status-line.success { color: #8eda7e; }
+
+    .progress-bar-track {
+      height: 4px;
+      background: #1a2030;
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: #7eb8da;
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.4s ease;
+    }
+
+    .import-summary {
+      font-size: 0.75em;
+      color: #506070;
+      margin-top: 8px;
+      line-height: 1.6;
+    }
   </style>
 </head>
 <body>
@@ -237,6 +412,37 @@
     <h1>COMMUNION SPACE</h1>
     <div class="subtitle" id="participantList">Loading...</div>
     <div class="tick-counter" id="tickCounter">tick 0</div>
+    <button class="import-btn" id="importBtn">IMPORT</button>
+  </div>
+
+  <!-- Import Modal -->
+  <div class="modal-overlay" id="importModal">
+    <div class="modal">
+      <h2>Import Chat History</h2>
+
+      <label for="importSource">Source</label>
+      <select id="importSource">
+        <option value="chatgpt">ChatGPT (conversations.json)</option>
+        <option value="xai" disabled>xAI / Grok (coming soon)</option>
+        <option value="anthropic" disabled>Anthropic / Claude (coming soon)</option>
+      </select>
+
+      <label for="importFile">File</label>
+      <input type="file" id="importFile" accept=".json" />
+
+      <div class="import-progress" id="importProgress">
+        <div class="status-line" id="importStatusLine">Preparing...</div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="importProgressBar"></div>
+        </div>
+        <div class="import-summary" id="importSummary"></div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-cancel" id="importCancelBtn">Cancel</button>
+        <button class="btn-import" id="importStartBtn" disabled>Import</button>
+      </div>
+    </div>
   </div>
 
   <div class="main" id="mainLayout">
@@ -406,6 +612,8 @@
         addJournalEntry(data.speaker, data.text, data.timestamp);
       } else if (data.type === 'tick') {
         tickCounter.textContent = `tick ${data.tickCount}`;
+      } else if (data.type === 'import-status') {
+        handleImportStatus(data);
       } else if (data.type === 'error') {
         const div = document.createElement('div');
         div.className = 'error-message';
@@ -434,6 +642,126 @@
     chatInput.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') sendMessage();
     });
+
+    // ── Import Modal ──
+    const importBtn = document.getElementById('importBtn');
+    const importModal = document.getElementById('importModal');
+    const importSource = document.getElementById('importSource');
+    const importFile = document.getElementById('importFile');
+    const importStartBtn = document.getElementById('importStartBtn');
+    const importCancelBtn = document.getElementById('importCancelBtn');
+    const importProgress = document.getElementById('importProgress');
+    const importStatusLine = document.getElementById('importStatusLine');
+    const importProgressBar = document.getElementById('importProgressBar');
+    const importSummary = document.getElementById('importSummary');
+
+    let importing = false;
+
+    importBtn.addEventListener('click', () => {
+      if (!importing) {
+        importModal.classList.add('active');
+        importProgress.classList.remove('active');
+        importSummary.textContent = '';
+        importStatusLine.className = 'status-line';
+        importProgressBar.style.width = '0%';
+        importStartBtn.disabled = !importFile.files.length;
+      }
+    });
+
+    importCancelBtn.addEventListener('click', () => {
+      if (!importing) importModal.classList.remove('active');
+    });
+
+    importModal.addEventListener('click', (e) => {
+      if (e.target === importModal && !importing) importModal.classList.remove('active');
+    });
+
+    importFile.addEventListener('change', () => {
+      importStartBtn.disabled = !importFile.files.length;
+    });
+
+    importStartBtn.addEventListener('click', async () => {
+      const file = importFile.files[0];
+      if (!file || importing) return;
+
+      importing = true;
+      importStartBtn.disabled = true;
+      importCancelBtn.disabled = true;
+      importProgress.classList.add('active');
+      importStatusLine.className = 'status-line';
+      importStatusLine.textContent = 'Reading file...';
+      importProgressBar.style.width = '10%';
+
+      try {
+        const text = await file.text();
+        importStatusLine.textContent = 'Uploading to server...';
+        importProgressBar.style.width = '25%';
+
+        const response = await fetch('/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: importSource.value,
+            data: text,
+            options: {},
+          }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Import failed');
+        }
+
+        importStatusLine.className = 'status-line success';
+        importStatusLine.textContent = 'Import complete!';
+        importProgressBar.style.width = '100%';
+        importProgressBar.style.background = '#8eda7e';
+
+        let summaryLines = [];
+        summaryLines.push(`${result.conversations} conversations`);
+        summaryLines.push(`${result.messages} messages`);
+        summaryLines.push(`${result.scrollsCreated} scrolls archived`);
+        summaryLines.push(`${result.journalEntries} journal entries`);
+        if (result.dateRange?.earliest) {
+          summaryLines.push(`${result.dateRange.earliest.split('T')[0]} to ${result.dateRange.latest.split('T')[0]}`);
+        }
+        if (result.errors?.length > 0) {
+          summaryLines.push(`${result.errors.length} errors`);
+        }
+        importSummary.textContent = summaryLines.join('  |  ');
+
+      } catch (err) {
+        importStatusLine.className = 'status-line error';
+        importStatusLine.textContent = `Error: ${err.message}`;
+        importProgressBar.style.width = '100%';
+        importProgressBar.style.background = '#da8080';
+      } finally {
+        importing = false;
+        importCancelBtn.disabled = false;
+        importStartBtn.disabled = false;
+      }
+    });
+
+    // Listen for import SSE events to update progress in real-time
+    function handleImportStatus(data) {
+      if (!importProgress.classList.contains('active')) return;
+
+      switch (data.status) {
+        case 'parsing':
+          importStatusLine.textContent = `Parsing ${data.source} export...`;
+          importProgressBar.style.width = '40%';
+          break;
+        case 'parsed':
+          importStatusLine.textContent = `Parsed: ${data.totalConversations} conversations, ${data.totalMessages} messages`;
+          importProgressBar.style.width = '60%';
+          break;
+        case 'ingesting':
+          importStatusLine.textContent = 'Writing to memory systems...';
+          importProgressBar.style.width = '80%';
+          break;
+      }
+    }
 
     chatInput.focus();
   </script>
