@@ -231,12 +231,53 @@
       font-style: italic;
     }
 
-    /* Import button in header */
+    /* Controls row in header */
+    .header { position: relative; }
+    .controls-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 6px;
+    }
+    .control-btn {
+      padding: 4px 10px;
+      background: rgba(126, 184, 218, 0.08);
+      border: 1px solid rgba(126, 184, 218, 0.25);
+      border-radius: 4px;
+      color: #7eb8da;
+      font-size: 1em;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .control-btn:hover {
+      background: rgba(126, 184, 218, 0.15);
+      border-color: rgba(126, 184, 218, 0.4);
+    }
+    .control-btn.paused {
+      color: #da8080;
+      border-color: rgba(218, 128, 128, 0.4);
+      background: rgba(218, 128, 128, 0.1);
+    }
+    .speed-label {
+      color: #667;
+      font-size: 0.7em;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .speed-slider {
+      width: 100px;
+      accent-color: #7eb8da;
+      cursor: pointer;
+    }
+    .speed-value {
+      color: #7eb8da;
+      font-family: 'Courier New', monospace;
+      font-size: 0.75em;
+      min-width: 30px;
+    }
     .import-btn {
-      position: absolute;
-      right: 20px;
-      top: 12px;
-      padding: 6px 14px;
+      padding: 4px 14px;
       background: rgba(126, 184, 218, 0.08);
       border: 1px solid rgba(126, 184, 218, 0.25);
       border-radius: 4px;
@@ -251,7 +292,6 @@
       background: rgba(126, 184, 218, 0.15);
       border-color: rgba(126, 184, 218, 0.4);
     }
-    .header { position: relative; }
 
     /* Modal overlay */
     .modal-overlay {
@@ -412,7 +452,13 @@
     <h1>COMMUNION SPACE</h1>
     <div class="subtitle" id="participantList">Loading...</div>
     <div class="tick-counter" id="tickCounter">tick 0</div>
-    <button class="import-btn" id="importBtn">IMPORT</button>
+    <div class="controls-row">
+      <button class="control-btn" id="pauseBtn" title="Pause/Resume">&#9208;</button>
+      <label class="speed-label" for="speedSlider">Speed</label>
+      <input type="range" id="speedSlider" min="3" max="60" value="15" class="speed-slider" title="Tick interval (seconds)" />
+      <span class="speed-value" id="speedValue">15s</span>
+      <button class="import-btn" id="importBtn">IMPORT</button>
+    </div>
   </div>
 
   <!-- Import Modal -->
@@ -472,6 +518,42 @@
     const tickCounter = document.getElementById('tickCounter');
     const participantList = document.getElementById('participantList');
     const roomStats = document.getElementById('roomStats');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const speedSlider = document.getElementById('speedSlider');
+    const speedValue = document.getElementById('speedValue');
+
+    // ── Pause / Resume ──
+    let isPaused = false;
+
+    pauseBtn.addEventListener('click', async () => {
+      const endpoint = isPaused ? '/resume' : '/pause';
+      await fetch(endpoint, { method: 'POST' });
+      // State will update via SSE 'control' event
+    });
+
+    // ── Speed Slider ──
+    speedSlider.addEventListener('input', () => {
+      speedValue.textContent = speedSlider.value + 's';
+    });
+
+    let speedDebounce = null;
+    speedSlider.addEventListener('change', () => {
+      clearTimeout(speedDebounce);
+      speedDebounce = setTimeout(() => {
+        const ms = Number(speedSlider.value) * 1000;
+        fetch('/speed?ms=' + ms, { method: 'POST' });
+      }, 200);
+    });
+
+    // Fetch initial control state
+    fetch('/control').then(r => r.json()).then(data => {
+      isPaused = data.paused;
+      pauseBtn.textContent = isPaused ? '\u25B6' : '\u23F8';
+      pauseBtn.classList.toggle('paused', isPaused);
+      const secs = Math.round(data.tickSpeed / 1000);
+      speedSlider.value = secs;
+      speedValue.textContent = secs + 's';
+    }).catch(() => {});
 
     // Dynamic state
     let config = null;
@@ -612,6 +694,15 @@
         addJournalEntry(data.speaker, data.text, data.timestamp);
       } else if (data.type === 'tick') {
         tickCounter.textContent = `tick ${data.tickCount}`;
+      } else if (data.type === 'control') {
+        isPaused = data.paused;
+        pauseBtn.textContent = isPaused ? '\u25B6' : '\u23F8';
+        pauseBtn.classList.toggle('paused', isPaused);
+        if (data.tickSpeed) {
+          const secs = Math.round(data.tickSpeed / 1000);
+          speedSlider.value = secs;
+          speedValue.textContent = secs + 's';
+        }
       } else if (data.type === 'import-status') {
         handleImportStatus(data);
       } else if (data.type === 'error') {

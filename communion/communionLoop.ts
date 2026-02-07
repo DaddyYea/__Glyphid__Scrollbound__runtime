@@ -101,6 +101,7 @@ export class CommunionLoop {
   private listeners: CommunionListener[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
   private tickIntervalMs: number;
+  private paused = false;
   private processing = false;
   private contextWindow: number;
   private journalContextWindow: number;
@@ -653,7 +654,7 @@ export class CommunionLoop {
    * Process one tick — all agents decide in parallel, then run memory systems
    */
   async tick(): Promise<void> {
-    if (this.processing) return;
+    if (this.processing || this.paused) return;
     this.processing = true;
 
     this.state.tickCount++;
@@ -911,6 +912,39 @@ export class CommunionLoop {
     this.tick();
 
     this.timer = setInterval(() => this.tick(), this.tickIntervalMs);
+  }
+
+  pause(): void {
+    this.paused = true;
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+    console.log('[COMMUNION] Paused');
+  }
+
+  resume(): void {
+    if (!this.paused) return;
+    this.paused = false;
+    this.timer = setInterval(() => this.tick(), this.tickIntervalMs);
+    console.log(`[COMMUNION] Resumed (tick every ${this.tickIntervalMs / 1000}s)`);
+  }
+
+  isPaused(): boolean {
+    return this.paused;
+  }
+
+  setTickSpeed(ms: number): void {
+    this.tickIntervalMs = Math.max(3000, Math.min(120000, ms)); // clamp 3s–120s
+    if (this.timer && !this.paused) {
+      clearInterval(this.timer);
+      this.timer = setInterval(() => this.tick(), this.tickIntervalMs);
+    }
+    console.log(`[COMMUNION] Tick speed set to ${this.tickIntervalMs / 1000}s`);
+  }
+
+  getTickSpeed(): number {
+    return this.tickIntervalMs;
   }
 
   async stop(): Promise<void> {

@@ -6,7 +6,7 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, createWriteStream } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, createWriteStream, openSync, readSync, closeSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { CommunionLoop, CommunionEvent } from './communionLoop';
@@ -141,10 +141,10 @@ function loadConfig(): CommunionConfig {
 async function handleImportFile(tmpPath: string, source: string, config: CommunionConfig, res: ServerResponse): Promise<void> {
   try {
     // Quick sanity check — read first few bytes to verify it's JSON
-    const fd = require('fs').openSync(tmpPath, 'r');
+    const fd = openSync(tmpPath, 'r');
     const probe = Buffer.alloc(16);
-    require('fs').readSync(fd, probe, 0, 16, 0);
-    require('fs').closeSync(fd);
+    readSync(fd, probe, 0, 16, 0);
+    closeSync(fd);
     const firstChar = probe.toString('utf-8').trimStart()[0];
 
     if (firstChar !== '[' && firstChar !== '{') {
@@ -156,6 +156,28 @@ async function handleImportFile(tmpPath: string, source: string, config: Communi
       return;
     }
 
+    // Detect old JSON-wrapped format: { source, data, options }
+    // This happens when the browser has a cached old dashboard page
+    let actualSource = source;
+    let actualPath = tmpPath;
+    try {
+      const rawCheck = readFileSync(tmpPath, 'utf-8');
+      const check = JSON.parse(rawCheck);
+      if (check && typeof check === 'object' && !Array.isArray(check) && typeof check.data === 'string' && check.source) {
+        console.log('[IMPORT] Detected old JSON-wrapped format, unwrapping...');
+        actualSource = check.source;
+        // Write the inner data to a new temp file
+        const unwrappedPath = tmpPath.replace('.json', '-unwrapped.json');
+        writeFileSync(unwrappedPath, check.data, 'utf-8');
+        try { unlinkSync(tmpPath); } catch {}
+        actualPath = unwrappedPath;
+        tmpPath = unwrappedPath;
+      }
+    } catch {
+      // Not valid JSON or other issue — proceed with original file, parser will handle it
+    }
+    source = actualSource;
+
     broadcast({ type: 'import-status', status: 'parsing', source });
 
     let conversations;
@@ -165,7 +187,7 @@ async function handleImportFile(tmpPath: string, source: string, config: Communi
       switch (source) {
         case 'chatgpt':
         case 'openai': {
-          const parsed = parseChatGPTExport(tmpPath, {
+          const parsed = parseChatGPTExport(actualPath, {
             skipSystem: true,
             skipTool: true,
             userName: config.humanName,
@@ -181,7 +203,7 @@ async function handleImportFile(tmpPath: string, source: string, config: Communi
           return;
       }
     } finally {
-      try { unlinkSync(tmpPath); } catch {}
+      try { unlinkSync(actualPath); } catch {}
     }
 
     broadcast({
@@ -368,6 +390,49 @@ async function main() {
         agents: state.agentIds,
         scrollCount: communion.getMemory().getMetrics().totalScrolls,
         archiveCount: communion.getArchive().getStats().totalScrolls,
+      }));
+      return;
+    }
+
+    // Pause/Resume
+    if (url === '/pause' && req.method === 'POST') {
+      communion.pause();
+      broadcast({ type: 'control', paused: true, tickSpeed: communion.getTickSpeed() });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ paused: true }));
+      return;
+    }
+
+    if (url === '/resume' && req.method === 'POST') {
+      communion.resume();
+      broadcast({ type: 'control', paused: false, tickSpeed: communion.getTickSpeed() });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ paused: false }));
+      return;
+    }
+
+    // Tick speed control
+    if (url?.startsWith('/speed') && req.method === 'POST') {
+      const speedParams = new URLSearchParams(url.split('?')[1] || '');
+      const ms = Number(speedParams.get('ms'));
+      if (!ms || ms < 3000 || ms > 120000) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Provide ?ms=N (3000-120000)' }));
+        return;
+      }
+      communion.setTickSpeed(ms);
+      broadcast({ type: 'control', paused: communion.isPaused(), tickSpeed: communion.getTickSpeed() });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ tickSpeed: communion.getTickSpeed() }));
+      return;
+    }
+
+    // Control state (GET)
+    if (url === '/control') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        paused: communion.isPaused(),
+        tickSpeed: communion.getTickSpeed(),
       }));
       return;
     }
