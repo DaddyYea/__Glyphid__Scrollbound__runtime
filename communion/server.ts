@@ -279,9 +279,9 @@ async function main() {
   communion.start();
 
   // Graceful shutdown
-  process.on('SIGINT', () => {
+  process.on('SIGINT', async () => {
     console.log('\n[SHUTDOWN] Stopping communion...');
-    communion.stop();
+    await communion.stop();
     server.close();
     const state = communion.getState();
     console.log(`\n=== Session Stats ===`);

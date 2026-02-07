@@ -1,13 +1,20 @@
 /**
- * Communion Loop (N-Agent)
+ * Communion Loop (N-Agent) — Full Memory Integration
  *
  * The heartbeat of the communion space. Each tick:
  * 1. All agents see the room conversation + their own journal
  * 2. Each independently decides: speak to the room, write in journal, or stay silent
  * 3. Results are broadcast + persisted to memory
  *
- * The human can speak into the room at any time (async, not tick-bound).
- * Memory: room messages become scrolls, journals are per-agent on disk.
+ * Memory Architecture:
+ * - ScrollPulseBuffer: Short-term memory with decay
+ * - ScrollPulseMemory: Memory routing + recall
+ * - ScrollArchive: Permanent storage for scrollfired memories
+ * - ScrollfireEngine: Elevation logic (important moments → permanent)
+ * - Journal: Per-agent private reflections on disk
+ * - SessionPersistence: Cross-session continuity (scrolls, patterns, preferences)
+ * - ScrollPatternRecognizer: Pattern detection across scroll history
+ * - AdaptationEngine: Runtime learning from experience
  */
 
 import crypto from 'crypto';
@@ -19,7 +26,10 @@ import { ScrollPulseBuffer } from '../src/memory/scrollPulseBuffer';
 import { ScrollPulseMemory } from '../src/memory/scrollPulseMemory';
 import { ScrollArchive } from '../src/memory/scrollArchive';
 import { ScrollfireEngine } from '../src/memory/scrollfire';
+import { ScrollPatternRecognizer } from '../src/memory/scrollPatternRecognition';
 import { Journal } from '../src/memory/journal';
+import { SessionPersistence } from '../src/persistence/sessionPersistence';
+import { AdaptationEngine } from '../src/learning/adaptationEngine';
 import type { ScrollEcho, MoodVector } from '../src/types';
 
 // ── Events ──
@@ -74,15 +84,12 @@ Keep messages concise (1-3 sentences). You're in a flowing conversation, not wri
 // ── Default colors ──
 
 const DEFAULT_COLORS = [
-  '#7eb8da', // blue
-  '#da9a7e', // orange
-  '#b87eda', // purple
-  '#7edab8', // teal
-  '#dada7e', // yellow
-  '#da7e9a', // pink
-  '#7edada', // cyan
-  '#9ada7e', // green
+  '#7eb8da', '#da9a7e', '#b87eda', '#7edab8',
+  '#dada7e', '#da7e9a', '#7edada', '#9ada7e',
 ];
+
+// ── Pattern analysis interval ──
+const PATTERN_ANALYSIS_INTERVAL = 5; // Run pattern recognition every N ticks
 
 // ── Loop ──
 
@@ -95,6 +102,7 @@ export class CommunionLoop {
   private processing = false;
   private contextWindow: number;
   private journalContextWindow: number;
+  private dataDir: string;
 
   // Memory systems
   private memory: ScrollPulseMemory;
@@ -102,6 +110,11 @@ export class CommunionLoop {
   private archive: ScrollArchive;
   private scrollfire: ScrollfireEngine;
   private journals: Map<string, Journal> = new Map();
+
+  // Persistence & learning
+  private session: SessionPersistence;
+  private patternRecognizer: ScrollPatternRecognizer;
+  private adaptationEngine: AdaptationEngine;
 
   // Shared documents
   private documentsContext: string = '';
@@ -112,32 +125,47 @@ export class CommunionLoop {
     this.contextWindow = config.contextWindow || 30;
     this.journalContextWindow = config.journalContextWindow || 10;
 
-    const dataDir = config.dataDir || 'data/communion';
-    if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
+    this.dataDir = config.dataDir || 'data/communion';
+    if (!existsSync(this.dataDir)) mkdirSync(this.dataDir, { recursive: true });
 
     this.documentsDir = config.documentsDir || 'communion-docs';
     if (!existsSync(this.documentsDir)) mkdirSync(this.documentsDir, { recursive: true });
 
-    // Initialize memory systems
+    // ── Initialize memory systems ──
     this.buffer = new ScrollPulseBuffer(200);
     this.archive = new ScrollArchive();
     this.scrollfire = new ScrollfireEngine();
     this.memory = new ScrollPulseMemory(this.buffer, this.archive, this.scrollfire);
     this.buffer.start();
 
-    // Wire scrollfire → archive
+    // ── Initialize persistence & learning ──
+    this.session = new SessionPersistence({
+      dataDir: this.dataDir,
+      autoSaveInterval: 60000, // Auto-save every 60s
+      maxScrollHistory: 1000,
+      maxMoodHistory: 500,
+    });
+
+    this.patternRecognizer = new ScrollPatternRecognizer();
+    this.adaptationEngine = new AdaptationEngine({
+      learningRate: 0.1,
+      minConfidence: 0.6,
+    });
+
+    // ── Wire scrollfire → archive + session persistence ──
     this.scrollfire.onScrollfire((event) => {
       this.archive.archiveScroll(event.scroll, event);
+      this.session.addScrollfireEvent(event);
+      this.adaptationEngine.observeScroll(event.scroll);
       console.log(`[SCROLLFIRE] Elevated scroll: ${event.scroll.content.substring(0, 50)}...`);
     });
 
-    // Initialize state
+    // ── Initialize agents ──
     const agentIds: string[] = [];
     const agentNames: Record<string, string> = {};
     const agentColors: Record<string, string> = {};
     const journals: Record<string, CommunionMessage[]> = {};
 
-    // Initialize agents
     for (let i = 0; i < config.agents.length; i++) {
       const agentConfig = config.agents[i];
       const backend = createBackend(agentConfig);
@@ -151,12 +179,11 @@ export class CommunionLoop {
       journals[agentConfig.id] = [];
 
       // Per-agent journal on disk
-      const journalPath = `${dataDir}/journal-${agentConfig.id}.jsonld`;
+      const journalPath = `${this.dataDir}/journal-${agentConfig.id}.jsonld`;
       const journal = new Journal(journalPath);
       this.journals.set(agentConfig.id, journal);
     }
 
-    // Human entries
     agentNames['human'] = config.humanName;
     agentColors['human'] = '#8eda7e';
 
@@ -176,10 +203,84 @@ export class CommunionLoop {
     // Load shared documents
     this.loadDocuments();
 
+    // ── Initialize session persistence (loads previous session data) ──
+    const sessionState = await this.session.initializeSession();
+    console.log(`[PERSISTENCE] Session initialized: ${sessionState.metadata.sessionId}`);
+
+    // Restore scrolls from previous session into buffer
+    if (sessionState.scrolls.length > 0) {
+      const recentScrolls = sessionState.scrolls.slice(-100); // Load last 100
+      for (const scroll of recentScrolls) {
+        this.buffer.addScroll(scroll);
+      }
+      console.log(`[PERSISTENCE] Restored ${recentScrolls.length} scrolls from previous session`);
+    }
+
+    // Restore scrollfired events into archive
+    if (sessionState.scrollfireEvents.length > 0) {
+      for (const event of sessionState.scrollfireEvents) {
+        if (event.scroll) {
+          this.archive.archiveScroll(event.scroll, event);
+        }
+      }
+      console.log(`[PERSISTENCE] Restored ${sessionState.scrollfireEvents.length} scrollfire events`);
+    }
+
+    // Restore learned preferences into adaptation engine
+    if (sessionState.learnedPreferences.length > 0) {
+      for (const pref of sessionState.learnedPreferences) {
+        this.adaptationEngine.observeScroll({
+          id: 'restored',
+          content: '',
+          timestamp: pref.lastReinforced,
+          location: '',
+          emotionalSignature: sessionState.lastMoodVector,
+          resonance: pref.strength,
+          tags: [],
+          triggers: [],
+          preserve: false,
+          scrollfireMarked: false,
+          lastAccessed: pref.lastReinforced,
+          accessCount: pref.successCount,
+          decayRate: 1.0,
+          relatedScrollIds: [],
+          sourceModel: 'outer',
+        });
+      }
+      console.log(`[PERSISTENCE] Restored ${sessionState.learnedPreferences.length} learned preferences`);
+    }
+
+    // Restore detected patterns
+    if (sessionState.detectedPatterns.length > 0) {
+      console.log(`[PERSISTENCE] ${sessionState.detectedPatterns.length} patterns from previous session`);
+    }
+
+    // Restore room messages from persisted scrolls
+    for (const scroll of sessionState.scrolls.slice(-30)) {
+      if (scroll.location === 'communion-room' && scroll.content.startsWith('[')) {
+        const match = scroll.content.match(/^\[(.+?)\] (.+)$/);
+        if (match) {
+          const speakerName = match[1];
+          const text = match[2];
+          const speakerId = Object.entries(this.state.agentNames).find(([_, name]) => name === speakerName)?.[0] || 'human';
+          this.state.messages.push({
+            id: scroll.id,
+            speaker: speakerId,
+            speakerName,
+            text,
+            timestamp: scroll.timestamp,
+            type: 'room',
+          });
+        }
+      }
+    }
+    if (this.state.messages.length > 0) {
+      console.log(`[PERSISTENCE] Restored ${this.state.messages.length} room messages`);
+    }
+
     // Initialize all journals from disk
     for (const [agentId, journal] of this.journals) {
       await journal.initialize();
-      // Load recent entries into state
       const recent = await journal.getRecent(50);
       for (const entry of recent) {
         this.state.journals[agentId].push({
@@ -193,6 +294,11 @@ export class CommunionLoop {
       }
     }
     console.log('[COMMUNION] Journals loaded from disk');
+
+    // Log memory status
+    const archiveStats = this.archive.getStats();
+    const bufferMetrics = this.memory.getMetrics();
+    console.log(`[MEMORY] Buffer: ${bufferMetrics.totalScrolls} scrolls | Archive: ${archiveStats.totalScrolls} scrollfired`);
   }
 
   /**
@@ -228,9 +334,6 @@ export class CommunionLoop {
     }
   }
 
-  /**
-   * Reload documents (can be called at runtime if docs change)
-   */
   reloadDocuments(): void {
     this.loadDocuments();
   }
@@ -241,11 +344,7 @@ export class CommunionLoop {
 
   private emit(event: CommunionEvent): void {
     for (const listener of this.listeners) {
-      try {
-        listener(event);
-      } catch (err) {
-        console.error('[COMMUNION] Listener error:', err);
-      }
+      try { listener(event); } catch (err) { console.error('[COMMUNION] Listener error:', err); }
     }
   }
 
@@ -259,6 +358,18 @@ export class CommunionLoop {
 
   getArchive(): ScrollArchive {
     return this.archive;
+  }
+
+  getSession(): SessionPersistence {
+    return this.session;
+  }
+
+  getPatternRecognizer(): ScrollPatternRecognizer {
+    return this.patternRecognizer;
+  }
+
+  getAdaptationEngine(): AdaptationEngine {
+    return this.adaptationEngine;
   }
 
   /**
@@ -276,8 +387,10 @@ export class CommunionLoop {
     this.state.messages.push(msg);
     this.state.lastSpeaker = 'human';
 
-    // Store as scroll
-    this.memory.remember(this.messageToScroll(msg));
+    const scroll = this.messageToScroll(msg);
+    this.memory.remember(scroll);
+    this.session.addScroll(scroll);
+    this.adaptationEngine.observeScroll(scroll);
 
     this.emit({ type: 'room-message', message: msg, agentId: 'human' });
     return msg;
@@ -312,41 +425,34 @@ export class CommunionLoop {
     };
   }
 
-  /**
-   * Build conversation context string from recent room messages
-   */
   private buildConversationContext(): string {
     const recent = this.state.messages.slice(-this.contextWindow);
     if (recent.length === 0) {
       return 'ROOM CONVERSATION:\n(The room is quiet. No one has spoken yet.)';
     }
-
     const lines = recent.map(m => `${m.speakerName}: ${m.text}`);
     return `ROOM CONVERSATION (last ${recent.length} messages):\n${lines.join('\n')}`;
   }
 
-  /**
-   * Build journal context for a specific agent
-   */
   private buildJournalContext(agentId: string): string {
     const journal = this.state.journals[agentId] || [];
     const recent = journal.slice(-this.journalContextWindow);
     if (recent.length === 0) {
       return 'YOUR PRIVATE JOURNAL:\n(No entries yet.)';
     }
-
     const lines = recent.map(m => `- ${m.text}`);
     return `YOUR PRIVATE JOURNAL (last ${recent.length} entries):\n${lines.join('\n')}`;
   }
 
   /**
-   * Process one tick — all agents decide in parallel
+   * Process one tick — all agents decide in parallel, then run memory systems
    */
   async tick(): Promise<void> {
     if (this.processing) return;
     this.processing = true;
 
     this.state.tickCount++;
+    this.session.incrementPulseCount();
     console.log(`\n[TICK ${this.state.tickCount}] Processing ${this.agents.size} agents...`);
 
     const conversationContext = this.buildConversationContext();
@@ -359,18 +465,45 @@ export class CommunionLoop {
     );
 
     for (let i = 0; i < results.length; i++) {
-      const result = results[i];
-      if (result.status === 'rejected') {
+      if (results[i].status === 'rejected') {
         const agentId = this.state.agentIds[i];
-        console.error(`[TICK] ${agentId} error:`, result.reason);
-        this.emit({ type: 'error', error: String(result.reason), agentId });
+        console.error(`[TICK] ${agentId} error:`, (results[i] as PromiseRejectedResult).reason);
+        this.emit({ type: 'error', error: String((results[i] as PromiseRejectedResult).reason), agentId });
       }
     }
 
-    // Check scrollfire candidates
+    // ── Post-tick memory processing ──
+
+    // Scrollfire: evaluate buffer for permanent elevation
     const candidates = this.scrollfire.evaluateBatch(this.buffer.getActiveScrolls());
     if (candidates.length > 0) {
       this.scrollfire.autoElevateBatch(candidates);
+      console.log(`[SCROLLFIRE] Elevated ${candidates.length} scrolls this tick`);
+    }
+
+    // Pattern recognition: run every N ticks
+    if (this.state.tickCount % PATTERN_ANALYSIS_INTERVAL === 0) {
+      const activeScrolls = this.buffer.getActiveScrolls();
+      if (activeScrolls.length >= 3) {
+        try {
+          const patterns = this.patternRecognizer.analyzeScrolls(activeScrolls);
+          if (patterns.length > 0) {
+            for (const pattern of patterns) {
+              this.session.addPattern(pattern);
+            }
+            this.adaptationEngine.observePatterns(patterns);
+            console.log(`[PATTERNS] Detected ${patterns.length} patterns`);
+          }
+        } catch (err) {
+          console.error('[PATTERNS] Analysis error:', err);
+        }
+      }
+    }
+
+    // Persist learned preferences to session
+    const preferences = this.adaptationEngine.getPreferences();
+    if (preferences.length > 0) {
+      this.session.updatePreferences(preferences);
     }
 
     this.emit({ type: 'tick', tickCount: this.state.tickCount });
@@ -405,8 +538,11 @@ export class CommunionLoop {
       this.state.messages.push(msg);
       this.state.lastSpeaker = agentId;
 
-      // Persist to scroll memory
-      this.memory.remember(this.messageToScroll(msg));
+      // Persist to all memory layers
+      const scroll = this.messageToScroll(msg);
+      this.memory.remember(scroll);
+      this.session.addScroll(scroll);
+      this.adaptationEngine.observeScroll(scroll);
 
       this.emit({ type: 'room-message', message: msg, agentId });
       console.log(`[${agent.config.name}] SPEAK: ${result.text}`);
@@ -428,7 +564,7 @@ export class CommunionLoop {
       const journal = this.journals.get(agentId);
       if (journal) {
         await journal.write(result.text, {
-          moodVector: undefined as any, // Journal entries don't need mood tracking in communion
+          moodVector: undefined as any,
           emotionalIntensity: 0.5,
           intendedTarget: 'self',
           loopIntent: 'reflect',
@@ -458,12 +594,21 @@ export class CommunionLoop {
     this.timer = setInterval(() => this.tick(), this.tickIntervalMs);
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
     }
     this.buffer.stop();
+
+    // Final session save
+    try {
+      await this.session.closeSession();
+      console.log('[PERSISTENCE] Session saved and closed');
+    } catch (err) {
+      console.error('[PERSISTENCE] Error saving session:', err);
+    }
+
     console.log('[COMMUNION] Loop stopped');
   }
 }
