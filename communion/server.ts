@@ -390,6 +390,73 @@ async function main() {
       return;
     }
 
+    // Graph stats
+    if (url === '/graph/stats') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(communion.getGraph().getStats()));
+      return;
+    }
+
+    // Full graph as JSON-LD
+    if (url === '/graph') {
+      res.writeHead(200, {
+        'Content-Type': 'application/ld+json',
+        'Cache-Control': 'no-cache',
+      });
+      res.end(JSON.stringify(communion.getGraph().toJsonLd(), null, 2));
+      return;
+    }
+
+    // Graph node lookup (e.g. /graph/node/scroll:abc-123)
+    if (url?.startsWith('/graph/node/')) {
+      const nodeUri = decodeURIComponent(url.slice('/graph/node/'.length));
+      const node = communion.getGraph().getNode(nodeUri);
+      if (node) {
+        res.writeHead(200, { 'Content-Type': 'application/ld+json' });
+        res.end(JSON.stringify(node, null, 2));
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: `Node not found: ${nodeUri}` }));
+      }
+      return;
+    }
+
+    // Graph neighbors (e.g. /graph/neighbors/scroll:abc-123)
+    if (url?.startsWith('/graph/neighbors/')) {
+      const nodeUri = decodeURIComponent(url.slice('/graph/neighbors/'.length));
+      const neighbors = communion.getGraph().neighbors(nodeUri);
+      res.writeHead(200, { 'Content-Type': 'application/ld+json' });
+      res.end(JSON.stringify(neighbors.map(n => ({
+        '@type': n['@type'],
+        '@id': n['@id'],
+        created: n.created,
+        edgeCount: Object.values(n.edges).reduce((s, e) => s + e.length, 0),
+        data: n.data,
+      })), null, 2));
+      return;
+    }
+
+    // Graph traverse (e.g. /graph/traverse/scroll:abc-123?depth=2&type=JournalEntry)
+    if (url?.startsWith('/graph/traverse/')) {
+      const parts = url.slice('/graph/traverse/'.length).split('?');
+      const nodeUri = decodeURIComponent(parts[0]);
+      const params = new URLSearchParams(parts[1] || '');
+      const traversed = communion.getGraph().traverse(nodeUri, {
+        maxDepth: Number(params.get('depth')) || 3,
+        filterType: (params.get('type') as any) || undefined,
+        maxResults: Number(params.get('limit')) || 50,
+      });
+      res.writeHead(200, { 'Content-Type': 'application/ld+json' });
+      res.end(JSON.stringify(traversed.map(t => ({
+        '@type': t.node['@type'],
+        '@id': t.node['@id'],
+        depth: t.depth,
+        path: t.path,
+        data: t.node.data,
+      })), null, 2));
+      return;
+    }
+
     // Import chat history
     if (url === '/import' && req.method === 'POST') {
       collectBody(req, 50 * 1024 * 1024, (err, body) => {

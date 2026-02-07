@@ -7,6 +7,7 @@
  * 3. Results are broadcast + persisted to memory
  *
  * Memory Architecture:
+ * - ScrollGraph: JSON-LD graph — the interconnected web of ALL memory entities
  * - ScrollPulseBuffer: Short-term memory with decay
  * - ScrollPulseMemory: Memory routing + recall
  * - ScrollArchive: Permanent storage for scrollfired memories
@@ -30,6 +31,7 @@ import { ScrollPatternRecognizer } from '../src/memory/scrollPatternRecognition'
 import { Journal } from '../src/memory/journal';
 import { SessionPersistence } from '../src/persistence/sessionPersistence';
 import { AdaptationEngine } from '../src/learning/adaptationEngine';
+import { ScrollGraph } from '../src/memory/scrollGraph';
 import type { ScrollEcho, MoodVector } from '../src/types';
 
 // ── Events ──
@@ -116,6 +118,9 @@ export class CommunionLoop {
   private patternRecognizer: ScrollPatternRecognizer;
   private adaptationEngine: AdaptationEngine;
 
+  // Graph — the interconnected web of all memory
+  private graph: ScrollGraph;
+
   // Shared documents
   private documentsContext: string = '';
   private documentsDir: string;
@@ -130,6 +135,9 @@ export class CommunionLoop {
 
     this.documentsDir = config.documentsDir || 'communion-docs';
     if (!existsSync(this.documentsDir)) mkdirSync(this.documentsDir, { recursive: true });
+
+    // ── Initialize the graph ──
+    this.graph = new ScrollGraph(join(this.dataDir, 'scroll-graph.jsonld'));
 
     // ── Initialize memory systems ──
     this.buffer = new ScrollPulseBuffer(200);
@@ -152,11 +160,22 @@ export class CommunionLoop {
       minConfidence: 0.6,
     });
 
-    // ── Wire scrollfire → archive + session persistence ──
+    // ── Wire scrollfire → archive + session + graph ──
     this.scrollfire.onScrollfire((event) => {
       this.archive.archiveScroll(event.scroll, event);
       this.session.addScrollfireEvent(event);
       this.adaptationEngine.observeScroll(event.scroll);
+
+      // Register scrollfire event in graph + link to scroll
+      const sfUri = `scrollfire:${event.scroll.id}`;
+      this.graph.addNode(sfUri, 'ScrollfireEvent', {
+        scrollId: event.scroll.id,
+        reason: (event as any).reason || 'elevation',
+        timestamp: event.scroll.timestamp,
+        resonance: event.scroll.resonance,
+      });
+      this.graph.link(`scroll:${event.scroll.id}`, 'elevatedBy', sfUri);
+
       console.log(`[SCROLLFIRE] Elevated scroll: ${event.scroll.content.substring(0, 50)}...`);
     });
 
@@ -182,10 +201,23 @@ export class CommunionLoop {
       const journalPath = `${this.dataDir}/journal-${agentConfig.id}.jsonld`;
       const journal = new Journal(journalPath);
       this.journals.set(agentConfig.id, journal);
+
+      // Register agent in graph
+      this.graph.addNode(`agent:${agentConfig.id}`, 'Agent', {
+        name: agentConfig.name,
+        provider: agentConfig.provider,
+        model: agentConfig.model,
+        color: agentConfig.color,
+      });
     }
 
+    // Register human in graph
     agentNames['human'] = config.humanName;
     agentColors['human'] = '#8eda7e';
+    this.graph.addNode('agent:human', 'Agent', {
+      name: config.humanName,
+      color: '#8eda7e',
+    });
 
     this.state = {
       messages: [],
@@ -203,15 +235,24 @@ export class CommunionLoop {
     // Load shared documents
     this.loadDocuments();
 
+    // ── Load graph from disk ──
+    await this.graph.load();
+
     // ── Initialize session persistence (loads previous session data) ──
     const sessionState = await this.session.initializeSession();
+    const sessionUri = `session:${sessionState.metadata.sessionId}`;
+    this.graph.addNode(sessionUri, 'Session', {
+      sessionId: sessionState.metadata.sessionId,
+      startTime: sessionState.metadata.startTime,
+    });
     console.log(`[PERSISTENCE] Session initialized: ${sessionState.metadata.sessionId}`);
 
-    // Restore scrolls from previous session into buffer
+    // Restore scrolls from previous session into buffer + graph
     if (sessionState.scrolls.length > 0) {
       const recentScrolls = sessionState.scrolls.slice(-100); // Load last 100
       for (const scroll of recentScrolls) {
         this.buffer.addScroll(scroll);
+        this.registerScrollInGraph(scroll, sessionUri);
       }
       console.log(`[PERSISTENCE] Restored ${recentScrolls.length} scrolls from previous session`);
     }
@@ -250,8 +291,11 @@ export class CommunionLoop {
       console.log(`[PERSISTENCE] Restored ${sessionState.learnedPreferences.length} learned preferences`);
     }
 
-    // Restore detected patterns
+    // Restore detected patterns into graph
     if (sessionState.detectedPatterns.length > 0) {
+      for (const pattern of sessionState.detectedPatterns) {
+        this.registerPatternInGraph(pattern, sessionUri);
+      }
       console.log(`[PERSISTENCE] ${sessionState.detectedPatterns.length} patterns from previous session`);
     }
 
@@ -278,7 +322,7 @@ export class CommunionLoop {
       console.log(`[PERSISTENCE] Restored ${this.state.messages.length} room messages`);
     }
 
-    // Initialize all journals from disk
+    // Initialize all journals from disk + register in graph
     for (const [agentId, journal] of this.journals) {
       await journal.initialize();
       const recent = await journal.getRecent(50);
@@ -291,6 +335,33 @@ export class CommunionLoop {
           timestamp: entry.timestamp,
           type: 'journal',
         });
+
+        // Register journal entry in graph
+        const entryUri = `journal:${entry['@id']}`;
+        if (!this.graph.hasNode(entryUri)) {
+          this.graph.addNode(entryUri, 'JournalEntry', {
+            content: entry.content,
+            timestamp: entry.timestamp,
+            tags: entry.tags,
+            reflectionType: entry.reflectionType,
+            emotionalIntensity: entry.emotionalIntensity,
+          });
+          this.graph.link(entryUri, 'spokenBy', `agent:${agentId}`);
+          this.graph.link(entryUri, 'occurredDuring', sessionUri);
+
+          // Link to referenced scrolls
+          if (entry.linkedScrolls) {
+            for (const scrollId of entry.linkedScrolls) {
+              this.graph.link(entryUri, 'reflectsOn', `scroll:${scrollId}`);
+            }
+          }
+          // Link to chained entries
+          if (entry.linkedEntries) {
+            for (const linkedId of entry.linkedEntries) {
+              this.graph.link(entryUri, 'chainedWith', `journal:${linkedId}`);
+            }
+          }
+        }
       }
     }
     console.log('[COMMUNION] Journals loaded from disk');
@@ -352,6 +423,13 @@ export class CommunionLoop {
         try {
           const data = JSON.parse(readFileSync(join(this.dataDir, file), 'utf-8'));
           if (data.scrolls && Array.isArray(data.scrolls)) {
+            // Create an ImportedConversation node for this archive
+            const importUri = `import:${file.replace('import-archive-', '').replace('.json', '')}`;
+            this.graph.addNode(importUri, 'ImportedConversation', {
+              file,
+              scrollCount: data.scrolls.length,
+            });
+
             let imported = 0;
             for (const scroll of data.scrolls) {
               this.archive.archiveScroll(scroll, data.events?.find((e: any) => e.scroll?.id === scroll.id) || {
@@ -360,6 +438,19 @@ export class CommunionLoop {
                 timestamp: scroll.timestamp,
                 criteria: { name: 'import', description: 'Chat history import', check: () => true },
               });
+
+              // Register in graph with import link
+              const scrollUri = `scroll:${scroll.id}`;
+              if (!this.graph.hasNode(scrollUri)) {
+                this.graph.addNode(scrollUri, 'ScrollEcho', {
+                  content: scroll.content,
+                  timestamp: scroll.timestamp,
+                  location: scroll.location,
+                  resonance: scroll.resonance,
+                  tags: scroll.tags,
+                });
+                this.graph.link(scrollUri, 'importedFrom', importUri);
+              }
               imported++;
             }
             console.log(`[IMPORT] Loaded ${imported} scrolls from ${file}`);
@@ -430,6 +521,16 @@ export class CommunionLoop {
     this.memory.remember(scroll);
     this.session.addScroll(scroll);
     this.adaptationEngine.observeScroll(scroll);
+    this.registerScrollInGraph(scroll);
+
+    // Link message to human agent in graph
+    this.graph.link(`scroll:${scroll.id}`, 'spokenBy', 'agent:human');
+
+    // Link to previous message for conversation threading
+    if (this.state.messages.length > 1) {
+      const prev = this.state.messages[this.state.messages.length - 2];
+      this.graph.link(`scroll:${scroll.id}`, 'relatedTo', `scroll:${prev.id}`);
+    }
 
     this.emit({ type: 'room-message', message: msg, agentId: 'human' });
     return msg;
@@ -529,6 +630,7 @@ export class CommunionLoop {
           if (patterns.length > 0) {
             for (const pattern of patterns) {
               this.session.addPattern(pattern);
+              this.registerPatternInGraph(pattern);
             }
             this.adaptationEngine.observePatterns(patterns);
             console.log(`[PATTERNS] Detected ${patterns.length} patterns`);
@@ -543,6 +645,11 @@ export class CommunionLoop {
     const preferences = this.adaptationEngine.getPreferences();
     if (preferences.length > 0) {
       this.session.updatePreferences(preferences);
+    }
+
+    // Save graph every 10 ticks
+    if (this.state.tickCount % 10 === 0) {
+      this.graph.save().catch(err => console.error('[GRAPH] Auto-save error:', err));
     }
 
     this.emit({ type: 'tick', tickCount: this.state.tickCount });
@@ -582,6 +689,14 @@ export class CommunionLoop {
       this.memory.remember(scroll);
       this.session.addScroll(scroll);
       this.adaptationEngine.observeScroll(scroll);
+      this.registerScrollInGraph(scroll);
+
+      // Graph: link to agent + thread to previous message
+      this.graph.link(`scroll:${scroll.id}`, 'spokenBy', `agent:${agentId}`);
+      if (this.state.messages.length > 1) {
+        const prev = this.state.messages[this.state.messages.length - 2];
+        this.graph.link(`scroll:${scroll.id}`, 'relatedTo', `scroll:${prev.id}`);
+      }
 
       this.emit({ type: 'room-message', message: msg, agentId });
       console.log(`[${agent.config.name}] SPEAK: ${result.text}`);
@@ -615,12 +730,110 @@ export class CommunionLoop {
         });
       }
 
+      // Register journal entry in graph
+      const journalUri = `journal:${msg.id}`;
+      this.graph.addNode(journalUri, 'JournalEntry', {
+        content: result.text,
+        timestamp: msg.timestamp,
+        tags: ['communion', agentId],
+      });
+      this.graph.link(journalUri, 'spokenBy', `agent:${agentId}`);
+
+      // Link journal to recent room messages (what was the agent reflecting on?)
+      const recentRoom = this.state.messages.slice(-3);
+      for (const recent of recentRoom) {
+        this.graph.link(journalUri, 'reflectsOn', `scroll:${recent.id}`);
+      }
+
+      // Link to previous journal entry for this agent (reflection chain)
+      const agentJournal = this.state.journals[agentId];
+      if (agentJournal.length > 1) {
+        const prevJournal = agentJournal[agentJournal.length - 2];
+        this.graph.link(journalUri, 'chainedWith', `journal:${prevJournal.id}`);
+      }
+
       this.emit({ type: 'journal-entry', message: msg, agentId });
       console.log(`[${agent.config.name}] JOURNAL: ${result.text}`);
 
     } else {
       console.log(`[${agent.config.name}] SILENT`);
     }
+  }
+
+  // ════════════════════════════════════════════
+  // Graph registration helpers
+  // ════════════════════════════════════════════
+
+  /**
+   * Register a scroll in the graph with all its existing relationships
+   */
+  private registerScrollInGraph(scroll: ScrollEcho, sessionUri?: string): void {
+    const uri = `scroll:${scroll.id}`;
+    if (this.graph.hasNode(uri)) return; // Already registered
+
+    this.graph.addNode(uri, 'ScrollEcho', {
+      content: scroll.content,
+      timestamp: scroll.timestamp,
+      location: scroll.location,
+      resonance: scroll.resonance,
+      tags: scroll.tags,
+      sourceModel: scroll.sourceModel,
+    });
+
+    // Link to related scrolls
+    for (const relatedId of scroll.relatedScrollIds) {
+      this.graph.link(uri, 'relatedTo', `scroll:${relatedId}`);
+    }
+
+    // Link to parent
+    if (scroll.parentScrollId) {
+      this.graph.link(uri, 'childOf', `scroll:${scroll.parentScrollId}`);
+    }
+
+    // Link to session
+    if (sessionUri) {
+      this.graph.link(uri, 'occurredDuring', sessionUri);
+    }
+  }
+
+  /**
+   * Register a detected pattern in the graph with links to its scrolls
+   */
+  private registerPatternInGraph(pattern: any, sessionUri?: string): void {
+    const uri = `pattern:${pattern.id}`;
+    if (this.graph.hasNode(uri)) return;
+
+    this.graph.addNode(uri, 'DetectedPattern', {
+      type: pattern.type,
+      name: pattern.name,
+      description: pattern.description,
+      strength: pattern.strength,
+      confidence: pattern.confidence,
+      tags: pattern.tags,
+    });
+
+    // Link pattern to all scrolls it was detected in
+    if (pattern.scrollIds) {
+      for (const scrollId of pattern.scrollIds) {
+        this.graph.link(uri, 'containsScroll', `scroll:${scrollId}`);
+      }
+    }
+
+    // Link to child patterns (meta-patterns)
+    if (pattern.childPatternIds) {
+      for (const childId of pattern.childPatternIds) {
+        this.graph.link(uri, 'containsScroll', `pattern:${childId}`);
+      }
+    }
+
+    // Link to session
+    if (sessionUri) {
+      this.graph.link(uri, 'occurredDuring', sessionUri);
+    }
+  }
+
+  getGraph(): ScrollGraph {
+    return this.graph;
   }
 
   start(): void {
@@ -646,6 +859,15 @@ export class CommunionLoop {
       console.log('[PERSISTENCE] Session saved and closed');
     } catch (err) {
       console.error('[PERSISTENCE] Error saving session:', err);
+    }
+
+    // Final graph save
+    try {
+      await this.graph.save();
+      const stats = this.graph.getStats();
+      console.log(`[GRAPH] Saved: ${stats.totalNodes} nodes, ${stats.totalEdges} edges`);
+    } catch (err) {
+      console.error('[GRAPH] Error saving graph:', err);
     }
 
     console.log('[COMMUNION] Loop stopped');
