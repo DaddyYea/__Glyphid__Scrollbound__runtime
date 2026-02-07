@@ -6,7 +6,7 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, createWriteStream, openSync, readSync, closeSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, createWriteStream, openSync, readSync, closeSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { CommunionLoop, CommunionEvent } from './communionLoop';
@@ -140,14 +140,15 @@ function loadConfig(): CommunionConfig {
  */
 async function handleImportFile(tmpPath: string, source: string, config: CommunionConfig, res: ServerResponse): Promise<void> {
   try {
-    // Quick sanity check — read first few bytes to verify it's JSON
+    // Quick sanity check + detect old JSON-wrapped format
+    // Read only first 200 bytes to avoid loading entire file into memory
     const fd = openSync(tmpPath, 'r');
-    const probe = Buffer.alloc(16);
-    readSync(fd, probe, 0, 16, 0);
+    const probe = Buffer.alloc(200);
+    const bytesRead = readSync(fd, probe, 0, 200, 0);
     closeSync(fd);
-    const firstChar = probe.toString('utf-8').trimStart()[0];
+    const head = probe.toString('utf-8', 0, bytesRead).trimStart();
 
-    if (firstChar !== '[' && firstChar !== '{') {
+    if (!head.startsWith('[') && !head.startsWith('{')) {
       try { unlinkSync(tmpPath); } catch {}
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
@@ -156,27 +157,33 @@ async function handleImportFile(tmpPath: string, source: string, config: Communi
       return;
     }
 
-    // Detect old JSON-wrapped format: { source, data, options }
-    // This happens when the browser has a cached old dashboard page
+    // Detect old JSON-wrapped format: {"source":"chatgpt","data":"...","options":{}}
+    // The head will contain "source" near the start if it's the old wrapper
     let actualSource = source;
     let actualPath = tmpPath;
-    try {
-      const rawCheck = readFileSync(tmpPath, 'utf-8');
-      const check = JSON.parse(rawCheck);
-      if (check && typeof check === 'object' && !Array.isArray(check) && typeof check.data === 'string' && check.source) {
-        console.log('[IMPORT] Detected old JSON-wrapped format, unwrapping...');
-        actualSource = check.source;
-        // Write the inner data to a new temp file
-        const unwrappedPath = tmpPath.replace('.json', '-unwrapped.json');
-        writeFileSync(unwrappedPath, check.data, 'utf-8');
-        try { unlinkSync(tmpPath); } catch {}
-        actualPath = unwrappedPath;
-        tmpPath = unwrappedPath;
+    if (head.startsWith('{') && head.includes('"source"') && head.includes('"data"')) {
+      // Likely old wrapper — need to unwrap. Read and parse the full file.
+      try {
+        const rawCheck = readFileSync(tmpPath, 'utf-8');
+        const check = JSON.parse(rawCheck);
+        if (check && typeof check.data === 'string' && check.source) {
+          console.log('[IMPORT] Detected old JSON-wrapped format, unwrapping...');
+          actualSource = check.source;
+          const unwrappedPath = tmpPath.replace('.json', '-unwrapped.json');
+          writeFileSync(unwrappedPath, check.data, 'utf-8');
+          try { unlinkSync(tmpPath); } catch {}
+          actualPath = unwrappedPath;
+          tmpPath = unwrappedPath;
+        }
+      } catch {
+        // Parse failed — proceed with original file, the chatgpt parser will handle it
       }
-    } catch {
-      // Not valid JSON or other issue — proceed with original file, parser will handle it
     }
     source = actualSource;
+
+    // Log file info for debugging
+    const fileSize = statSync(actualPath).size;
+    console.log(`[IMPORT] Processing ${actualPath} (${(fileSize / 1024 / 1024).toFixed(1)}MB, source=${source})`);
 
     broadcast({ type: 'import-status', status: 'parsing', source });
 
@@ -247,6 +254,9 @@ async function handleImportFile(tmpPath: string, source: string, config: Communi
   } catch (err) {
     try { unlinkSync(tmpPath); } catch {}
     const msg = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : '';
+    console.error('[IMPORT] Error:', msg);
+    if (stack) console.error(stack);
     broadcast({ type: 'import-status', status: 'error', error: msg });
     if (!res.headersSent) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
