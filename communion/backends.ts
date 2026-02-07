@@ -16,6 +16,7 @@ export interface GenerateOptions {
   conversationContext: string;
   journalContext: string;
   documentsContext?: string;
+  memoryContext?: string;
 }
 
 export interface GenerateResult {
@@ -139,7 +140,10 @@ function buildUserPrompt(options: GenerateOptions): string {
   if (options.documentsContext) {
     parts.push(options.documentsContext);
   }
-  parts.push('Based on the conversation, your private reflections, and any shared documents, decide what to do this tick. Respond with EXACTLY one of these formats:\n\n[SPEAK] your message to the room\n[JOURNAL] your private reflection\n[SILENT] (say nothing this tick)');
+  if (options.memoryContext) {
+    parts.push(options.memoryContext);
+  }
+  parts.push('Based on the conversation, your private reflections, any shared documents, and the memory state, decide what to do this tick. Respond with EXACTLY one of these formats:\n\n[SPEAK] your message to the room\n[JOURNAL] your private reflection\n[SILENT] (say nothing this tick)');
   return parts.join('\n\n');
 }
 

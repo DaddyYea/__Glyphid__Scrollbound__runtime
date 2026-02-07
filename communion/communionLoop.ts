@@ -585,6 +585,68 @@ export class CommunionLoop {
   }
 
   /**
+   * Build a live snapshot of the memory system state for agents to see.
+   * Gives them awareness of the graph, buffer decay, archive, patterns, and their own connections.
+   */
+  private buildMemoryContext(agentId: string): string {
+    const lines: string[] = ['MEMORY SYSTEM STATE (live — you can see this):'];
+
+    // Graph stats
+    const graphStats = this.graph.getStats();
+    lines.push(`\nScrollGraph: ${graphStats.totalNodes} nodes, ${graphStats.totalEdges} edges (JSON-LD web of all memory)`);
+    const typeEntries = Object.entries(graphStats.nodesByType)
+      .map(([type, count]) => `${count} ${type}`)
+      .join(', ');
+    if (typeEntries) lines.push(`  Node types: ${typeEntries}`);
+
+    // Buffer state — the part that actually forgets
+    const bufferMetrics = this.memory.getMetrics();
+    lines.push(`\nShort-term buffer: ${bufferMetrics.activeScrolls} active scrolls (${bufferMetrics.totalScrolls} total, ${bufferMetrics.sacredScrolls} preserved)`);
+    lines.push(`  Scrolls decay every 30s. Below resonance threshold → permanently lost.`);
+    if (bufferMetrics.averageResonance > 0) {
+      lines.push(`  Average resonance: ${bufferMetrics.averageResonance.toFixed(2)}`);
+    }
+    if (bufferMetrics.oldestScrollAge > 0) {
+      lines.push(`  Oldest scroll age: ${Math.round(bufferMetrics.oldestScrollAge)} min`);
+    }
+
+    // Archive — permanent
+    const archiveStats = this.archive.getStats();
+    lines.push(`\nPermanent archive: ${archiveStats.totalScrolls} scrollfired scrolls (never decay, never forgotten)`);
+
+    // This agent's connections
+    const agentUri = `agent:${agentId}`;
+    const neighbors = this.graph.neighbors(agentUri);
+    if (neighbors.length > 0) {
+      const scrolls = neighbors.filter(n => n['@type'] === 'ScrollEcho').length;
+      const journals = neighbors.filter(n => n['@type'] === 'JournalEntry').length;
+      lines.push(`\nYour graph presence: ${scrolls} messages + ${journals} journal entries linked to you`);
+    }
+
+    // Detected patterns
+    const patterns = this.graph.getByType('DetectedPattern');
+    if (patterns.length > 0) {
+      lines.push(`\nDetected patterns (${patterns.length} total):`);
+      for (const p of patterns.slice(-3)) {
+        const d = p.data as Record<string, unknown>;
+        lines.push(`  - ${d.name || d.type || 'unnamed'} (strength: ${typeof d.strength === 'number' ? d.strength.toFixed(2) : '?'})`);
+      }
+    }
+
+    // Most connected nodes
+    if (graphStats.mostConnected.length > 0) {
+      lines.push(`\nMost connected nodes:`);
+      for (const mc of graphStats.mostConnected.slice(0, 3)) {
+        const n = this.graph.getNode(mc.id);
+        const preview = n?.data?.content ? String(n.data.content).substring(0, 60) : mc.id;
+        lines.push(`  - [${mc.type}] ${mc.edgeCount} edges: ${preview}`);
+      }
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
    * Process one tick — all agents decide in parallel, then run memory systems
    */
   async tick(): Promise<void> {
@@ -662,12 +724,14 @@ export class CommunionLoop {
     conversationContext: string
   ): Promise<void> {
     const journalContext = this.buildJournalContext(agentId);
+    const memoryContext = this.buildMemoryContext(agentId);
 
     const options: GenerateOptions = {
       systemPrompt: agent.systemPrompt,
       conversationContext,
       journalContext,
       documentsContext: this.documentsContext || undefined,
+      memoryContext,
     };
 
     const result = await agent.backend.generate(options);
