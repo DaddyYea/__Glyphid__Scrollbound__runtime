@@ -295,6 +295,9 @@ export class CommunionLoop {
     }
     console.log('[COMMUNION] Journals loaded from disk');
 
+    // ── Load imported chat history archives ──
+    await this.loadImportedArchives();
+
     // Log memory status
     const archiveStats = this.archive.getStats();
     const bufferMetrics = this.memory.getMetrics();
@@ -331,6 +334,42 @@ export class CommunionLoop {
     if (docs.length > 0) {
       this.documentsContext = `SHARED DOCUMENTS (available to all participants):\n\n${docs.join('\n\n')}`;
       console.log(`[DOCS] ${files.length} documents loaded into context`);
+    }
+  }
+
+  /**
+   * Load any import-archive-*.json files from dataDir into the scroll archive.
+   * These are created by the import CLI (communion/import/cli.ts).
+   */
+  private async loadImportedArchives(): Promise<void> {
+    try {
+      const files = readdirSync(this.dataDir)
+        .filter(f => f.startsWith('import-archive-') && f.endsWith('.json'));
+
+      if (files.length === 0) return;
+
+      for (const file of files) {
+        try {
+          const data = JSON.parse(readFileSync(join(this.dataDir, file), 'utf-8'));
+          if (data.scrolls && Array.isArray(data.scrolls)) {
+            let imported = 0;
+            for (const scroll of data.scrolls) {
+              this.archive.archiveScroll(scroll, data.events?.find((e: any) => e.scroll?.id === scroll.id) || {
+                scroll,
+                reason: 'imported',
+                timestamp: scroll.timestamp,
+                criteria: { name: 'import', description: 'Chat history import', check: () => true },
+              });
+              imported++;
+            }
+            console.log(`[IMPORT] Loaded ${imported} scrolls from ${file}`);
+          }
+        } catch (err) {
+          console.error(`[IMPORT] Failed to load ${file}:`, err);
+        }
+      }
+    } catch {
+      // dataDir might not exist yet
     }
   }
 
