@@ -427,8 +427,8 @@
         <option value="anthropic" disabled>Anthropic / Claude (coming soon)</option>
       </select>
 
-      <label for="importFile">File</label>
-      <input type="file" id="importFile" accept=".json" />
+      <label for="importFile">File (conversations.json from ChatGPT export zip)</label>
+      <input type="file" id="importFile" accept=".json,.zip" />
 
       <div class="import-progress" id="importProgress">
         <div class="status-line" id="importStatusLine">Preparing...</div>
@@ -693,18 +693,14 @@
       importProgressBar.style.width = '10%';
 
       try {
-        const text = await file.text();
-        importStatusLine.textContent = 'Uploading to server...';
-        importProgressBar.style.width = '25%';
+        importStatusLine.textContent = 'Uploading file to server...';
+        importProgressBar.style.width = '15%';
 
-        const response = await fetch('/import', {
+        // Send file as raw binary stream — no JSON wrapping, no memory doubling
+        const response = await fetch('/import?source=' + encodeURIComponent(importSource.value), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            source: importSource.value,
-            data: text,
-            options: {},
-          }),
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: file,
         });
 
         const result = await response.json();
