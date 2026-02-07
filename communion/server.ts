@@ -9,11 +9,10 @@ import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, createWriteStream, openSync, readSync, closeSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { spawn } from 'child_process';
 import { CommunionLoop, CommunionEvent } from './communionLoop';
 import { CommunionConfig, AgentConfig } from './types';
-import { parseChatGPTExport } from './import/chatgpt';
-import { ingestConversations } from './import/ingest';
-import type { ImportOptions } from './import/types';
+// Import parsing happens in a child worker process (communion/import/worker.ts)
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -187,64 +186,62 @@ async function handleImportFile(tmpPath: string, source: string, config: Communi
 
     broadcast({ type: 'import-status', status: 'parsing', source });
 
-    let conversations;
-    let result;
-
-    try {
-      switch (source) {
-        case 'chatgpt':
-        case 'openai': {
-          const parsed = parseChatGPTExport(actualPath, {
-            skipSystem: true,
-            skipTool: true,
-            userName: config.humanName,
-            assistantName: 'ChatGPT',
-          });
-          conversations = parsed.conversations;
-          result = parsed.result;
-          break;
-        }
-        default:
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: `Unknown source: "${source}". Supported: chatgpt` }));
-          return;
-      }
-    } finally {
-      try { unlinkSync(actualPath); } catch {}
-    }
-
-    broadcast({
-      type: 'import-status',
-      status: 'parsed',
-      source,
-      totalConversations: result.totalConversations,
-      totalMessages: result.totalMessages,
-    });
-
-    // Ingest
-    broadcast({ type: 'import-status', status: 'ingesting', source });
-
+    // Spawn import worker with 4GB heap so large files don't OOM the server
     const dataDir = config.dataDir || 'data/communion';
-    const agentId = source === 'chatgpt' ? 'chatgpt' : source;
-    const agentName = source === 'chatgpt' ? 'ChatGPT' : source;
+    const workerPath = join(__dirname, 'import', 'worker.ts');
+    const summary = await new Promise<any>((resolve, reject) => {
+      const child = spawn(
+        process.execPath,
+        ['--max-old-space-size=4096', ...process.execArgv, workerPath, source, actualPath, dataDir, config.humanName],
+        { stdio: ['ignore', 'pipe', 'pipe'] }
+      );
 
-    const ingestResult = await ingestConversations(conversations, {
-      dataDir,
-      agentId,
-      agentName,
-      humanName: config.humanName,
-      journalAssistantMessages: true,
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (d: Buffer) => { stdout += d.toString(); });
+      child.stderr.on('data', (d: Buffer) => {
+        const line = d.toString().trim();
+        stderr += line + '\n';
+        // Worker sends progress on stderr
+        try {
+          const progress = JSON.parse(line);
+          if (progress.status === 'parsed') {
+            broadcast({ type: 'import-status', status: 'parsed', source, ...progress });
+            broadcast({ type: 'import-status', status: 'ingesting', source });
+          }
+        } catch {
+          // Not JSON, just log output
+          if (line) console.log(`[IMPORT WORKER] ${line}`);
+        }
+      });
+
+      child.on('close', (code) => {
+        // Clean up the temp file
+        try { unlinkSync(actualPath); } catch {}
+
+        if (code !== 0) {
+          let errorMsg = 'Import worker failed';
+          try {
+            const parsed = JSON.parse(stdout);
+            if (parsed.error) errorMsg = parsed.error;
+          } catch {
+            if (stderr.trim()) errorMsg = stderr.trim().split('\n').pop() || errorMsg;
+          }
+          reject(new Error(errorMsg));
+        } else {
+          try {
+            resolve(JSON.parse(stdout));
+          } catch {
+            reject(new Error('Worker returned invalid JSON'));
+          }
+        }
+      });
+
+      child.on('error', (err) => {
+        try { unlinkSync(actualPath); } catch {}
+        reject(err);
+      });
     });
-
-    const summary = {
-      source,
-      conversations: result.totalConversations,
-      messages: result.totalMessages,
-      scrollsCreated: ingestResult.scrollsCreated,
-      journalEntries: ingestResult.journalEntries,
-      dateRange: result.dateRange,
-      errors: result.errors,
-    };
 
     broadcast({ type: 'import-status', status: 'complete', ...summary });
 

@@ -83,13 +83,17 @@ export function parseChatGPTExport(
   filePath: string,
   options: ImportOptions = {}
 ): { conversations: ImportedConversation[]; result: ImportResult } {
-  const raw = readFileSync(filePath, 'utf-8');
+  // Parse file — release raw string immediately to save memory
   let parsed: unknown;
-
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    throw new Error(`Failed to parse ${filePath}: ${err}`);
+  {
+    const raw = readFileSync(filePath, 'utf-8');
+    console.log(`[CHATGPT PARSER] Read file: ${(raw.length / 1024 / 1024).toFixed(1)}MB`);
+    try {
+      parsed = JSON.parse(raw);
+    } catch (err) {
+      throw new Error(`Failed to parse ${filePath}: ${err}`);
+    }
+    // raw string is now out of scope and eligible for GC
   }
 
   // Handle both formats:
