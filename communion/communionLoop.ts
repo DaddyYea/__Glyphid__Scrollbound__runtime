@@ -180,7 +180,7 @@ export class CommunionLoop {
     for (const [agentId, journal] of this.journals) {
       await journal.initialize();
       // Load recent entries into state
-      const recent = journal.getRecent(50);
+      const recent = await journal.getRecent(50);
       for (const entry of recent) {
         this.state.journals[agentId].push({
           id: entry['@id'],
