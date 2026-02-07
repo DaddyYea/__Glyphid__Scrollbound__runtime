@@ -8,11 +8,13 @@
  * into the archive (permanent memory) rather than the short-term buffer.
  */
 
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 import { mkdirSync, existsSync } from 'fs';
 import { ImportedConversation, ImportedMessage, ImportSource } from './types';
 import { ScrollArchive } from '../../src/memory/scrollArchive';
 import { Journal } from '../../src/memory/journal';
+import { ScrollfireReason } from '../../src/memory/scrollfire';
+import type { ScrollfireEvent } from '../../src/memory/scrollfire';
 import type { ScrollEcho, MoodVector } from '../../src/types';
 
 export interface IngestOptions {
@@ -118,16 +120,15 @@ export async function ingestConversations(
 
       if (!options.dryRun) {
         // Archive the scroll (permanent storage)
-        archive.archiveScroll(scroll, {
-          scroll,
-          reason: `Imported from ${convo.source}: "${convo.title}"`,
-          timestamp: msg.timestamp,
-          criteria: {
-            name: 'import',
-            description: 'Chat history import',
-            check: () => true,
-          },
-        });
+        const event: ScrollfireEvent = {
+          scrollId: scroll.id,
+          reason: ScrollfireReason.MANUAL_ELEVATION,
+          elevatedAt: msg.timestamp,
+          resonanceAtElevation: scroll.resonance,
+          emotionalSignature: { ...IMPORT_MOOD },
+          notes: `Imported from ${convo.source}: "${convo.title}"`,
+        };
+        archive.archiveScroll(scroll, event);
       }
       scrollsCreated++;
 

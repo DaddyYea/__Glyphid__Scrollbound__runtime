@@ -6,7 +6,7 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { CommunionLoop, CommunionEvent } from './communionLoop';
@@ -203,7 +203,7 @@ async function handleImport(body: string, config: CommunionConfig, res: ServerRe
       }
     } finally {
       // Clean up temp file
-      try { const { unlinkSync } = await import('fs'); unlinkSync(tmpPath); } catch {}
+      try { unlinkSync(tmpPath); } catch {}
     }
 
     broadcast({
@@ -465,7 +465,13 @@ async function main() {
           res.end(JSON.stringify({ error: err.message }));
           return;
         }
-        handleImport(body, config, res);
+        handleImport(body, config, res).catch((e) => {
+          console.error('[IMPORT] Unhandled error:', e);
+          if (!res.headersSent) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+          }
+        });
       });
       return;
     }

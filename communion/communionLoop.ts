@@ -161,22 +161,22 @@ export class CommunionLoop {
     });
 
     // ── Wire scrollfire → archive + session + graph ──
-    this.scrollfire.onScrollfire((event) => {
-      this.archive.archiveScroll(event.scroll, event);
+    this.scrollfire.onScrollfire((event, scroll) => {
+      this.archive.archiveScroll(scroll, event);
       this.session.addScrollfireEvent(event);
-      this.adaptationEngine.observeScroll(event.scroll);
+      this.adaptationEngine.observeScroll(scroll);
 
       // Register scrollfire event in graph + link to scroll
-      const sfUri = `scrollfire:${event.scroll.id}`;
+      const sfUri = `scrollfire:${scroll.id}`;
       this.graph.addNode(sfUri, 'ScrollfireEvent', {
-        scrollId: event.scroll.id,
-        reason: (event as any).reason || 'elevation',
-        timestamp: event.scroll.timestamp,
-        resonance: event.scroll.resonance,
+        scrollId: scroll.id,
+        reason: event.reason || 'elevation',
+        timestamp: scroll.timestamp,
+        resonance: scroll.resonance,
       });
-      this.graph.link(`scroll:${event.scroll.id}`, 'elevatedBy', sfUri);
+      this.graph.link(`scroll:${scroll.id}`, 'elevatedBy', sfUri);
 
-      console.log(`[SCROLLFIRE] Elevated scroll: ${event.scroll.content.substring(0, 50)}...`);
+      console.log(`[SCROLLFIRE] Elevated scroll: ${scroll.content.substring(0, 50)}...`);
     });
 
     // ── Initialize agents ──
@@ -432,11 +432,14 @@ export class CommunionLoop {
 
             let imported = 0;
             for (const scroll of data.scrolls) {
-              this.archive.archiveScroll(scroll, data.events?.find((e: any) => e.scroll?.id === scroll.id) || {
-                scroll,
-                reason: 'imported',
-                timestamp: scroll.timestamp,
-                criteria: { name: 'import', description: 'Chat history import', check: () => true },
+              const matchedEvent = data.events?.find((e: any) => e.scrollId === scroll.id);
+              this.archive.archiveScroll(scroll, matchedEvent || {
+                scrollId: scroll.id,
+                reason: 'manual_elevation',
+                elevatedAt: scroll.timestamp,
+                resonanceAtElevation: scroll.resonance || 0.4,
+                emotionalSignature: scroll.emotionalSignature || {},
+                notes: 'Imported from archive',
               });
 
               // Register in graph with import link
