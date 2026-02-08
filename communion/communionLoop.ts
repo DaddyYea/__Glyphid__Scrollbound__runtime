@@ -1187,12 +1187,15 @@ export class CommunionLoop {
       clearInterval(this.timer);
       this.timer = null;
     }
+    // If a tick is mid-execution with staggered delays, let it finish
+    // but the next tick will be blocked by this.paused = true
     console.log('[COMMUNION] Paused');
   }
 
   resume(): void {
     if (!this.paused) return;
     this.paused = false;
+    this.processing = false; // Reset in case a tick was mid-execution when paused
     this.timer = setInterval(() => this.tick(), this.tickIntervalMs);
     console.log(`[COMMUNION] Resumed (tick every ${this.tickIntervalMs / 1000}s)`);
   }
