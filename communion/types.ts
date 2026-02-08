@@ -30,6 +30,12 @@ export interface AgentConfig {
   temperature?: number;
   /** Max tokens per response (default 512) */
   maxTokens?: number;
+  /** Voice configuration */
+  voice?: {
+    voiceId: string;
+    voiceProvider: 'openai' | 'xai';
+    enabled: boolean;
+  };
 }
 
 export interface CommunionMessage {

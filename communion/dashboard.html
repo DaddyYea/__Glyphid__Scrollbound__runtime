@@ -475,6 +475,67 @@
       margin-top: 8px;
       line-height: 1.6;
     }
+
+    /* Voice controls in journal headers */
+    .voice-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .voice-toggle {
+      padding: 2px 8px;
+      font-size: 0.7em;
+      font-family: 'Courier New', monospace;
+      border-radius: 3px;
+      cursor: pointer;
+      border: 1px solid rgba(100, 200, 100, 0.3);
+      background: rgba(100, 200, 100, 0.08);
+      color: #8eda7e;
+      transition: all 0.2s ease;
+    }
+    .voice-toggle.off {
+      border-color: rgba(136, 136, 136, 0.3);
+      background: rgba(136, 136, 136, 0.08);
+      color: #666;
+    }
+    .voice-select {
+      flex: 1;
+      padding: 2px 4px;
+      font-size: 0.7em;
+      font-family: 'Courier New', monospace;
+      background: rgba(15, 20, 30, 0.8);
+      border: 1px solid #1a2030;
+      border-radius: 3px;
+      color: #c0c8d4;
+      max-width: 120px;
+    }
+    .voice-select option { background: #0f1420; }
+
+    /* Speaking indicator */
+    .speaking-indicator {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      background: rgba(126, 184, 218, 0.1);
+      border: 1px solid rgba(126, 184, 218, 0.25);
+      border-radius: 4px;
+      font-size: 0.7em;
+      color: #7eb8da;
+      letter-spacing: 1px;
+    }
+    .speaking-indicator.active { display: flex; }
+    .speaking-dot {
+      width: 8px; height: 8px;
+      background: #7eb8da;
+      border-radius: 50%;
+      animation: pulse 1s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.3; transform: scale(0.8); }
+      50% { opacity: 1; transform: scale(1.2); }
+    }
   </style>
 </head>
 <body>
@@ -486,9 +547,10 @@
       <button class="control-btn" id="pauseBtn" title="Pause/Resume">&#9208;</button>
       <button class="presence-btn" id="presenceBtn" title="Toggle here/away">HERE</button>
       <label class="speed-label" for="speedSlider">Speed</label>
-      <input type="range" id="speedSlider" min="3" max="60" value="15" class="speed-slider" title="Tick interval (seconds)" />
-      <span class="speed-value" id="speedValue">15s</span>
+      <input type="range" id="speedSlider" min="3" max="1800" value="1800" class="speed-slider" title="Tick interval (seconds)" />
+      <span class="speed-value" id="speedValue">30m</span>
       <button class="import-btn" id="importBtn">IMPORT</button>
+      <span class="speaking-indicator" id="speakingIndicator"><span class="speaking-dot"></span><span id="speakingName">Speaking...</span></span>
     </div>
   </div>
 
@@ -579,8 +641,13 @@
     });
 
     // ── Speed Slider ──
+    function formatSpeed(secs) {
+      if (secs >= 60) return Math.round(secs / 60) + 'm';
+      return secs + 's';
+    }
+
     speedSlider.addEventListener('input', () => {
-      speedValue.textContent = speedSlider.value + 's';
+      speedValue.textContent = formatSpeed(Number(speedSlider.value));
     });
 
     let speedDebounce = null;
@@ -598,8 +665,8 @@
       pauseBtn.textContent = isPaused ? '\u25B6' : '\u23F8';
       pauseBtn.classList.toggle('paused', isPaused);
       const secs = Math.round(data.tickSpeed / 1000);
-      speedSlider.value = secs;
-      speedValue.textContent = secs + 's';
+      speedSlider.value = Math.min(1800, secs);
+      speedValue.textContent = formatSpeed(secs);
       if (data.humanPresence) {
         humanPresence = data.humanPresence;
         presenceBtn.textContent = humanPresence.toUpperCase();
@@ -607,11 +674,17 @@
       }
     }).catch(() => {});
 
+    const speakingIndicator = document.getElementById('speakingIndicator');
+    const speakingName = document.getElementById('speakingName');
+
     // Dynamic state
     let config = null;
     let roomHasMessages = false;
     let journalPanels = {}; // agentId → { container, entries, hasEntries }
     let messageCount = 0;
+    let voiceConfigs = {}; // agentId → { voiceId, voiceProvider, enabled }
+    let availableVoices = { openai: [], xai: [] };
+    let audioContext = null; // Web Audio API context (lazy init)
 
     function hexToRgba(hex, alpha) {
       const r = parseInt(hex.slice(1, 3), 16);
@@ -637,6 +710,8 @@
      */
     function buildLayout(cfg) {
       config = cfg;
+      if (cfg.voiceConfigs) voiceConfigs = cfg.voiceConfigs;
+      if (cfg.voices) availableVoices = cfg.voices;
       const agents = cfg.agentIds;
       const half = Math.ceil(agents.length / 2);
       const leftAgents = agents.slice(0, half);
@@ -670,6 +745,7 @@
     function createJournalPanel(agentId, cfg) {
       const color = cfg.agentColors[agentId] || '#7eb8da';
       const name = cfg.agentNames[agentId] || agentId;
+      const vc = voiceConfigs[agentId] || { voiceId: 'alloy', voiceProvider: 'openai', enabled: false };
 
       const panel = document.createElement('div');
       panel.className = 'journal-panel';
@@ -678,7 +754,63 @@
       header.className = 'journal-header';
       header.style.color = color;
       header.style.background = hexToRgba(color, 0.05);
-      header.textContent = `${name}'s Journal`;
+
+      // Agent name
+      const nameSpan = document.createElement('div');
+      nameSpan.textContent = `${name}'s Journal`;
+      header.appendChild(nameSpan);
+
+      // Voice controls row
+      const voiceRow = document.createElement('div');
+      voiceRow.className = 'voice-row';
+
+      const toggleBtn = document.createElement('button');
+      toggleBtn.className = 'voice-toggle' + (vc.enabled ? '' : ' off');
+      toggleBtn.textContent = vc.enabled ? 'VOICE' : 'MUTE';
+      toggleBtn.title = 'Toggle voice for ' + name;
+
+      const providerSelect = document.createElement('select');
+      providerSelect.className = 'voice-select';
+      providerSelect.title = 'Voice provider';
+      providerSelect.innerHTML = '<option value="openai">OpenAI</option><option value="xai">xAI</option>';
+      providerSelect.value = vc.voiceProvider;
+
+      const voiceSelect = document.createElement('select');
+      voiceSelect.className = 'voice-select';
+      voiceSelect.title = 'Voice';
+
+      function populateVoices(provider) {
+        const voices = availableVoices[provider] || [];
+        voiceSelect.innerHTML = voices.map(v =>
+          `<option value="${v.id}" ${v.id === vc.voiceId ? 'selected' : ''}>${v.name}</option>`
+        ).join('');
+      }
+      populateVoices(vc.voiceProvider);
+
+      providerSelect.addEventListener('change', () => {
+        populateVoices(providerSelect.value);
+        updateVoice(agentId, {
+          voiceProvider: providerSelect.value,
+          voiceId: voiceSelect.value,
+        });
+      });
+
+      voiceSelect.addEventListener('change', () => {
+        updateVoice(agentId, { voiceId: voiceSelect.value });
+      });
+
+      toggleBtn.addEventListener('click', () => {
+        const newEnabled = !vc.enabled;
+        vc.enabled = newEnabled;
+        toggleBtn.className = 'voice-toggle' + (newEnabled ? '' : ' off');
+        toggleBtn.textContent = newEnabled ? 'VOICE' : 'MUTE';
+        updateVoice(agentId, { enabled: newEnabled });
+      });
+
+      voiceRow.appendChild(toggleBtn);
+      voiceRow.appendChild(providerSelect);
+      voiceRow.appendChild(voiceSelect);
+      header.appendChild(voiceRow);
       panel.appendChild(header);
 
       const entries = document.createElement('div');
@@ -686,8 +818,18 @@
       entries.innerHTML = '<div class="empty-state">Waiting for first reflection...</div>';
       panel.appendChild(entries);
 
-      journalPanels[agentId] = { container: panel, entries, hasEntries: false, color };
+      journalPanels[agentId] = { container: panel, entries, hasEntries: false, color, toggleBtn, providerSelect, voiceSelect };
       return panel;
+    }
+
+    function updateVoice(agentId, changes) {
+      const vc = voiceConfigs[agentId];
+      if (vc) Object.assign(vc, changes);
+      fetch('/voice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId, ...changes }),
+      }).catch(err => console.error('Voice update error:', err));
     }
 
     function addRoomMessage(speaker, speakerName, text, timestamp, isBackchannel) {
@@ -750,14 +892,30 @@
         tickCounter.textContent = `tick ${data.tickCount}`;
       } else if (data.type === 'backchannel') {
         addRoomMessage(data.speaker, data.speakerName, data.text, data.timestamp, true);
+      } else if (data.type === 'speech-start') {
+        const name = config ? (config.agentNames[data.agentId] || data.agentId) : data.agentId;
+        speakingIndicator.classList.add('active');
+        speakingName.textContent = name + ' speaking...';
+      } else if (data.type === 'speech-end') {
+        if (data.audioBase64 && data.audioBase64.length > 0) {
+          playAudio(data.audioBase64, data.audioFormat, data.audioSampleRate, data.agentId);
+        } else {
+          speakingIndicator.classList.remove('active');
+          fetch('/speech-done', { method: 'POST' }).catch(() => {});
+        }
+      } else if (data.type === 'voice-config') {
+        // Update local voice config state
+        if (data.agentId && voiceConfigs[data.agentId]) {
+          Object.assign(voiceConfigs[data.agentId], data);
+        }
       } else if (data.type === 'control') {
         isPaused = data.paused;
         pauseBtn.textContent = isPaused ? '\u25B6' : '\u23F8';
         pauseBtn.classList.toggle('paused', isPaused);
         if (data.tickSpeed) {
           const secs = Math.round(data.tickSpeed / 1000);
-          speedSlider.value = secs;
-          speedValue.textContent = secs + 's';
+          speedSlider.value = Math.min(1800, secs);
+          speedValue.textContent = formatSpeed(secs);
         }
         if (data.humanPresence) {
           humanPresence = data.humanPresence;
@@ -911,6 +1069,60 @@
           importStatusLine.textContent = 'Writing to memory systems...';
           importProgressBar.style.width = '80%';
           break;
+      }
+    }
+
+    // ── Audio Playback ──
+
+    async function playAudio(base64, format, sampleRate, agentId) {
+      try {
+        const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+
+        if (format === 'mp3') {
+          // MP3: use <audio> element
+          const blob = new Blob([bytes], { type: 'audio/mpeg' });
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          audio.onended = () => {
+            URL.revokeObjectURL(url);
+            speakingIndicator.classList.remove('active');
+            fetch('/speech-done', { method: 'POST' }).catch(() => {});
+          };
+          audio.onerror = () => {
+            URL.revokeObjectURL(url);
+            speakingIndicator.classList.remove('active');
+            fetch('/speech-done', { method: 'POST' }).catch(() => {});
+          };
+          await audio.play();
+        } else if (format === 'pcm') {
+          // PCM 16-bit mono: use Web Audio API
+          if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          }
+          const rate = sampleRate || 24000;
+          const samples = new Int16Array(bytes.buffer);
+          const floats = new Float32Array(samples.length);
+          for (let i = 0; i < samples.length; i++) {
+            floats[i] = samples[i] / 32768;
+          }
+          const buffer = audioContext.createBuffer(1, floats.length, rate);
+          buffer.getChannelData(0).set(floats);
+          const source = audioContext.createBufferSource();
+          source.buffer = buffer;
+          source.connect(audioContext.destination);
+          source.onended = () => {
+            speakingIndicator.classList.remove('active');
+            fetch('/speech-done', { method: 'POST' }).catch(() => {});
+          };
+          source.start();
+        } else {
+          speakingIndicator.classList.remove('active');
+          fetch('/speech-done', { method: 'POST' }).catch(() => {});
+        }
+      } catch (err) {
+        console.error('Audio playback error:', err);
+        speakingIndicator.classList.remove('active');
+        fetch('/speech-done', { method: 'POST' }).catch(() => {});
       }
     }
 

@@ -12,6 +12,7 @@ import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
 import { CommunionLoop, CommunionEvent } from './communionLoop';
 import { CommunionConfig, AgentConfig } from './types';
+import { ALL_VOICES, OPENAI_VOICES, XAI_VOICES } from './voice';
 // Import parsing happens in a child worker process (communion/import/worker.ts)
 import dotenv from 'dotenv';
 
@@ -124,7 +125,7 @@ function loadConfig(): CommunionConfig {
   return {
     humanName: process.env.HUMAN_NAME || 'Jason',
     agents,
-    tickIntervalMs: Number(process.env.TICK_INTERVAL_MS) || 15000,
+    tickIntervalMs: Number(process.env.TICK_INTERVAL_MS) || 1800000, // 30 min default
     dataDir: process.env.DATA_DIR || 'data/communion',
     documentsDir: process.env.DOCUMENTS_DIR || 'communion-docs',
   };
@@ -270,6 +271,17 @@ async function main() {
       });
     } else if (event.type === 'tick') {
       broadcast({ type: 'tick', tickCount: event.tickCount });
+    } else if (event.type === 'speech-start') {
+      broadcast({ type: 'speech-start', agentId: event.agentId });
+    } else if (event.type === 'speech-end') {
+      broadcast({
+        type: 'speech-end',
+        agentId: event.agentId,
+        audioBase64: event.audioBase64,
+        audioFormat: event.audioFormat,
+        audioSampleRate: event.audioSampleRate,
+        durationMs: event.durationMs,
+      });
     } else if (event.type === 'error') {
       broadcast({ type: 'error', agentId: event.agentId, error: event.error });
     }
@@ -323,6 +335,8 @@ async function main() {
         agentNames: state.agentNames,
         agentColors: state.agentColors,
         humanName: state.humanName,
+        voiceConfigs: communion.getAllVoiceConfigs(),
+        voices: { openai: OPENAI_VOICES, xai: XAI_VOICES },
       })}\n\n`);
 
       // Replay existing messages
@@ -409,9 +423,9 @@ async function main() {
     if (url?.startsWith('/speed') && req.method === 'POST') {
       const speedParams = new URLSearchParams(url.split('?')[1] || '');
       const ms = Number(speedParams.get('ms'));
-      if (!ms || ms < 3000 || ms > 120000) {
+      if (!ms || ms < 3000 || ms > 1800000) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Provide ?ms=N (3000-120000)' }));
+        res.end(JSON.stringify({ error: 'Provide ?ms=N (3000-1800000)' }));
         return;
       }
       communion.setTickSpeed(ms);
@@ -453,6 +467,53 @@ async function main() {
           res.end(JSON.stringify({ error: 'Invalid JSON' }));
         }
       });
+      return;
+    }
+
+    // Voice config — set voice for an agent
+    if (url === '/voice' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const { agentId, voiceId, voiceProvider, enabled } = JSON.parse(body);
+          if (!agentId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing agentId' }));
+            return;
+          }
+          communion.setVoiceConfig(agentId, {
+            ...(voiceId !== undefined && { voiceId }),
+            ...(voiceProvider !== undefined && { voiceProvider }),
+            ...(enabled !== undefined && { enabled }),
+          });
+          const updated = communion.getVoiceConfig(agentId);
+          broadcast({ type: 'voice-config', agentId, ...updated });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(updated));
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        }
+      });
+      return;
+    }
+
+    // Voice config — get all voice configs
+    if (url === '/voice' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        configs: communion.getAllVoiceConfigs(),
+        voices: { openai: OPENAI_VOICES, xai: XAI_VOICES },
+      }));
+      return;
+    }
+
+    // Speech done — client reports audio playback finished
+    if (url === '/speech-done' && req.method === 'POST') {
+      communion.reportSpeechComplete();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ speaking: false }));
       return;
     }
 

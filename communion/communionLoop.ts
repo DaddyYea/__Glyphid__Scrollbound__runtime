@@ -33,11 +33,12 @@ import { SessionPersistence } from '../src/persistence/sessionPersistence';
 import { AdaptationEngine } from '../src/learning/adaptationEngine';
 import { ScrollGraph } from '../src/memory/scrollGraph';
 import { ContextRAM, parseRAMCommands, SlotName, ReflectiveSweepResult } from './contextRAM';
+import { synthesize, getDefaultVoiceConfig, AgentVoiceConfig } from './voice';
 import type { ScrollEcho, MoodVector } from '../src/types';
 
 // ── Events ──
 
-export type CommunionEventType = 'room-message' | 'journal-entry' | 'tick' | 'error' | 'backchannel';
+export type CommunionEventType = 'room-message' | 'journal-entry' | 'tick' | 'error' | 'backchannel' | 'speech-start' | 'speech-end';
 
 export interface CommunionEvent {
   type: CommunionEventType;
@@ -45,6 +46,14 @@ export interface CommunionEvent {
   tickCount?: number;
   error?: string;
   agentId?: string;
+  /** Base64 audio data for speech events */
+  audioBase64?: string;
+  /** Audio format */
+  audioFormat?: 'mp3' | 'pcm';
+  /** Audio sample rate (for PCM) */
+  audioSampleRate?: number;
+  /** Estimated speech duration in ms */
+  durationMs?: number;
 }
 
 export type CommunionListener = (event: CommunionEvent) => void;
@@ -180,6 +189,10 @@ export class CommunionLoop {
   // Context RAM — per-agent working memory
   private ram: Map<string, ContextRAM> = new Map();
 
+  // Voice — per-agent TTS configuration
+  private voiceConfigs: Map<string, AgentVoiceConfig> = new Map();
+  private speaking = false; // Global speech lock — clock pauses when anyone is speaking
+
   constructor(config: CommunionConfig) {
     this.tickIntervalMs = config.tickIntervalMs || 15000;
     this.contextWindow = config.contextWindow || 30;
@@ -289,6 +302,12 @@ export class CommunionLoop {
         agentConfig.provider,
         agentConfig.baseUrl,
       ));
+      // Initialize voice config (from agent config or defaults)
+      if (agentConfig.voice) {
+        this.voiceConfigs.set(agentConfig.id, { ...agentConfig.voice });
+      } else {
+        this.voiceConfigs.set(agentConfig.id, getDefaultVoiceConfig(agentConfig.id, agentConfig.provider, agentConfig.baseUrl));
+      }
     }
 
     this.state = {
@@ -800,7 +819,7 @@ export class CommunionLoop {
    * 6. Post-tick memory processing (scrollfire, patterns, etc.)
    */
   async tick(): Promise<void> {
-    if (this.processing || this.paused) return;
+    if (this.processing || this.paused || this.speaking) return;
     this.processing = true;
 
     this.state.tickCount++;
@@ -1020,6 +1039,9 @@ export class CommunionLoop {
 
       this.emit({ type: 'room-message', message: msg, agentId });
       console.log(`[${agent.config.name}] SPEAK: ${responseText}`);
+
+      // ── Voice synthesis — speak aloud if enabled ──
+      await this.synthesizeAndEmit(agentId, agent.config, responseText);
 
       // ── Rhythm: post-speech decay ──
       const rhythm = this.rhythm.get(agentId);
@@ -1281,6 +1303,105 @@ export class CommunionLoop {
     }
   }
 
+  // ════════════════════════════════════════════
+  // Voice — TTS synthesis + speech lock
+  // ════════════════════════════════════════════
+
+  /**
+   * Synthesize speech for an agent and emit audio events.
+   * Sets the global speaking flag to pause the master clock.
+   */
+  private async synthesizeAndEmit(agentId: string, agentConfig: AgentConfig, text: string): Promise<void> {
+    const voiceConfig = this.voiceConfigs.get(agentId);
+    if (!voiceConfig || !voiceConfig.enabled) return;
+
+    try {
+      this.speaking = true;
+      this.emit({ type: 'speech-start', agentId, durationMs: 0 });
+      console.log(`[${agentConfig.name}] VOICE: synthesizing (${voiceConfig.voiceProvider}/${voiceConfig.voiceId})...`);
+
+      // Collect API keys from agent configs
+      const apiKeys: { openai?: string; xai?: string } = {};
+      for (const [, agent] of this.agents) {
+        if (agent.config.baseUrl?.includes('openai.com')) {
+          apiKeys.openai = agent.config.apiKey;
+        }
+        if (agent.config.baseUrl?.includes('x.ai')) {
+          apiKeys.xai = agent.config.apiKey;
+        }
+        if (agent.config.provider === 'anthropic') {
+          // Claude doesn't have TTS — use OpenAI key if available
+        }
+      }
+      // Also check env vars as fallback
+      if (!apiKeys.openai && process.env.OPENAI_API_KEY) {
+        apiKeys.openai = process.env.OPENAI_API_KEY;
+      }
+      if (!apiKeys.xai && process.env.XAI_API_KEY) {
+        apiKeys.xai = process.env.XAI_API_KEY;
+      }
+
+      const result = await synthesize(text, voiceConfig, apiKeys);
+
+      this.emit({
+        type: 'speech-end',
+        agentId,
+        audioBase64: result.audio.toString('base64'),
+        audioFormat: result.format,
+        audioSampleRate: result.sampleRate,
+        durationMs: result.durationMs,
+      });
+      console.log(`[${agentConfig.name}] VOICE: ${Math.round((result.durationMs || 0) / 1000)}s audio ready`);
+
+    } catch (err) {
+      console.error(`[${agentConfig.name}] VOICE ERROR:`, err);
+      this.emit({ type: 'speech-end', agentId, durationMs: 0 });
+    } finally {
+      this.speaking = false;
+    }
+  }
+
+  /**
+   * Set voice config for an agent.
+   */
+  setVoiceConfig(agentId: string, config: Partial<AgentVoiceConfig>): void {
+    const existing = this.voiceConfigs.get(agentId);
+    if (existing) {
+      Object.assign(existing, config);
+      console.log(`[VOICE] ${agentId}: ${existing.enabled ? `${existing.voiceProvider}/${existing.voiceId}` : 'disabled'}`);
+    }
+  }
+
+  /**
+   * Get voice config for an agent.
+   */
+  getVoiceConfig(agentId: string): AgentVoiceConfig | undefined {
+    return this.voiceConfigs.get(agentId);
+  }
+
+  /**
+   * Get all voice configs.
+   */
+  getAllVoiceConfigs(): Record<string, AgentVoiceConfig> {
+    const result: Record<string, AgentVoiceConfig> = {};
+    for (const [id, config] of this.voiceConfigs) {
+      result[id] = { ...config };
+    }
+    return result;
+  }
+
+  /**
+   * Report speech completion from client (after audio finishes playing).
+   * This allows the master clock to resume.
+   */
+  reportSpeechComplete(): void {
+    this.speaking = false;
+  }
+
+  isSpeaking(): boolean {
+    return this.speaking;
+  }
+
   // ── Human Presence ──
 
   setHumanPresence(presence: HumanPresence): void {
@@ -1407,7 +1528,7 @@ export class CommunionLoop {
   }
 
   setTickSpeed(ms: number): void {
-    this.tickIntervalMs = Math.max(3000, Math.min(120000, ms)); // clamp 3s–120s
+    this.tickIntervalMs = Math.max(3000, Math.min(1800000, ms)); // clamp 3s–30min
     if (this.timer && !this.paused) {
       clearInterval(this.timer);
       this.timer = setInterval(() => this.tick(), this.tickIntervalMs);

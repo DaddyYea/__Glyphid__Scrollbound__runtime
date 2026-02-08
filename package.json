@@ -35,13 +35,15 @@
     "dotenv": "^17.2.4",
     "node-fetch": "^2.7.0",
     "pngjs": "^7.0.0",
-    "stream-json": "^1.9.1"
+    "stream-json": "^1.9.1",
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.11",
     "@types/node": "^20.10.6",
     "@types/node-fetch": "^2.6.11",
     "@types/pngjs": "^6.0.5",
+    "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^6.17.0",
     "@typescript-eslint/parser": "^6.17.0",
     "eslint": "^8.56.0",
