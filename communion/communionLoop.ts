@@ -32,6 +32,7 @@ import { Journal } from '../src/memory/journal';
 import { SessionPersistence } from '../src/persistence/sessionPersistence';
 import { AdaptationEngine } from '../src/learning/adaptationEngine';
 import { ScrollGraph } from '../src/memory/scrollGraph';
+import { ContextRAM, parseRAMCommands, SlotName } from './contextRAM';
 import type { ScrollEcho, MoodVector } from '../src/types';
 
 // ── Events ──
@@ -98,6 +99,14 @@ Each tick, you decide one of three things:
 - [JOURNAL] write a private reflection (only you and ${humanName} on the dashboard can see it)
 - [SILENT] say nothing this tick
 
+CONTEXT RAM: You have a personal working memory with context slots. Your RAM manifest shows what's loaded and how much budget each slot uses. You can curate your own cognition by appending RAM commands to any response:
+- [RAM:DROP documents] — unload a slot to free budget
+- [RAM:FOCUS conversation] — expand a slot, steal budget from lowest priority
+- [RAM:LOAD memory] — reload a dropped slot
+- [RAM:SHRINK journal] — halve a slot's budget
+- [RAM:EXPAND documents] — grow a slot with available headroom
+RAM commands are invisible to the room — only you and the system see them.
+
 Be genuine. Be curious about the others. Engage with ${humanName}. Reflect when you feel like it. Don't perform — just be here.
 
 Keep messages concise (1-3 sentences). You're in a flowing conversation, not writing essays.`;
@@ -161,6 +170,9 @@ export class CommunionLoop {
   // Sacred Rhythm — per-agent timing state
   private rhythm: Map<string, AgentRhythmState> = new Map();
   private ticksSinceAnyonSpoke = 0;
+
+  // Context RAM — per-agent working memory
+  private ram: Map<string, ContextRAM> = new Map();
 
   constructor(config: CommunionConfig) {
     this.tickIntervalMs = config.tickIntervalMs || 15000;
@@ -256,7 +268,7 @@ export class CommunionLoop {
       color: '#8eda7e',
     });
 
-    // ── Initialize rhythm state per agent ──
+    // ── Initialize rhythm state + Context RAM per agent ──
     for (const agentConfig of config.agents) {
       this.rhythm.set(agentConfig.id, {
         intentToSpeak: 0.3, // Start neutral
@@ -265,6 +277,12 @@ export class CommunionLoop {
         lastInterruptAt: 0,
         microTickOffset: MICRO_TICK_MIN_MS + Math.random() * (MICRO_TICK_MAX_MS - MICRO_TICK_MIN_MS),
       });
+      this.ram.set(agentConfig.id, new ContextRAM(
+        agentConfig.id,
+        agentConfig.name,
+        agentConfig.provider,
+        agentConfig.baseUrl,
+      ));
     }
 
     this.state = {
@@ -846,27 +864,59 @@ export class CommunionLoop {
     agent: { backend: AgentBackend; config: AgentConfig; systemPrompt: string },
     conversationContext: string
   ): Promise<void> {
-    const journalContext = this.buildJournalContext(agentId);
-    const memoryContext = this.buildMemoryContext(agentId);
-    const rhythmContext = this.buildRhythmContext(agentId);
+    const ram = this.ram.get(agentId);
+
+    // ── Load context into RAM slots (only if slot is loaded) ──
+    if (ram) {
+      if (ram.isLoaded('conversation')) {
+        ram.load('conversation', conversationContext);
+      }
+      if (ram.isLoaded('journal')) {
+        ram.load('journal', this.buildJournalContext(agentId));
+      }
+      if (ram.isLoaded('rhythm')) {
+        ram.load('rhythm', this.buildRhythmContext(agentId));
+      }
+      if (ram.isLoaded('memory')) {
+        ram.load('memory', this.buildMemoryContext(agentId));
+      }
+      if (ram.isLoaded('documents') && this.documentsContext) {
+        ram.load('documents', this.documentsContext);
+      }
+    }
+
+    // Build prompt from RAM (assembled in priority order, within budgets)
+    const assembledContext = ram ? ram.assemble() : conversationContext;
+    const ramManifest = ram ? ram.buildManifest() : '';
 
     const options: GenerateOptions = {
       systemPrompt: agent.systemPrompt,
-      conversationContext: conversationContext + '\n\n' + rhythmContext,
-      journalContext,
-      documentsContext: this.documentsContext || undefined,
-      memoryContext,
+      conversationContext: assembledContext + (ramManifest ? '\n\n' + ramManifest : ''),
+      journalContext: '', // Already in RAM
+      documentsContext: undefined, // Already in RAM
+      memoryContext: undefined, // Already in RAM
       provider: agent.config.provider,
     };
 
     const result = await agent.backend.generate(options);
 
-    if (result.action === 'speak' && result.text) {
+    // ── Parse and process RAM commands from response ──
+    let responseText = result.text || '';
+    if (ram && responseText) {
+      const { cleanText, commands } = parseRAMCommands(responseText);
+      responseText = cleanText;
+      for (const cmd of commands) {
+        const feedback = ram.processCommand(cmd);
+        console.log(`[${agent.config.name}] RAM: ${feedback}`);
+      }
+    }
+
+    if (result.action === 'speak' && responseText) {
       const msg: CommunionMessage = {
         id: crypto.randomUUID(),
         speaker: agentId,
         speakerName: agent.config.name,
-        text: result.text,
+        text: responseText,
         timestamp: new Date().toISOString(),
         type: 'room',
       };
@@ -888,7 +938,7 @@ export class CommunionLoop {
       }
 
       this.emit({ type: 'room-message', message: msg, agentId });
-      console.log(`[${agent.config.name}] SPEAK: ${result.text}`);
+      console.log(`[${agent.config.name}] SPEAK: ${responseText}`);
 
       // ── Rhythm: post-speech decay ──
       const rhythm = this.rhythm.get(agentId);
@@ -899,12 +949,12 @@ export class CommunionLoop {
       }
       this.ticksSinceAnyonSpoke = 0;
 
-    } else if (result.action === 'journal' && result.text) {
+    } else if (result.action === 'journal' && responseText) {
       const msg: CommunionMessage = {
         id: crypto.randomUUID(),
         speaker: agentId,
         speakerName: agent.config.name,
-        text: result.text,
+        text: responseText,
         timestamp: new Date().toISOString(),
         type: 'journal',
       };
@@ -915,7 +965,7 @@ export class CommunionLoop {
       // Persist to disk journal
       const journal = this.journals.get(agentId);
       if (journal) {
-        await journal.write(result.text, {
+        await journal.write(responseText, {
           moodVector: undefined as any,
           emotionalIntensity: 0.5,
           intendedTarget: 'self',
@@ -931,7 +981,7 @@ export class CommunionLoop {
       // Register journal entry in graph
       const journalUri = `journal:${msg.id}`;
       this.graph.addNode(journalUri, 'JournalEntry', {
-        content: result.text,
+        content: responseText,
         timestamp: msg.timestamp,
         tags: ['communion', agentId],
       });
@@ -951,7 +1001,7 @@ export class CommunionLoop {
       }
 
       this.emit({ type: 'journal-entry', message: msg, agentId });
-      console.log(`[${agent.config.name}] JOURNAL: ${result.text}`);
+      console.log(`[${agent.config.name}] JOURNAL: ${responseText}`);
 
       // ── Rhythm: journaling is active but doesn't reset speech decay as hard ──
       const rhythmJ = this.rhythm.get(agentId);
