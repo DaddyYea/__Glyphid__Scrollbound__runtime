@@ -19,8 +19,7 @@
  */
 
 import crypto from 'crypto';
-import { mkdirSync, existsSync, readdirSync, readFileSync, createReadStream } from 'fs';
-import { createInterface } from 'readline';
+import { mkdirSync, existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
 import { AgentBackend, GenerateOptions, createBackend } from './backends';
 import { AgentConfig, CommunionConfig, CommunionMessage } from './types';
@@ -411,15 +410,12 @@ export class CommunionLoop {
   }
 
   /**
-   * Load import-archive-*.json and import-archive-*.ndjson files from dataDir
-   * into the scroll archive. JSON files use {scrolls:[], events:[]} format.
-   * NDJSON files have one {scroll, event} object per line (streaming format).
-   *
-   * To prevent OOM on massive imports, we cap the number of loaded scrolls.
+   * Load import-archive-*.json and import-archive-*.ndjson files from dataDir.
+   * JSON files use {scrolls:[], events:[]} format — loaded in full (small files only).
+   * NDJSON files are registered as metadata only — scrolls stay on disk.
+   * 220k+ scrolls don't belong in memory on startup.
    */
   private async loadImportedArchives(): Promise<void> {
-    const MAX_LOADED_SCROLLS = 10000; // Cap to prevent OOM on huge imports
-
     try {
       const files = readdirSync(this.dataDir)
         .filter(f => f.startsWith('import-archive-') && (f.endsWith('.json') || f.endsWith('.ndjson')));
@@ -434,12 +430,28 @@ export class CommunionLoop {
           const importUri = `import:${agentKey}`;
 
           if (isNdjson) {
-            // Stream NDJSON line-by-line — constant memory
-            const imported = await this.loadNdjsonArchive(filePath, importUri, MAX_LOADED_SCROLLS);
-            console.log(`[IMPORT] Loaded ${imported} scrolls from ${file} (NDJSON, capped at ${MAX_LOADED_SCROLLS})`);
+            // NDJSON archives are too large to load — just register metadata
+            const stat = statSync(filePath);
+            // Estimate line count from file size (avg ~500 bytes per scroll line)
+            const estimatedScrolls = Math.round(stat.size / 500);
+            this.graph.addNode(importUri, 'ImportedArchive', {
+              file,
+              filePath,
+              format: 'ndjson',
+              fileSizeMB: Math.round(stat.size / 1024 / 1024),
+              estimatedScrolls,
+            });
+            console.log(`[IMPORT] Registered NDJSON archive: ${file} (~${estimatedScrolls} scrolls, ${Math.round(stat.size / 1024 / 1024)}MB on disk)`);
           } else {
-            // Legacy JSON format: {scrolls: [], events: []}
-            const data = JSON.parse(readFileSync(filePath, 'utf-8'));
+            // Legacy JSON format: {scrolls: [], events: []} — small files, load in full
+            const raw = readFileSync(filePath, 'utf-8');
+            // Skip large JSON files too
+            if (raw.length > 50 * 1024 * 1024) {
+              console.log(`[IMPORT] Skipping large JSON archive: ${file} (${Math.round(raw.length / 1024 / 1024)}MB)`);
+              this.graph.addNode(importUri, 'ImportedArchive', { file, format: 'json', skipped: true });
+              continue;
+            }
+            const data = JSON.parse(raw);
             if (data.scrolls && Array.isArray(data.scrolls)) {
               this.graph.addNode(importUri, 'ImportedConversation', {
                 file,
@@ -448,7 +460,6 @@ export class CommunionLoop {
 
               let imported = 0;
               for (const scroll of data.scrolls) {
-                if (imported >= MAX_LOADED_SCROLLS) break;
                 const matchedEvent = data.events?.find((e: any) => e.scrollId === scroll.id);
                 this.archive.archiveScroll(scroll, matchedEvent || {
                   scrollId: scroll.id,
@@ -484,77 +495,6 @@ export class CommunionLoop {
     }
   }
 
-  /**
-   * Stream-load an NDJSON archive file line by line.
-   * Each line is JSON: { scroll: ScrollEcho, event: ScrollfireEvent }
-   * Returns the number of scrolls loaded.
-   */
-  private loadNdjsonArchive(filePath: string, importUri: string, maxScrolls: number): Promise<number> {
-    return new Promise((resolve, reject) => {
-      let imported = 0;
-      let totalLines = 0;
-
-      const rl = createInterface({
-        input: createReadStream(filePath, { encoding: 'utf-8' }),
-        crlfDelay: Infinity,
-      });
-
-      // Register graph node for this import
-      if (!this.graph.hasNode(importUri)) {
-        this.graph.addNode(importUri, 'ImportedConversation', { file: filePath });
-      }
-
-      rl.on('line', (line: string) => {
-        totalLines++;
-        if (imported >= maxScrolls) return; // Skip remaining lines but keep counting
-
-        const trimmed = line.trim();
-        if (!trimmed) return;
-
-        try {
-          const { scroll, event } = JSON.parse(trimmed);
-          if (!scroll || !event) return;
-
-          this.archive.archiveScroll(scroll, event);
-
-          // Register in graph (sample — only first 1000 to keep graph manageable)
-          if (imported < 1000) {
-            const scrollUri = `scroll:${scroll.id}`;
-            if (!this.graph.hasNode(scrollUri)) {
-              this.graph.addNode(scrollUri, 'ScrollEcho', {
-                content: scroll.content,
-                timestamp: scroll.timestamp,
-                location: scroll.location,
-                resonance: scroll.resonance,
-                tags: scroll.tags,
-              });
-              this.graph.link(scrollUri, 'importedFrom', importUri);
-            }
-          }
-          imported++;
-        } catch {
-          // Skip malformed lines
-        }
-      });
-
-      rl.on('close', () => {
-        // Update graph node with final count
-        if (this.graph.hasNode(importUri)) {
-          this.graph.addNode(importUri, 'ImportedConversation', {
-            file: filePath,
-            scrollCount: totalLines,
-            loadedCount: imported,
-          });
-        }
-        resolve(imported);
-      });
-
-      rl.on('error', (err: Error) => {
-        console.error(`[IMPORT] NDJSON read error: ${err.message}`);
-        resolve(imported); // Return what we got so far
-      });
-    });
-  }
 
   reloadDocuments(): void {
     this.loadDocuments();
