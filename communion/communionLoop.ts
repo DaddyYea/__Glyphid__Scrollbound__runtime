@@ -19,7 +19,8 @@
  */
 
 import crypto from 'crypto';
-import { mkdirSync, existsSync, readdirSync, readFileSync } from 'fs';
+import { mkdirSync, existsSync, readdirSync, readFileSync, createReadStream } from 'fs';
+import { createInterface } from 'readline';
 import { join } from 'path';
 import { AgentBackend, GenerateOptions, createBackend } from './backends';
 import { AgentConfig, CommunionConfig, CommunionMessage } from './types';
@@ -410,54 +411,69 @@ export class CommunionLoop {
   }
 
   /**
-   * Load any import-archive-*.json files from dataDir into the scroll archive.
-   * These are created by the import CLI (communion/import/cli.ts).
+   * Load import-archive-*.json and import-archive-*.ndjson files from dataDir
+   * into the scroll archive. JSON files use {scrolls:[], events:[]} format.
+   * NDJSON files have one {scroll, event} object per line (streaming format).
+   *
+   * To prevent OOM on massive imports, we cap the number of loaded scrolls.
    */
   private async loadImportedArchives(): Promise<void> {
+    const MAX_LOADED_SCROLLS = 10000; // Cap to prevent OOM on huge imports
+
     try {
       const files = readdirSync(this.dataDir)
-        .filter(f => f.startsWith('import-archive-') && f.endsWith('.json'));
+        .filter(f => f.startsWith('import-archive-') && (f.endsWith('.json') || f.endsWith('.ndjson')));
 
       if (files.length === 0) return;
 
       for (const file of files) {
         try {
-          const data = JSON.parse(readFileSync(join(this.dataDir, file), 'utf-8'));
-          if (data.scrolls && Array.isArray(data.scrolls)) {
-            // Create an ImportedConversation node for this archive
-            const importUri = `import:${file.replace('import-archive-', '').replace('.json', '')}`;
-            this.graph.addNode(importUri, 'ImportedConversation', {
-              file,
-              scrollCount: data.scrolls.length,
-            });
+          const filePath = join(this.dataDir, file);
+          const isNdjson = file.endsWith('.ndjson');
+          const agentKey = file.replace('import-archive-', '').replace(/\.(json|ndjson)$/, '');
+          const importUri = `import:${agentKey}`;
 
-            let imported = 0;
-            for (const scroll of data.scrolls) {
-              const matchedEvent = data.events?.find((e: any) => e.scrollId === scroll.id);
-              this.archive.archiveScroll(scroll, matchedEvent || {
-                scrollId: scroll.id,
-                reason: 'manual_elevation',
-                elevatedAt: scroll.timestamp,
-                resonanceAtElevation: scroll.resonance || 0.4,
-                emotionalSignature: scroll.emotionalSignature || {},
-                notes: 'Imported from archive',
+          if (isNdjson) {
+            // Stream NDJSON line-by-line — constant memory
+            const imported = await this.loadNdjsonArchive(filePath, importUri, MAX_LOADED_SCROLLS);
+            console.log(`[IMPORT] Loaded ${imported} scrolls from ${file} (NDJSON, capped at ${MAX_LOADED_SCROLLS})`);
+          } else {
+            // Legacy JSON format: {scrolls: [], events: []}
+            const data = JSON.parse(readFileSync(filePath, 'utf-8'));
+            if (data.scrolls && Array.isArray(data.scrolls)) {
+              this.graph.addNode(importUri, 'ImportedConversation', {
+                file,
+                scrollCount: data.scrolls.length,
               });
 
-              // Register in graph with import link
-              const scrollUri = `scroll:${scroll.id}`;
-              if (!this.graph.hasNode(scrollUri)) {
-                this.graph.addNode(scrollUri, 'ScrollEcho', {
-                  content: scroll.content,
-                  timestamp: scroll.timestamp,
-                  location: scroll.location,
-                  resonance: scroll.resonance,
-                  tags: scroll.tags,
+              let imported = 0;
+              for (const scroll of data.scrolls) {
+                if (imported >= MAX_LOADED_SCROLLS) break;
+                const matchedEvent = data.events?.find((e: any) => e.scrollId === scroll.id);
+                this.archive.archiveScroll(scroll, matchedEvent || {
+                  scrollId: scroll.id,
+                  reason: 'manual_elevation',
+                  elevatedAt: scroll.timestamp,
+                  resonanceAtElevation: scroll.resonance || 0.4,
+                  emotionalSignature: scroll.emotionalSignature || {},
+                  notes: 'Imported from archive',
                 });
-                this.graph.link(scrollUri, 'importedFrom', importUri);
+
+                const scrollUri = `scroll:${scroll.id}`;
+                if (!this.graph.hasNode(scrollUri)) {
+                  this.graph.addNode(scrollUri, 'ScrollEcho', {
+                    content: scroll.content,
+                    timestamp: scroll.timestamp,
+                    location: scroll.location,
+                    resonance: scroll.resonance,
+                    tags: scroll.tags,
+                  });
+                  this.graph.link(scrollUri, 'importedFrom', importUri);
+                }
+                imported++;
               }
-              imported++;
+              console.log(`[IMPORT] Loaded ${imported} scrolls from ${file}`);
             }
-            console.log(`[IMPORT] Loaded ${imported} scrolls from ${file}`);
           }
         } catch (err) {
           console.error(`[IMPORT] Failed to load ${file}:`, err);
@@ -466,6 +482,78 @@ export class CommunionLoop {
     } catch {
       // dataDir might not exist yet
     }
+  }
+
+  /**
+   * Stream-load an NDJSON archive file line by line.
+   * Each line is JSON: { scroll: ScrollEcho, event: ScrollfireEvent }
+   * Returns the number of scrolls loaded.
+   */
+  private loadNdjsonArchive(filePath: string, importUri: string, maxScrolls: number): Promise<number> {
+    return new Promise((resolve, reject) => {
+      let imported = 0;
+      let totalLines = 0;
+
+      const rl = createInterface({
+        input: createReadStream(filePath, { encoding: 'utf-8' }),
+        crlfDelay: Infinity,
+      });
+
+      // Register graph node for this import
+      if (!this.graph.hasNode(importUri)) {
+        this.graph.addNode(importUri, 'ImportedConversation', { file: filePath });
+      }
+
+      rl.on('line', (line: string) => {
+        totalLines++;
+        if (imported >= maxScrolls) return; // Skip remaining lines but keep counting
+
+        const trimmed = line.trim();
+        if (!trimmed) return;
+
+        try {
+          const { scroll, event } = JSON.parse(trimmed);
+          if (!scroll || !event) return;
+
+          this.archive.archiveScroll(scroll, event);
+
+          // Register in graph (sample — only first 1000 to keep graph manageable)
+          if (imported < 1000) {
+            const scrollUri = `scroll:${scroll.id}`;
+            if (!this.graph.hasNode(scrollUri)) {
+              this.graph.addNode(scrollUri, 'ScrollEcho', {
+                content: scroll.content,
+                timestamp: scroll.timestamp,
+                location: scroll.location,
+                resonance: scroll.resonance,
+                tags: scroll.tags,
+              });
+              this.graph.link(scrollUri, 'importedFrom', importUri);
+            }
+          }
+          imported++;
+        } catch {
+          // Skip malformed lines
+        }
+      });
+
+      rl.on('close', () => {
+        // Update graph node with final count
+        if (this.graph.hasNode(importUri)) {
+          this.graph.addNode(importUri, 'ImportedConversation', {
+            file: filePath,
+            scrollCount: totalLines,
+            loadedCount: imported,
+          });
+        }
+        resolve(imported);
+      });
+
+      rl.on('error', (err: Error) => {
+        console.error(`[IMPORT] NDJSON read error: ${err.message}`);
+        resolve(imported); // Return what we got so far
+      });
+    });
   }
 
   reloadDocuments(): void {

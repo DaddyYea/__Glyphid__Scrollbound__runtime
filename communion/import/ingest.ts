@@ -167,3 +167,74 @@ export async function ingestConversations(
     conversationsProcessed: conversations.length,
   };
 }
+
+/**
+ * Streaming ingest session — writes scrolls directly to disk as NDJSON
+ * (one JSON object per line). Never holds all scrolls in memory.
+ */
+export class IngestSession {
+  private archiveStream: import('fs').WriteStream | null = null;
+  private dataDir: string;
+  private agentId: string;
+  private journalAssistant: boolean;
+  private archivePath: string = '';
+  scrollsCreated = 0;
+  journalEntries = 0;
+  conversationsProcessed = 0;
+
+  constructor(private options: IngestOptions = {}) {
+    this.dataDir = options.dataDir || 'data/communion';
+    this.agentId = options.agentId || 'chatgpt';
+    this.journalAssistant = options.journalAssistantMessages ?? true;
+  }
+
+  async initialize(): Promise<void> {
+    const { createWriteStream } = await import('fs');
+    if (!existsSync(this.dataDir)) mkdirSync(this.dataDir, { recursive: true });
+
+    // Write scrolls as NDJSON — one scroll per line, constant memory
+    this.archivePath = `${this.dataDir}/import-archive-${this.agentId}.ndjson`;
+    this.archiveStream = createWriteStream(this.archivePath);
+  }
+
+  ingestConversation(convo: ImportedConversation): void {
+    const convoScrollIds: string[] = [];
+
+    for (const msg of convo.messages) {
+      const scroll = messageToScroll(msg, convo.title, convo.source);
+
+      if (convoScrollIds.length > 0) {
+        scroll.relatedScrollIds = [convoScrollIds[convoScrollIds.length - 1]];
+      }
+      convoScrollIds.push(scroll.id);
+
+      // Write scroll directly to disk as NDJSON line
+      if (this.archiveStream) {
+        const event: ScrollfireEvent = {
+          scrollId: scroll.id,
+          reason: ScrollfireReason.MANUAL_ELEVATION,
+          elevatedAt: msg.timestamp,
+          resonanceAtElevation: scroll.resonance,
+          emotionalSignature: { ...IMPORT_MOOD },
+          notes: `Imported from ${convo.source}: "${convo.title}"`,
+        };
+        this.archiveStream.write(JSON.stringify({ scroll, event }) + '\n');
+      }
+      this.scrollsCreated++;
+    }
+    this.conversationsProcessed++;
+  }
+
+  finalize(): Promise<void> {
+    return new Promise((resolve) => {
+      if (this.archiveStream) {
+        this.archiveStream.end(() => {
+          console.log(`  [INGEST] Archive saved: ${this.archivePath} (${this.scrollsCreated} scrolls, NDJSON)`);
+          resolve();
+        });
+      } else {
+        resolve();
+      }
+    });
+  }
+}

@@ -2,14 +2,13 @@
  * Import Worker
  *
  * Spawned as a child process to parse large export files using streaming JSON.
- * Never loads the full file into memory — processes one conversation at a time.
+ * Never accumulates all conversations in memory — ingests each one as it streams in.
  *
  * Usage: node --max-old-space-size=4096 tsx communion/import/worker.ts <source> <filePath> <dataDir> <humanName>
  */
 
 import { streamChatGPTExport } from './chatgpt';
-import { ingestConversations } from './ingest';
-import type { ImportedConversation } from './types';
+import { IngestSession } from './ingest';
 
 async function run() {
   const [, , source, filePath, dataDir, humanName] = process.argv;
@@ -20,21 +19,35 @@ async function run() {
   }
 
   try {
-    // Collect conversations incrementally via streaming
-    const conversations: ImportedConversation[] = [];
+    const agentId = source === 'chatgpt' ? 'chatgpt' : source;
+    const agentName = source === 'chatgpt' ? 'ChatGPT' : source;
+
+    // Initialize ingest session once
+    const session = new IngestSession({
+      dataDir: dataDir || 'data/communion',
+      agentId,
+      agentName,
+      humanName: humanName || 'User',
+      journalAssistantMessages: true,
+    });
+    await session.initialize();
+
     let result;
 
     switch (source) {
       case 'chatgpt':
       case 'openai': {
+        // Stream-parse and ingest each conversation immediately — no accumulation
         result = await streamChatGPTExport(
           filePath,
           { skipSystem: true, skipTool: true, userName: humanName || 'User', assistantName: 'ChatGPT' },
           (convo) => {
-            conversations.push(convo);
-            // Log progress every 100 conversations
-            if (conversations.length % 100 === 0) {
-              process.stderr.write(`[WORKER] Parsed ${conversations.length} conversations so far...\n`);
+            // Ingest synchronously within the stream callback
+            // (journal writes are async but we fire-and-forget here)
+            session.ingestConversation(convo);
+
+            if (session.conversationsProcessed % 100 === 0) {
+              process.stderr.write(`[WORKER] ${session.conversationsProcessed} conversations, ${session.scrollsCreated} scrolls...\n`);
             }
           },
         );
@@ -44,32 +57,21 @@ async function run() {
         throw new Error(`Unknown source: "${source}"`);
     }
 
-    // Send parse result as a progress line
     process.stderr.write(JSON.stringify({
       status: 'parsed',
       totalConversations: result.totalConversations,
       totalMessages: result.totalMessages,
     }) + '\n');
 
-    // Ingest
-    const agentId = source === 'chatgpt' ? 'chatgpt' : source;
-    const agentName = source === 'chatgpt' ? 'ChatGPT' : source;
+    // Finalize — save archive to disk
+    await session.finalize();
 
-    const ingestResult = await ingestConversations(conversations, {
-      dataDir: dataDir || 'data/communion',
-      agentId,
-      agentName,
-      humanName: humanName || 'User',
-      journalAssistantMessages: true,
-    });
-
-    // Final result to stdout
     const summary = {
       source,
       conversations: result.totalConversations,
       messages: result.totalMessages,
-      scrollsCreated: ingestResult.scrollsCreated,
-      journalEntries: ingestResult.journalEntries,
+      scrollsCreated: session.scrollsCreated,
+      journalEntries: session.journalEntries,
       dateRange: result.dateRange,
       errors: result.errors,
     };
