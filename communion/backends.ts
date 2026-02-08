@@ -17,6 +17,8 @@ export interface GenerateOptions {
   journalContext: string;
   documentsContext?: string;
   memoryContext?: string;
+  /** Provider hint for prompt size limiting */
+  provider?: string;
 }
 
 export interface GenerateResult {
@@ -135,6 +137,15 @@ export class OpenAICompatibleBackend implements AgentBackend {
   }
 }
 
+// Approximate char limits per provider (rough: 1 token ≈ 4 chars)
+// Leave headroom for the response
+const MAX_PROMPT_CHARS: Record<string, number> = {
+  anthropic: 600000,    // ~150k tokens (200k max - headroom)
+  openai: 80000,        // ~20k tokens (GPT-4o 128k but TPM limits)
+  grok: 400000,         // ~100k tokens (131k max - headroom)
+  default: 80000,
+};
+
 function buildUserPrompt(options: GenerateOptions): string {
   const parts = [options.conversationContext, options.journalContext];
   if (options.documentsContext) {
@@ -144,7 +155,21 @@ function buildUserPrompt(options: GenerateOptions): string {
     parts.push(options.memoryContext);
   }
   parts.push('Based on the conversation, your private reflections, any shared documents, and the memory state, decide what to do this tick. Respond with EXACTLY one of these formats:\n\n[SPEAK] your message to the room\n[JOURNAL] your private reflection\n[SILENT] (say nothing this tick)');
-  return parts.join('\n\n');
+
+  let prompt = parts.join('\n\n');
+
+  // Hard cap — truncate from the middle (keep start + end) if too long
+  const maxChars = MAX_PROMPT_CHARS[options.provider || 'default'] || MAX_PROMPT_CHARS.default;
+  if (prompt.length > maxChars) {
+    const keepStart = Math.floor(maxChars * 0.3);
+    const keepEnd = Math.floor(maxChars * 0.6);
+    const truncated = prompt.length - maxChars;
+    prompt = prompt.substring(0, keepStart) +
+      `\n\n[... ${truncated} characters truncated to fit context window ...]\n\n` +
+      prompt.substring(prompt.length - keepEnd);
+  }
+
+  return prompt;
 }
 
 /**

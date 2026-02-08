@@ -440,11 +440,23 @@ export class CommunionLoop {
       return;
     }
 
+    const MAX_DOC_CHARS = 50000; // Cap total document context at ~12k tokens
     const docs: string[] = [];
+    let totalChars = 0;
     for (const file of files) {
       try {
-        const content = readFileSync(join(this.documentsDir, file), 'utf-8');
+        let content = readFileSync(join(this.documentsDir, file), 'utf-8');
+        // Truncate individual files if too large
+        if (content.length > 10000) {
+          console.log(`[DOCS] Truncating ${file}: ${content.length} → 10000 chars`);
+          content = content.substring(0, 10000) + '\n[... truncated ...]';
+        }
+        if (totalChars + content.length > MAX_DOC_CHARS) {
+          console.log(`[DOCS] Skipping ${file}: would exceed ${MAX_DOC_CHARS} char limit`);
+          continue;
+        }
         docs.push(`--- ${file} ---\n${content.trim()}`);
+        totalChars += content.length;
         console.log(`[DOCS] Loaded: ${file} (${content.length} chars)`);
       } catch (err) {
         console.error(`[DOCS] Failed to read ${file}:`, err);
@@ -453,7 +465,7 @@ export class CommunionLoop {
 
     if (docs.length > 0) {
       this.documentsContext = `SHARED DOCUMENTS (available to all participants):\n\n${docs.join('\n\n')}`;
-      console.log(`[DOCS] ${files.length} documents loaded into context`);
+      console.log(`[DOCS] ${docs.length}/${files.length} documents loaded (${totalChars} chars)`);
     }
   }
 
@@ -844,6 +856,7 @@ export class CommunionLoop {
       journalContext,
       documentsContext: this.documentsContext || undefined,
       memoryContext,
+      provider: agent.config.provider,
     };
 
     const result = await agent.backend.generate(options);
