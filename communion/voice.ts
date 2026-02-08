@@ -128,8 +128,10 @@ export async function synthesizeXAI(
   apiKey: string,
 ): Promise<SynthesisResult> {
   const WS = await getWebSocket();
+  console.log(`[TTS] xAI: voice=${voiceId}, text=${text.length} chars`);
 
   return new Promise<SynthesisResult>((resolve, reject) => {
+    let resolved = false;
     const ws = new WS('wss://api.x.ai/v1/realtime', {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -137,21 +139,25 @@ export async function synthesizeXAI(
     });
 
     const timeout = setTimeout(() => {
-      ws.close();
-      reject(new Error('xAI TTS timeout (30s)'));
+      if (!resolved) {
+        resolved = true;
+        ws.close();
+        reject(new Error('xAI TTS timeout (30s)'));
+      }
     }, 30000);
 
     const audioChunks: Buffer[] = [];
-    let sessionReady = false;
+    let textSent = false;
 
     ws.on('open', () => {
-      // Configure session
+      console.log('[TTS] xAI: WebSocket connected, sending session.update...');
+      // Configure session — wait for session.updated before sending text
       ws.send(JSON.stringify({
         type: 'session.update',
         session: {
           voice: voiceId,
           modalities: ['text', 'audio'],
-          instructions: 'You are a text-to-speech engine. Repeat the user\'s message exactly as given. Do not add anything.',
+          instructions: 'You are a text-to-speech engine. Read the user message aloud exactly as written. Do not add, remove, or change any words.',
           audio: {
             output: {
               format: { type: 'audio/pcm', rate: 24000 },
@@ -164,10 +170,13 @@ export async function synthesizeXAI(
     ws.on('message', (raw: Buffer | string) => {
       try {
         const msg = JSON.parse(raw.toString());
+        console.log(`[TTS] xAI event: ${msg.type}`);
 
-        if (msg.type === 'session.created' || msg.type === 'session.updated') {
-          sessionReady = true;
-          // Send the text to speak
+        // Only send text AFTER session.updated (our config is applied)
+        // Ignore session.created — that's the initial state before our voice config
+        if (msg.type === 'session.updated' && !textSent) {
+          textSent = true;
+          console.log(`[TTS] xAI: session configured with voice=${voiceId}, sending text...`);
           ws.send(JSON.stringify({
             type: 'conversation.item.create',
             item: {
@@ -176,50 +185,102 @@ export async function synthesizeXAI(
               content: [{ type: 'input_text', text }],
             },
           }));
-          ws.send(JSON.stringify({ type: 'response.create' }));
+          ws.send(JSON.stringify({
+            type: 'response.create',
+            response: {
+              modalities: ['audio'],
+            },
+          }));
         }
 
         if (msg.type === 'response.audio.delta' && msg.delta) {
           audioChunks.push(Buffer.from(msg.delta, 'base64'));
         }
 
-        if (msg.type === 'response.audio.done' || msg.type === 'response.done') {
-          clearTimeout(timeout);
-          ws.close();
-          const audio = Buffer.concat(audioChunks);
-          // PCM 24kHz 16-bit mono: duration = bytes / (24000 * 2)
-          const durationMs = (audio.length / (24000 * 2)) * 1000;
-          resolve({ audio, format: 'pcm', sampleRate: 24000, durationMs });
+        // Wait for response.audio.done specifically — response.done can fire too early
+        if (msg.type === 'response.audio.done') {
+          console.log(`[TTS] xAI: audio stream done, ${audioChunks.length} chunks received`);
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeout);
+            ws.close();
+            const audio = Buffer.concat(audioChunks);
+            const durationMs = (audio.length / (24000 * 2)) * 1000;
+            console.log(`[TTS] xAI: ${audio.length} bytes PCM, ~${Math.round(durationMs / 1000)}s`);
+            resolve({ audio, format: 'pcm', sampleRate: 24000, durationMs });
+          }
+        }
+
+        // If response.done fires and we haven't resolved from audio.done,
+        // resolve with whatever we have
+        if (msg.type === 'response.done' && !resolved) {
+          if (audioChunks.length > 0) {
+            resolved = true;
+            clearTimeout(timeout);
+            ws.close();
+            const audio = Buffer.concat(audioChunks);
+            const durationMs = (audio.length / (24000 * 2)) * 1000;
+            console.log(`[TTS] xAI: resolved on response.done, ${audio.length} bytes PCM`);
+            resolve({ audio, format: 'pcm', sampleRate: 24000, durationMs });
+          } else {
+            console.warn('[TTS] xAI: response.done but no audio chunks — waiting...');
+          }
         }
 
         if (msg.type === 'error') {
-          clearTimeout(timeout);
-          ws.close();
-          reject(new Error(`xAI Realtime error: ${msg.error?.message || JSON.stringify(msg.error)}`));
+          console.error('[TTS] xAI error:', msg.error?.message || JSON.stringify(msg.error));
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeout);
+            ws.close();
+            reject(new Error(`xAI Realtime error: ${msg.error?.message || JSON.stringify(msg.error)}`));
+          }
         }
       } catch (err) {
         // Non-JSON message, ignore
       }
     });
 
-    ws.on('error', (err) => {
-      clearTimeout(timeout);
-      reject(new Error(`xAI WebSocket error: ${err.message}`));
+    ws.on('error', (err: any) => {
+      console.error('[TTS] xAI WebSocket error:', err.message);
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        reject(new Error(`xAI WebSocket error: ${err.message}`));
+      }
     });
 
     ws.on('close', () => {
       clearTimeout(timeout);
-      // If we got audio chunks, resolve
-      if (audioChunks.length > 0) {
-        const audio = Buffer.concat(audioChunks);
-        const durationMs = (audio.length / (24000 * 2)) * 1000;
-        resolve({ audio, format: 'pcm', sampleRate: 24000, durationMs });
+      if (!resolved) {
+        // If we got audio chunks, resolve; otherwise reject
+        if (audioChunks.length > 0) {
+          resolved = true;
+          const audio = Buffer.concat(audioChunks);
+          const durationMs = (audio.length / (24000 * 2)) * 1000;
+          console.log(`[TTS] xAI: resolved on close, ${audio.length} bytes PCM`);
+          resolve({ audio, format: 'pcm', sampleRate: 24000, durationMs });
+        } else {
+          resolved = true;
+          reject(new Error('xAI WebSocket closed with no audio data'));
+        }
       }
     });
   });
 }
 
 // ── Unified synthesize function ──
+
+// Map xAI voices to similar OpenAI voices for fallback
+const XAI_TO_OPENAI_FALLBACK: Record<string, string> = {
+  'Ara': 'nova',
+  'Eve': 'shimmer',
+  'Leo': 'onyx',
+  'Sal': 'echo',
+  'Rex': 'fable',
+  'Mika': 'coral',
+  'Vale': 'alloy',
+};
 
 export async function synthesize(
   text: string,
@@ -237,7 +298,17 @@ export async function synthesize(
 
   if (voiceConfig.voiceProvider === 'xai') {
     if (!apiKeys.xai) throw new Error('xAI API key required for xAI TTS');
-    return synthesizeXAI(text, voiceConfig.voiceId, apiKeys.xai);
+    try {
+      return await synthesizeXAI(text, voiceConfig.voiceId, apiKeys.xai);
+    } catch (err) {
+      // Fallback to OpenAI TTS if xAI fails and OpenAI key is available
+      if (apiKeys.openai) {
+        const fallbackVoice = XAI_TO_OPENAI_FALLBACK[voiceConfig.voiceId] || 'alloy';
+        console.warn(`[TTS] xAI failed (${(err as Error).message}), falling back to OpenAI/${fallbackVoice}`);
+        return synthesizeOpenAI(text, fallbackVoice, apiKeys.openai);
+      }
+      throw err;
+    }
   }
 
   throw new Error(`Unknown voice provider: ${voiceConfig.voiceProvider}`);
