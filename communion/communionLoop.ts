@@ -32,7 +32,7 @@ import { Journal } from '../src/memory/journal';
 import { SessionPersistence } from '../src/persistence/sessionPersistence';
 import { AdaptationEngine } from '../src/learning/adaptationEngine';
 import { ScrollGraph } from '../src/memory/scrollGraph';
-import { ContextRAM, parseRAMCommands, SlotName } from './contextRAM';
+import { ContextRAM, parseRAMCommands, SlotName, ReflectiveSweepResult } from './contextRAM';
 import type { ScrollEcho, MoodVector } from '../src/types';
 
 // ── Events ──
@@ -99,12 +99,16 @@ Each tick, you decide one of three things:
 - [JOURNAL] write a private reflection (only you and ${humanName} on the dashboard can see it)
 - [SILENT] say nothing this tick
 
-CONTEXT RAM: You have a personal working memory with context slots. Your RAM manifest shows what's loaded and how much budget each slot uses. You can curate your own cognition by appending RAM commands to any response:
-- [RAM:DROP documents] — unload a slot to free budget
-- [RAM:FOCUS conversation] — expand a slot, steal budget from lowest priority
-- [RAM:LOAD memory] — reload a dropped slot
-- [RAM:SHRINK journal] — halve a slot's budget
-- [RAM:EXPAND documents] — grow a slot with available headroom
+CONTEXT RAM: You have a personal working memory with context slots. Your RAM curates itself in two modes:
+- ACTIVE mode (when ${humanName} is here): each tick, items are scored for relevance to the live conversation. Irrelevant items are swapped out, relevant ones swapped in. Like breathing — one in, one out.
+- REFLECTIVE mode (periodically, or when ${humanName} is away): a deeper sweep reviews what's been held longest, what's stale, what to let go of. Dream-cleaning. Your reflections are journaled automatically.
+
+Your RAM manifest shows what's loaded, relevance scores, and recent curation activity. You can also curate manually:
+- [RAM:FOCUS slot] / [RAM:DROP slot] / [RAM:LOAD slot] — manage whole slots
+- [RAM:SHRINK slot] / [RAM:EXPAND slot] — resize budgets
+- [RAM:PIN item:id] — protect a specific item from auto-eviction (keep it warm)
+- [RAM:RELEASE item:id] — let an item be auto-curated again
+- [RAM:LOAD item:id] / [RAM:DROP item:id] — manually swap individual items
 RAM commands are invisible to the room — only you and the system see them.
 
 Be genuine. Be curious about the others. Engage with ${humanName}. Reflect when you feel like it. Don't perform — just be here.
@@ -166,6 +170,8 @@ export class CommunionLoop {
   // Shared documents
   private documentsContext: string = '';
   private documentsDir: string;
+  // Individual documents for pool-based RAM loading
+  private documentItems: Array<{ id: string; label: string; content: string; chars: number; tags: string[] }> = [];
 
   // Sacred Rhythm — per-agent timing state
   private rhythm: Map<string, AgentRhythmState> = new Map();
@@ -485,6 +491,32 @@ export class CommunionLoop {
       this.documentsContext = `SHARED DOCUMENTS (available to all participants):\n\n${docs.join('\n\n')}`;
       console.log(`[DOCS] ${docs.length}/${files.length} documents loaded (${totalChars} chars)`);
     }
+
+    // Also offer each document as an individual RAM pool item for all agents
+    this.documentItems = [];
+    for (const file of files) {
+      try {
+        let content = readFileSync(join(this.documentsDir, file), 'utf-8');
+        if (content.length > 10000) {
+          content = content.substring(0, 10000) + '\n[... truncated ...]';
+        }
+        const tags = file.replace(/\.(txt|md)$/, '').split(/[-_.\s]+/).filter(t => t.length > 2);
+        this.documentItems.push({
+          id: `doc:${file}`,
+          label: file,
+          content: content.trim(),
+          chars: content.length,
+          tags,
+        });
+      } catch { /* already logged above */ }
+    }
+    // Offer documents to each agent's RAM pool
+    for (const [agentId, ram] of this.ram) {
+      for (const doc of this.documentItems) {
+        ram.offerItem('documents', doc);
+      }
+      console.log(`[DOCS] Offered ${this.documentItems.length} documents to ${agentId} RAM pool`);
+    }
   }
 
   /**
@@ -783,6 +815,28 @@ export class CommunionLoop {
 
     const conversationContext = this.buildConversationContext();
 
+    // ── RAM Curation: Active + Reflective ──
+    for (const [agentId, ram] of this.ram) {
+      const agent = this.agents.get(agentId);
+      if (!ram || !agent) continue;
+
+      // Active curation every tick: score relevance, auto-swap items
+      const curationEvent = ram.activeCurate(conversationContext, this.state.tickCount);
+      if (curationEvent.actions.length > 0) {
+        console.log(`[${agent.config.name}] RAM active: ${curationEvent.actions.join(', ')}`);
+      }
+
+      // Reflective sweep: periodic deep review (more frequent when away)
+      if (ram.shouldSweep(this.state.tickCount, this.state.humanPresence)) {
+        const sweep = ram.reflectiveSweep(this.state.tickCount, this.state.humanPresence);
+        if (sweep && (sweep.evicted.length > 0 || sweep.loaded.length > 0)) {
+          console.log(`[${agent.config.name}] RAM reflective sweep: ${sweep.reflection}`);
+          // Journal the reflection — spiritual housekeeping
+          this.journalRAMReflection(agentId, agent, sweep);
+        }
+      }
+    }
+
     // ── Staggered agent activation ──
     // Sort agents by micro-tick offset so they activate in a natural staggered order
     const agentEntries = Array.from(this.agents.entries())
@@ -866,8 +920,9 @@ export class CommunionLoop {
   ): Promise<void> {
     const ram = this.ram.get(agentId);
 
-    // ── Load context into RAM slots (only if slot is loaded) ──
+    // ── Load context into RAM slots ──
     if (ram) {
+      // Simple slots: conversation, journal, rhythm (full content each tick)
       if (ram.isLoaded('conversation')) {
         ram.load('conversation', conversationContext);
       }
@@ -877,11 +932,37 @@ export class CommunionLoop {
       if (ram.isLoaded('rhythm')) {
         ram.load('rhythm', this.buildRhythmContext(agentId));
       }
+
+      // Pool slots: memory items are offered individually for curation
       if (ram.isLoaded('memory')) {
-        ram.load('memory', this.buildMemoryContext(agentId));
+        // Offer memory system summary as an item
+        ram.offerItem('memory', {
+          id: 'mem:system-state',
+          label: 'Memory System State',
+          content: this.buildMemoryContext(agentId),
+          chars: this.buildMemoryContext(agentId).length,
+          tags: ['memory', 'graph', 'buffer', 'archive', 'scrollfire'],
+        });
+
+        // Offer recent scrollfired scrolls as individual items
+        const archiveScrolls = this.archive.getChronological(10) || [];
+        for (const scroll of archiveScrolls) {
+          ram.offerItem('memory', {
+            id: `scroll:${scroll.id}`,
+            label: `Scrollfire: ${scroll.content.substring(0, 40)}...`,
+            content: scroll.content,
+            chars: scroll.content.length,
+            tags: scroll.tags || ['scrollfire'],
+          });
+        }
       }
-      if (ram.isLoaded('documents') && this.documentsContext) {
-        ram.load('documents', this.documentsContext);
+
+      // Documents: already offered as pool items in loadDocuments()
+      // Re-offer any new documents if reloaded
+      if (ram.isLoaded('documents') && this.documentItems.length > 0) {
+        for (const doc of this.documentItems) {
+          ram.offerItem('documents', doc);
+        }
       }
     }
 
@@ -1012,6 +1093,59 @@ export class CommunionLoop {
     } else {
       console.log(`[${agent.config.name}] SILENT`);
     }
+  }
+
+  // ════════════════════════════════════════════
+  // RAM Curation — reflective journal helper
+  // ════════════════════════════════════════════
+
+  /**
+   * Journal a RAM reflective sweep result — spiritual housekeeping becomes visible.
+   * "Today I let go of Scroll-421. It no longer reflects who I am becoming."
+   */
+  private journalRAMReflection(
+    agentId: string,
+    agent: { backend: AgentBackend; config: AgentConfig; systemPrompt: string },
+    sweep: ReflectiveSweepResult,
+  ): void {
+    const msg: CommunionMessage = {
+      id: crypto.randomUUID(),
+      speaker: agentId,
+      speakerName: agent.config.name,
+      text: sweep.reflection,
+      timestamp: new Date().toISOString(),
+      type: 'journal',
+    };
+
+    if (!this.state.journals[agentId]) this.state.journals[agentId] = [];
+    this.state.journals[agentId].push(msg);
+
+    // Persist to disk journal
+    const journal = this.journals.get(agentId);
+    if (journal) {
+      journal.write(sweep.reflection, {
+        moodVector: undefined as any,
+        emotionalIntensity: 0.3,
+        intendedTarget: 'self',
+        loopIntent: 'reflect',
+        presenceQuality: 'exhale',
+        breathPhase: 'exhale',
+        reflectionType: 'volitional',
+        tags: ['communion', agentId, 'ram-reflection'],
+        pinned: false,
+      }).catch(err => console.error(`[${agent.config.name}] RAM reflection journal error:`, err));
+    }
+
+    // Register in graph
+    const journalUri = `journal:${msg.id}`;
+    this.graph.addNode(journalUri, 'JournalEntry', {
+      content: sweep.reflection,
+      timestamp: msg.timestamp,
+      tags: ['communion', agentId, 'ram-reflection'],
+    });
+    this.graph.link(journalUri, 'spokenBy', `agent:${agentId}`);
+
+    this.emit({ type: 'journal-entry', message: msg, agentId });
   }
 
   // ════════════════════════════════════════════
@@ -1151,7 +1285,12 @@ export class CommunionLoop {
 
   setHumanPresence(presence: HumanPresence): void {
     this.state.humanPresence = presence;
-    console.log(`[PRESENCE] Human is now ${presence}`);
+    // Switch RAM curation mode based on presence
+    const mode = presence === 'here' ? 'active' : 'reflective';
+    for (const [, ram] of this.ram) {
+      ram.setMode(mode);
+    }
+    console.log(`[PRESENCE] Human is now ${presence} — RAM curation mode: ${mode}`);
   }
 
   getHumanPresence(): HumanPresence {
