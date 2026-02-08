@@ -697,6 +697,14 @@ export class CommunionLoop {
     }
 
     this.emit({ type: 'room-message', message: msg, agentId: 'human' });
+
+    // Human spoke — trigger an immediate tick so agents can respond,
+    // regardless of the scheduled clock (even if next tick is 30 min away)
+    if (!this.processing && !this.speaking) {
+      console.log('[COMMUNION] Human spoke — triggering immediate tick');
+      this.tick().catch(err => console.error('[COMMUNION] Immediate tick error:', err));
+    }
+
     return msg;
   }
 
