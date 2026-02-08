@@ -10,7 +10,19 @@
  * The master clock pauses during playback.
  */
 
-import * as WebSocket from 'ws';
+// ws is loaded lazily — only when xAI voice is actually used
+let WebSocketClass: any = null;
+async function getWebSocket(): Promise<any> {
+  if (!WebSocketClass) {
+    try {
+      const ws = await import('ws');
+      WebSocketClass = ws.default || ws;
+    } catch {
+      throw new Error('ws package not installed. Run: npm install ws');
+    }
+  }
+  return WebSocketClass;
+}
 
 // ── Voice definitions ──
 
@@ -77,6 +89,7 @@ export async function synthesizeOpenAI(
   voiceId: string,
   apiKey: string,
 ): Promise<SynthesisResult> {
+  console.log(`[TTS] OpenAI: voice=${voiceId}, text=${text.length} chars, key=${apiKey ? apiKey.substring(0, 8) + '...' : 'MISSING'}`);
   const response = await fetch('https://api.openai.com/v1/audio/speech', {
     method: 'POST',
     headers: {
@@ -99,6 +112,7 @@ export async function synthesizeOpenAI(
 
   const arrayBuffer = await response.arrayBuffer();
   const audio = Buffer.from(arrayBuffer);
+  console.log(`[TTS] OpenAI: received ${audio.length} bytes MP3`);
 
   // Rough estimate: ~150 words/min, ~5 chars/word = ~750 chars/min
   const durationMs = Math.max(1000, (text.length / 750) * 60000);
@@ -113,17 +127,19 @@ export async function synthesizeXAI(
   voiceId: string,
   apiKey: string,
 ): Promise<SynthesisResult> {
-  return new Promise<SynthesisResult>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      ws.close();
-      reject(new Error('xAI TTS timeout (30s)'));
-    }, 30000);
+  const WS = await getWebSocket();
 
-    const ws = new WebSocket('wss://api.x.ai/v1/realtime', {
+  return new Promise<SynthesisResult>((resolve, reject) => {
+    const ws = new WS('wss://api.x.ai/v1/realtime', {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
       },
     });
+
+    const timeout = setTimeout(() => {
+      ws.close();
+      reject(new Error('xAI TTS timeout (30s)'));
+    }, 30000);
 
     const audioChunks: Buffer[] = [];
     let sessionReady = false;
