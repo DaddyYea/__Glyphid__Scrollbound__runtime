@@ -32,7 +32,9 @@
  * ]
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, createReadStream } from 'fs';
+import { parser } from 'stream-json';
+import { streamArray } from 'stream-json/streamers/StreamArray';
 import {
   ImportedMessage,
   ImportedConversation,
@@ -312,4 +314,101 @@ function extractTextContent(msg: ChatGPTMessage): string {
   }
 
   return '';
+}
+
+// ── Streaming Parser (for large files) ──
+
+/**
+ * Stream-parse a ChatGPT conversations.json file.
+ * Processes one conversation at a time — never loads the full file into memory.
+ *
+ * Calls `onConversation` for each parsed conversation so the caller can
+ * ingest incrementally.
+ */
+export function streamChatGPTExport(
+  filePath: string,
+  options: ImportOptions = {},
+  onConversation: (convo: ImportedConversation) => void,
+): Promise<ImportResult> {
+  return new Promise((resolve, reject) => {
+    const result: ImportResult = {
+      source: 'chatgpt' as ImportSource,
+      totalConversations: 0,
+      totalMessages: 0,
+      skippedMessages: 0,
+      dateRange: { earliest: '', latest: '' },
+      conversationTitles: [],
+      errors: [],
+    };
+
+    let earliest = Infinity;
+    let latest = -Infinity;
+
+    const pipeline = createReadStream(filePath)
+      .pipe(parser())
+      .pipe(streamArray());
+
+    pipeline.on('data', ({ value: convo }: { value: ChatGPTConversation }) => {
+      // ── Date filters ──
+      const createdMs = (convo.create_time || 0) * 1000;
+      const createdISO = new Date(createdMs).toISOString();
+
+      if (options.after && createdISO < options.after) return;
+      if (options.before && createdISO > options.before) return;
+
+      // ── Title filter ──
+      if (options.titleFilter) {
+        const regex = new RegExp(options.titleFilter, 'i');
+        if (!regex.test(convo.title || '')) return;
+      }
+
+      // ── Max conversations ──
+      if (options.maxConversations && result.totalConversations >= options.maxConversations) return;
+
+      try {
+        const messages = extractMessages(convo, options);
+        if (messages.length === 0) return;
+
+        const updatedMs = (convo.update_time || convo.create_time || 0) * 1000;
+
+        const imported: ImportedConversation = {
+          id: convo.conversation_id || convo.id || convo.current_node || `chatgpt-${Date.now()}-${result.totalConversations}`,
+          title: convo.title || 'Untitled',
+          created: createdISO,
+          updated: new Date(updatedMs).toISOString(),
+          messages,
+          source: 'chatgpt',
+          model: convo.default_model_slug,
+        };
+
+        result.totalConversations++;
+        result.totalMessages += messages.length;
+        result.conversationTitles.push(imported.title);
+
+        // Track date range
+        for (const msg of messages) {
+          const t = new Date(msg.timestamp).getTime();
+          if (t < earliest) earliest = t;
+          if (t > latest) latest = t;
+        }
+
+        // Emit to caller for incremental ingestion
+        onConversation(imported);
+
+      } catch (err) {
+        result.errors.push(`Error parsing "${convo.title}": ${err}`);
+      }
+    });
+
+    pipeline.on('end', () => {
+      result.dateRange.earliest = earliest === Infinity ? '' : new Date(earliest).toISOString();
+      result.dateRange.latest = latest === -Infinity ? '' : new Date(latest).toISOString();
+      console.log(`[CHATGPT PARSER] Stream complete: ${result.totalConversations} conversations, ${result.totalMessages} messages`);
+      resolve(result);
+    });
+
+    pipeline.on('error', (err: Error) => {
+      reject(new Error(`Stream parse error: ${err.message}`));
+    });
+  });
 }

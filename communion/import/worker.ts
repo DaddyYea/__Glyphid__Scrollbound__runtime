@@ -1,14 +1,15 @@
 /**
  * Import Worker
  *
- * Spawned as a child process with extra memory for parsing large export files.
- * Reads args from process.argv, writes JSON result to stdout.
+ * Spawned as a child process to parse large export files using streaming JSON.
+ * Never loads the full file into memory — processes one conversation at a time.
  *
  * Usage: node --max-old-space-size=4096 tsx communion/import/worker.ts <source> <filePath> <dataDir> <humanName>
  */
 
-import { parseChatGPTExport } from './chatgpt';
+import { streamChatGPTExport } from './chatgpt';
 import { ingestConversations } from './ingest';
+import type { ImportedConversation } from './types';
 
 async function run() {
   const [, , source, filePath, dataDir, humanName] = process.argv;
@@ -19,20 +20,24 @@ async function run() {
   }
 
   try {
-    let conversations;
+    // Collect conversations incrementally via streaming
+    const conversations: ImportedConversation[] = [];
     let result;
 
     switch (source) {
       case 'chatgpt':
       case 'openai': {
-        const parsed = parseChatGPTExport(filePath, {
-          skipSystem: true,
-          skipTool: true,
-          userName: humanName || 'User',
-          assistantName: 'ChatGPT',
-        });
-        conversations = parsed.conversations;
-        result = parsed.result;
+        result = await streamChatGPTExport(
+          filePath,
+          { skipSystem: true, skipTool: true, userName: humanName || 'User', assistantName: 'ChatGPT' },
+          (convo) => {
+            conversations.push(convo);
+            // Log progress every 100 conversations
+            if (conversations.length % 100 === 0) {
+              process.stderr.write(`[WORKER] Parsed ${conversations.length} conversations so far...\n`);
+            }
+          },
+        );
         break;
       }
       default:
@@ -74,6 +79,7 @@ async function run() {
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[WORKER ERROR] ${msg}\n`);
     process.stdout.write(JSON.stringify({ error: msg }));
     process.exit(1);
   }

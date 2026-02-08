@@ -5,7 +5,7 @@
  *   npx tsx communion/import/cli.ts chatgpt <file> [options]
  */
 
-export { parseChatGPTExport } from './chatgpt';
+export { parseChatGPTExport, streamChatGPTExport } from './chatgpt';
 export { ingestConversations } from './ingest';
 export type { IngestOptions } from './ingest';
 export type {
