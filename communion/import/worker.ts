@@ -8,6 +8,7 @@
  */
 
 import { streamChatGPTExport } from './chatgpt';
+import { streamClaudeExport } from './claude';
 import { IngestSession } from './ingest';
 
 // Redirect console.log to stderr — stdout is reserved for the JSON result
@@ -25,8 +26,13 @@ async function run() {
   }
 
   try {
-    const agentId = source === 'chatgpt' ? 'chatgpt' : source;
-    const agentName = source === 'chatgpt' ? 'ChatGPT' : source;
+    const sourceMap: Record<string, { id: string; name: string }> = {
+      chatgpt: { id: 'chatgpt', name: 'ChatGPT' },
+      openai: { id: 'chatgpt', name: 'ChatGPT' },
+      anthropic: { id: 'claude', name: 'Claude' },
+      claude: { id: 'claude', name: 'Claude' },
+    };
+    const { id: agentId, name: agentName } = sourceMap[source] || { id: source, name: source };
 
     // Initialize ingest session once
     const session = new IngestSession({
@@ -50,6 +56,21 @@ async function run() {
           (convo) => {
             // Ingest synchronously within the stream callback
             // (journal writes are async but we fire-and-forget here)
+            session.ingestConversation(convo);
+
+            if (session.conversationsProcessed % 100 === 0) {
+              process.stderr.write(`[WORKER] ${session.conversationsProcessed} conversations, ${session.scrollsCreated} scrolls...\n`);
+            }
+          },
+        );
+        break;
+      }
+      case 'anthropic':
+      case 'claude': {
+        result = await streamClaudeExport(
+          filePath,
+          { skipTool: true, userName: humanName || 'User', assistantName: 'Claude' },
+          (convo) => {
             session.ingestConversation(convo);
 
             if (session.conversationsProcessed % 100 === 0) {
