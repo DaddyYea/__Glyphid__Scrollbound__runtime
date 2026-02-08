@@ -473,8 +473,11 @@
         <option value="anthropic" disabled>Anthropic / Claude (coming soon)</option>
       </select>
 
-      <label for="importFile">File (conversations.json from ChatGPT export zip)</label>
-      <input type="file" id="importFile" accept=".json,.zip" />
+      <label for="importFile">File path (paste full path to conversations.json)</label>
+      <input type="text" id="importFilePath" placeholder="e.g. C:\Users\you\Downloads\conversations.json" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+      <div style="margin-top:4px;font-size:0.7em;color:#667;">
+        Export from ChatGPT Settings &gt; Data Controls &gt; Export Data. Extract the zip, then paste the path to conversations.json above.
+      </div>
 
       <div class="import-progress" id="importProgress">
         <div class="status-line" id="importStatusLine">Preparing...</div>
@@ -738,7 +741,7 @@
     const importBtn = document.getElementById('importBtn');
     const importModal = document.getElementById('importModal');
     const importSource = document.getElementById('importSource');
-    const importFile = document.getElementById('importFile');
+    const importFilePath = document.getElementById('importFilePath');
     const importStartBtn = document.getElementById('importStartBtn');
     const importCancelBtn = document.getElementById('importCancelBtn');
     const importProgress = document.getElementById('importProgress');
@@ -755,7 +758,7 @@
         importSummary.textContent = '';
         importStatusLine.className = 'status-line';
         importProgressBar.style.width = '0%';
-        importStartBtn.disabled = !importFile.files.length;
+        importStartBtn.disabled = !importFilePath.value.trim();
       }
     });
 
@@ -767,31 +770,34 @@
       if (e.target === importModal && !importing) importModal.classList.remove('active');
     });
 
-    importFile.addEventListener('change', () => {
-      importStartBtn.disabled = !importFile.files.length;
+    importFilePath.addEventListener('input', () => {
+      importStartBtn.disabled = !importFilePath.value.trim();
     });
 
     importStartBtn.addEventListener('click', async () => {
-      const file = importFile.files[0];
-      if (!file || importing) return;
+      const filePath = importFilePath.value.trim();
+      if (!filePath || importing) return;
 
       importing = true;
       importStartBtn.disabled = true;
       importCancelBtn.disabled = true;
       importProgress.classList.add('active');
       importStatusLine.className = 'status-line';
-      importStatusLine.textContent = 'Reading file...';
+      importStatusLine.textContent = 'Starting import...';
       importProgressBar.style.width = '10%';
 
       try {
-        importStatusLine.textContent = 'Uploading file to server...';
+        importStatusLine.textContent = 'Server is reading file from disk...';
         importProgressBar.style.width = '15%';
 
-        // Send file as raw binary stream — no JSON wrapping, no memory doubling
-        const response = await fetch('/import?source=' + encodeURIComponent(importSource.value), {
+        // Send just the file path — server reads directly from disk
+        const response = await fetch('/import', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/octet-stream' },
-          body: file,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: importSource.value,
+            filePath: filePath,
+          }),
         });
 
         const result = await response.json();

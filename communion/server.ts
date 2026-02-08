@@ -6,7 +6,7 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, createWriteStream, openSync, readSync, closeSync, statSync } from 'fs';
+import { readFileSync, existsSync, mkdirSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
@@ -134,65 +134,25 @@ function loadConfig(): CommunionConfig {
  * Collect request body with size limit
  */
 /**
- * Handle /import endpoint
- * File is already streamed to tmpPath on disk. Parse directly from file.
+ * Handle /import — spawn worker process with 4GB heap to parse large files.
+ * The file is read directly from the user's disk path (no upload needed).
  */
-async function handleImportFile(tmpPath: string, source: string, config: CommunionConfig, res: ServerResponse): Promise<void> {
+async function handleImportFile(filePath: string, source: string, config: CommunionConfig, res: ServerResponse): Promise<void> {
   try {
-    // Quick sanity check + detect old JSON-wrapped format
-    // Read only first 200 bytes to avoid loading entire file into memory
-    const fd = openSync(tmpPath, 'r');
-    const probe = Buffer.alloc(200);
-    const bytesRead = readSync(fd, probe, 0, 200, 0);
-    closeSync(fd);
-    const head = probe.toString('utf-8', 0, bytesRead).trimStart();
-
-    if (!head.startsWith('[') && !head.startsWith('{')) {
-      try { unlinkSync(tmpPath); } catch {}
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        error: 'File does not appear to be JSON. If you downloaded a .zip from ChatGPT, extract it and upload conversations.json.',
-      }));
-      return;
-    }
-
-    // Detect old JSON-wrapped format: {"source":"chatgpt","data":"...","options":{}}
-    // The head will contain "source" near the start if it's the old wrapper
-    let actualSource = source;
-    let actualPath = tmpPath;
-    if (head.startsWith('{') && head.includes('"source"') && head.includes('"data"')) {
-      // Likely old wrapper — need to unwrap. Read and parse the full file.
-      try {
-        const rawCheck = readFileSync(tmpPath, 'utf-8');
-        const check = JSON.parse(rawCheck);
-        if (check && typeof check.data === 'string' && check.source) {
-          console.log('[IMPORT] Detected old JSON-wrapped format, unwrapping...');
-          actualSource = check.source;
-          const unwrappedPath = tmpPath.replace('.json', '-unwrapped.json');
-          writeFileSync(unwrappedPath, check.data, 'utf-8');
-          try { unlinkSync(tmpPath); } catch {}
-          actualPath = unwrappedPath;
-          tmpPath = unwrappedPath;
-        }
-      } catch {
-        // Parse failed — proceed with original file, the chatgpt parser will handle it
-      }
-    }
-    source = actualSource;
-
-    // Log file info for debugging
-    const fileSize = statSync(actualPath).size;
-    console.log(`[IMPORT] Processing ${actualPath} (${(fileSize / 1024 / 1024).toFixed(1)}MB, source=${source})`);
-
     broadcast({ type: 'import-status', status: 'parsing', source });
 
-    // Spawn import worker with 4GB heap so large files don't OOM the server
     const dataDir = config.dataDir || 'data/communion';
     const workerPath = join(__dirname, 'import', 'worker.ts');
+
+    console.log(`[IMPORT] Spawning worker: source=${source}, file=${filePath}`);
+    console.log(`[IMPORT] Worker path: ${workerPath}`);
+    console.log(`[IMPORT] execPath: ${process.execPath}`);
+    console.log(`[IMPORT] execArgv: ${JSON.stringify(process.execArgv)}`);
+
     const summary = await new Promise<any>((resolve, reject) => {
       const child = spawn(
         process.execPath,
-        ['--max-old-space-size=4096', ...process.execArgv, workerPath, source, actualPath, dataDir, config.humanName],
+        ['--max-old-space-size=4096', ...process.execArgv, workerPath, source, filePath, dataDir, config.humanName],
         { stdio: ['ignore', 'pipe', 'pipe'] }
       );
 
@@ -200,45 +160,48 @@ async function handleImportFile(tmpPath: string, source: string, config: Communi
       let stderr = '';
       child.stdout.on('data', (d: Buffer) => { stdout += d.toString(); });
       child.stderr.on('data', (d: Buffer) => {
-        const line = d.toString().trim();
-        stderr += line + '\n';
-        // Worker sends progress on stderr
-        try {
-          const progress = JSON.parse(line);
-          if (progress.status === 'parsed') {
-            broadcast({ type: 'import-status', status: 'parsed', source, ...progress });
-            broadcast({ type: 'import-status', status: 'ingesting', source });
+        const lines = d.toString().split('\n');
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          stderr += trimmed + '\n';
+          // Worker sends progress as JSON on stderr
+          try {
+            const progress = JSON.parse(trimmed);
+            if (progress.status === 'parsed') {
+              broadcast({ type: 'import-status', status: 'parsed', source, ...progress });
+              broadcast({ type: 'import-status', status: 'ingesting', source });
+            }
+          } catch {
+            console.log(`[IMPORT WORKER] ${trimmed}`);
           }
-        } catch {
-          // Not JSON, just log output
-          if (line) console.log(`[IMPORT WORKER] ${line}`);
         }
       });
 
       child.on('close', (code) => {
-        // Clean up the temp file
-        try { unlinkSync(actualPath); } catch {}
-
+        console.log(`[IMPORT] Worker exited with code ${code}`);
         if (code !== 0) {
           let errorMsg = 'Import worker failed';
           try {
             const parsed = JSON.parse(stdout);
             if (parsed.error) errorMsg = parsed.error;
           } catch {
-            if (stderr.trim()) errorMsg = stderr.trim().split('\n').pop() || errorMsg;
+            // Use last stderr line as error
+            const lastLine = stderr.trim().split('\n').pop();
+            if (lastLine) errorMsg = lastLine;
           }
           reject(new Error(errorMsg));
         } else {
           try {
             resolve(JSON.parse(stdout));
           } catch {
-            reject(new Error('Worker returned invalid JSON'));
+            reject(new Error(`Worker returned invalid output: ${stdout.substring(0, 200)}`));
           }
         }
       });
 
       child.on('error', (err) => {
-        try { unlinkSync(actualPath); } catch {}
+        console.error('[IMPORT] Failed to spawn worker:', err);
         reject(err);
       });
     });
@@ -249,11 +212,9 @@ async function handleImportFile(tmpPath: string, source: string, config: Communi
     res.end(JSON.stringify(summary));
 
   } catch (err) {
-    try { unlinkSync(tmpPath); } catch {}
     const msg = err instanceof Error ? err.message : String(err);
-    const stack = err instanceof Error ? err.stack : '';
     console.error('[IMPORT] Error:', msg);
-    if (stack) console.error(stack);
+    if (err instanceof Error && err.stack) console.error(err.stack);
     broadcast({ type: 'import-status', status: 'error', error: msg });
     if (!res.headersSent) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -525,72 +486,36 @@ async function main() {
       return;
     }
 
-    // Import chat history — stream file directly to disk
-    if (url?.startsWith('/import') && req.method === 'POST') {
-      console.log(`[IMPORT] Upload started (Content-Type: ${req.headers['content-type']}, Content-Length: ${req.headers['content-length']})`);
-      try {
-        const importParams = new URLSearchParams(url.split('?')[1] || '');
-        const source = importParams.get('source') || 'chatgpt';
-
-        const dataDir = config.dataDir || 'data/communion';
-        if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
-        const tmpPath = join(dataDir, `_import-upload-${Date.now()}.json`);
-
-        // Stream request body directly to temp file (no memory buffering)
-        const ws = createWriteStream(tmpPath);
-        let totalBytes = 0;
-        const MAX_UPLOAD = 500 * 1024 * 1024; // 500MB limit
-        let aborted = false;
-
-        req.on('data', (chunk: Buffer) => {
-          if (aborted) return;
-          totalBytes += chunk.length;
-          if (totalBytes > MAX_UPLOAD) {
-            aborted = true;
-            req.destroy();
-            ws.end();
-            try { unlinkSync(tmpPath); } catch {}
-            if (!res.headersSent) {
-              res.writeHead(413, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: 'Upload too large (max 500MB)' }));
-            }
+    // Import chat history — server reads file directly from local disk path
+    if (url === '/import' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const { source, filePath } = JSON.parse(body);
+          if (!source || !filePath) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing "source" or "filePath"' }));
             return;
           }
-          ws.write(chunk);
-        });
-
-        req.on('end', () => {
-          if (aborted) return;
-          console.log(`[IMPORT] Upload complete: ${(totalBytes / 1024 / 1024).toFixed(1)}MB received`);
-          ws.end(() => {
-            handleImportFile(tmpPath, source, config, res).catch((e) => {
-              console.error('[IMPORT] Unhandled error:', e);
-              try { unlinkSync(tmpPath); } catch {}
-              if (!res.headersSent) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
-              }
-            });
-          });
-        });
-
-        req.on('error', (err) => {
-          console.error('[IMPORT] Upload error:', err.message);
-          aborted = true;
-          ws.end();
-          try { unlinkSync(tmpPath); } catch {}
-          if (!res.headersSent) {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: err.message }));
+          if (!existsSync(filePath)) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `File not found: ${filePath}` }));
+            return;
           }
-        });
-      } catch (err) {
-        console.error('[IMPORT] Route error:', err);
-        if (!res.headersSent) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+          console.log(`[IMPORT] source=${source}, file=${filePath} (${(statSync(filePath).size / 1024 / 1024).toFixed(1)}MB)`);
+          handleImportFile(filePath, source, config, res).catch((e) => {
+            console.error('[IMPORT] Error:', e);
+            if (!res.headersSent) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+            }
+          });
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON body' }));
         }
-      }
+      });
       return;
     }
 
