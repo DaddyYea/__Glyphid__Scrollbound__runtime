@@ -492,7 +492,9 @@ async function main() {
       req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
       req.on('end', () => {
         try {
-          const { source, filePath } = JSON.parse(body);
+          const parsed = JSON.parse(body);
+          const source = parsed.source;
+          const filePath = (parsed.filePath || '').replace(/^["']+|["']+$/g, '').trim();
           if (!source || !filePath) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Missing "source" or "filePath"' }));
