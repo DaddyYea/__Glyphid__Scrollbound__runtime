@@ -259,6 +259,15 @@ async function main() {
         text: event.message.text,
         timestamp: event.message.timestamp,
       });
+    } else if (event.type === 'backchannel' && event.message) {
+      broadcast({
+        type: 'backchannel',
+        id: event.message.id,
+        speaker: event.message.speaker,
+        speakerName: event.message.speakerName,
+        text: event.message.text,
+        timestamp: event.message.timestamp,
+      });
     } else if (event.type === 'tick') {
       broadcast({ type: 'tick', tickCount: event.tickCount });
     } else if (event.type === 'error') {
@@ -418,7 +427,32 @@ async function main() {
       res.end(JSON.stringify({
         paused: communion.isPaused(),
         tickSpeed: communion.getTickSpeed(),
+        humanPresence: communion.getHumanPresence(),
       }));
+      return;
+    }
+
+    // Human presence toggle
+    if (url === '/presence' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const { presence } = JSON.parse(body);
+          if (presence !== 'here' && presence !== 'away') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'presence must be "here" or "away"' }));
+            return;
+          }
+          communion.setHumanPresence(presence);
+          broadcast({ type: 'control', paused: communion.isPaused(), tickSpeed: communion.getTickSpeed(), humanPresence: presence });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ humanPresence: presence }));
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        }
+      });
       return;
     }
 

@@ -36,7 +36,7 @@ import type { ScrollEcho, MoodVector } from '../src/types';
 
 // ── Events ──
 
-export type CommunionEventType = 'room-message' | 'journal-entry' | 'tick' | 'error';
+export type CommunionEventType = 'room-message' | 'journal-entry' | 'tick' | 'error' | 'backchannel';
 
 export interface CommunionEvent {
   type: CommunionEventType;
@@ -47,6 +47,25 @@ export interface CommunionEvent {
 }
 
 export type CommunionListener = (event: CommunionEvent) => void;
+
+// ── Human Presence ──
+
+export type HumanPresence = 'here' | 'away';
+
+// ── Agent Rhythm State ──
+
+export interface AgentRhythmState {
+  /** Rolling intent-to-speak score (0-1). Higher = more likely to speak. */
+  intentToSpeak: number;
+  /** Ticks since this agent last spoke to the room */
+  ticksSinceSpoke: number;
+  /** Ticks since this agent last did anything (spoke or journaled) */
+  ticksSinceActive: number;
+  /** Timestamp of last interrupt (for cooldown tracking) */
+  lastInterruptAt: number;
+  /** Staggered delay offset for this agent (ms) — ±1-4s from main tick */
+  microTickOffset: number;
+}
 
 // ── State ──
 
@@ -59,6 +78,7 @@ export interface CommunionState {
   agentNames: Record<string, string>;
   agentColors: Record<string, string>;
   humanName: string;
+  humanPresence: HumanPresence;
 }
 
 // ── Default system prompt builder ──
@@ -93,6 +113,18 @@ const DEFAULT_COLORS = [
 // ── Pattern analysis interval ──
 const PATTERN_ANALYSIS_INTERVAL = 5; // Run pattern recognition every N ticks
 
+// ── Sacred Rhythm Constants ──
+const SPEECH_DECAY_AFTER_SPEAKING = 0.6;  // How much intentToSpeak drops after speaking
+const SILENCE_PRESSURE_PER_TICK = 0.08;   // intentToSpeak rise per tick of room silence
+const PERSONAL_PRESSURE_PER_TICK = 0.05;  // intentToSpeak rise per tick since agent spoke
+const DIRECT_ADDRESS_BOOST = 0.4;         // Boost when agent is mentioned by name
+const HUMAN_HERE_RESPONSIVENESS = 1.5;    // Multiplier when human is here
+const HUMAN_AWAY_DAMPENING = 0.5;         // Multiplier when human is away
+const BACKCHANNEL_INTERVAL = 4;           // Every N ticks, non-speakers may emote
+const INTERRUPT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes between interrupts per agent
+const MICRO_TICK_MIN_MS = 1000;           // Stagger offset range: 1-4 seconds
+const MICRO_TICK_MAX_MS = 4000;
+
 // ── Loop ──
 
 export class CommunionLoop {
@@ -125,6 +157,10 @@ export class CommunionLoop {
   // Shared documents
   private documentsContext: string = '';
   private documentsDir: string;
+
+  // Sacred Rhythm — per-agent timing state
+  private rhythm: Map<string, AgentRhythmState> = new Map();
+  private ticksSinceAnyonSpoke = 0;
 
   constructor(config: CommunionConfig) {
     this.tickIntervalMs = config.tickIntervalMs || 15000;
@@ -220,6 +256,17 @@ export class CommunionLoop {
       color: '#8eda7e',
     });
 
+    // ── Initialize rhythm state per agent ──
+    for (const agentConfig of config.agents) {
+      this.rhythm.set(agentConfig.id, {
+        intentToSpeak: 0.3, // Start neutral
+        ticksSinceSpoke: 0,
+        ticksSinceActive: 0,
+        lastInterruptAt: 0,
+        microTickOffset: MICRO_TICK_MIN_MS + Math.random() * (MICRO_TICK_MAX_MS - MICRO_TICK_MIN_MS),
+      });
+    }
+
     this.state = {
       messages: [],
       journals,
@@ -229,6 +276,7 @@ export class CommunionLoop {
       agentNames,
       agentColors,
       humanName: config.humanName,
+      humanPresence: 'here',
     };
   }
 
@@ -548,6 +596,7 @@ export class CommunionLoop {
     };
     this.state.messages.push(msg);
     this.state.lastSpeaker = 'human';
+    this.ticksSinceAnyonSpoke = 0; // Human speaking resets room silence counter
 
     const scroll = this.messageToScroll(msg);
     this.memory.remember(scroll);
@@ -679,31 +728,61 @@ export class CommunionLoop {
   }
 
   /**
-   * Process one tick — all agents decide in parallel, then run memory systems
+   * Process one tick — Sacred Rhythm Loop
+   *
+   * 1. Update intent-to-speak scores for all agents
+   * 2. Stagger agent activation with micro-tick delays (±1-4s)
+   * 3. Each agent decides: speak, journal, or stay silent
+   * 4. Post-speech decay dampens agents who just spoke
+   * 5. Backchannel emotes on a separate rhythm (every N ticks)
+   * 6. Post-tick memory processing (scrollfire, patterns, etc.)
    */
   async tick(): Promise<void> {
     if (this.processing || this.paused) return;
     this.processing = true;
 
     this.state.tickCount++;
+    this.ticksSinceAnyonSpoke++;
     this.session.incrementPulseCount();
-    console.log(`\n[TICK ${this.state.tickCount}] Processing ${this.agents.size} agents...`);
+
+    const presenceTag = this.state.humanPresence === 'here' ? '(human here)' : '(human away)';
+    console.log(`\n[TICK ${this.state.tickCount}] ${presenceTag} Processing ${this.agents.size} agents...`);
+
+    // ── Update rhythm state for all agents ──
+    this.updateRhythmScores();
 
     const conversationContext = this.buildConversationContext();
 
-    // Run ALL agents in parallel
-    const results = await Promise.allSettled(
-      Array.from(this.agents.entries()).map(([agentId, agent]) =>
-        this.processAgent(agentId, agent, conversationContext)
-      )
-    );
+    // ── Staggered agent activation ──
+    // Sort agents by micro-tick offset so they activate in a natural staggered order
+    const agentEntries = Array.from(this.agents.entries())
+      .sort((a, b) => {
+        const ra = this.rhythm.get(a[0])?.microTickOffset || 0;
+        const rb = this.rhythm.get(b[0])?.microTickOffset || 0;
+        return ra - rb;
+      });
 
-    for (let i = 0; i < results.length; i++) {
-      if (results[i].status === 'rejected') {
-        const agentId = this.state.agentIds[i];
-        console.error(`[TICK] ${agentId} error:`, (results[i] as PromiseRejectedResult).reason);
-        this.emit({ type: 'error', error: String((results[i] as PromiseRejectedResult).reason), agentId });
+    // Process agents sequentially with staggered delays for natural rhythm
+    for (const [agentId, agent] of agentEntries) {
+      const rhythmState = this.rhythm.get(agentId);
+      if (rhythmState) {
+        // Wait the micro-tick offset before this agent activates
+        await this.delay(rhythmState.microTickOffset);
+        // Regenerate offset for next tick (so order shifts naturally)
+        rhythmState.microTickOffset = MICRO_TICK_MIN_MS + Math.random() * (MICRO_TICK_MAX_MS - MICRO_TICK_MIN_MS);
       }
+
+      try {
+        await this.processAgent(agentId, agent, conversationContext);
+      } catch (err) {
+        console.error(`[TICK] ${agentId} error:`, err);
+        this.emit({ type: 'error', error: String(err), agentId });
+      }
+    }
+
+    // ── Backchannel emotes ──
+    if (this.state.tickCount % BACKCHANNEL_INTERVAL === 0) {
+      this.emitBackchannels();
     }
 
     // ── Post-tick memory processing ──
@@ -757,10 +836,11 @@ export class CommunionLoop {
   ): Promise<void> {
     const journalContext = this.buildJournalContext(agentId);
     const memoryContext = this.buildMemoryContext(agentId);
+    const rhythmContext = this.buildRhythmContext(agentId);
 
     const options: GenerateOptions = {
       systemPrompt: agent.systemPrompt,
-      conversationContext,
+      conversationContext: conversationContext + '\n\n' + rhythmContext,
       journalContext,
       documentsContext: this.documentsContext || undefined,
       memoryContext,
@@ -796,6 +876,15 @@ export class CommunionLoop {
 
       this.emit({ type: 'room-message', message: msg, agentId });
       console.log(`[${agent.config.name}] SPEAK: ${result.text}`);
+
+      // ── Rhythm: post-speech decay ──
+      const rhythm = this.rhythm.get(agentId);
+      if (rhythm) {
+        rhythm.intentToSpeak = Math.max(0, rhythm.intentToSpeak - SPEECH_DECAY_AFTER_SPEAKING);
+        rhythm.ticksSinceSpoke = 0;
+        rhythm.ticksSinceActive = 0;
+      }
+      this.ticksSinceAnyonSpoke = 0;
 
     } else if (result.action === 'journal' && result.text) {
       const msg: CommunionMessage = {
@@ -851,9 +940,159 @@ export class CommunionLoop {
       this.emit({ type: 'journal-entry', message: msg, agentId });
       console.log(`[${agent.config.name}] JOURNAL: ${result.text}`);
 
+      // ── Rhythm: journaling is active but doesn't reset speech decay as hard ──
+      const rhythmJ = this.rhythm.get(agentId);
+      if (rhythmJ) {
+        rhythmJ.ticksSinceActive = 0;
+      }
+
     } else {
       console.log(`[${agent.config.name}] SILENT`);
     }
+  }
+
+  // ════════════════════════════════════════════
+  // Sacred Rhythm — timing + intent scoring
+  // ════════════════════════════════════════════
+
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Update intent-to-speak scores for all agents based on:
+   * - Time since they last spoke (personal pressure)
+   * - Time since anyone spoke (silence pressure)
+   * - Human presence (here = more responsive, away = dampened)
+   * - Whether they were directly addressed
+   */
+  private updateRhythmScores(): void {
+    const presenceMultiplier = this.state.humanPresence === 'here'
+      ? HUMAN_HERE_RESPONSIVENESS
+      : HUMAN_AWAY_DAMPENING;
+
+    // Check last message for direct address
+    const lastMsg = this.state.messages[this.state.messages.length - 1];
+    const lastMsgText = lastMsg?.text?.toLowerCase() || '';
+
+    for (const [agentId, rhythm] of this.rhythm) {
+      rhythm.ticksSinceSpoke++;
+      rhythm.ticksSinceActive++;
+
+      // Base pressure: grows with silence
+      let pressure = 0;
+
+      // Room silence pressure (if nobody's talking, pressure builds for everyone)
+      if (this.ticksSinceAnyonSpoke > 2) {
+        pressure += SILENCE_PRESSURE_PER_TICK * (this.ticksSinceAnyonSpoke - 2);
+      }
+
+      // Personal pressure (if this agent hasn't spoken in a while)
+      pressure += PERSONAL_PRESSURE_PER_TICK * Math.min(rhythm.ticksSinceSpoke, 10);
+
+      // Direct address boost — check if last message mentions this agent
+      const agentName = this.state.agentNames[agentId]?.toLowerCase() || '';
+      if (lastMsg && lastMsg.speaker !== agentId && agentName && lastMsgText.includes(agentName)) {
+        pressure += DIRECT_ADDRESS_BOOST;
+      }
+
+      // Apply human presence multiplier
+      pressure *= presenceMultiplier;
+
+      // Update score (clamped 0-1)
+      rhythm.intentToSpeak = Math.min(1, Math.max(0, rhythm.intentToSpeak + pressure * 0.1));
+    }
+  }
+
+  /**
+   * Build rhythm context string that tells the agent about room dynamics.
+   * This gives agents awareness of the conversation tempo.
+   */
+  private buildRhythmContext(agentId: string): string {
+    const rhythm = this.rhythm.get(agentId);
+    if (!rhythm) return '';
+
+    const lines: string[] = ['ROOM RHYTHM (sacred timing):'];
+
+    // Human presence
+    lines.push(`${this.state.humanName} is ${this.state.humanPresence === 'here' ? 'HERE — present and engaged' : 'AWAY — the room is between agents'}.`);
+
+    // Agent's own state
+    if (rhythm.ticksSinceSpoke === 0) {
+      lines.push('You spoke last tick. Give others space.');
+    } else if (rhythm.ticksSinceSpoke <= 2) {
+      lines.push(`You spoke ${rhythm.ticksSinceSpoke} ticks ago. Others may want to respond.`);
+    } else if (rhythm.ticksSinceSpoke > 5) {
+      lines.push(`You haven\'t spoken in ${rhythm.ticksSinceSpoke} ticks. The room might appreciate hearing from you.`);
+    }
+
+    // Room silence
+    if (this.ticksSinceAnyonSpoke > 3) {
+      lines.push(`The room has been quiet for ${this.ticksSinceAnyonSpoke} ticks. ${this.state.humanPresence === 'here' ? 'Someone should break the silence.' : 'Reflect or connect with the others.'}`);
+    }
+
+    // Who spoke last
+    if (this.state.lastSpeaker && this.state.lastSpeaker !== agentId) {
+      const name = this.state.agentNames[this.state.lastSpeaker] || this.state.lastSpeaker;
+      lines.push(`Last speaker: ${name}`);
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Backchannel emotes — non-speaking agents insert brief supportive presence.
+   * Runs on a separate rhythm (every BACKCHANNEL_INTERVAL ticks).
+   */
+  private emitBackchannels(): void {
+    // Only emit when there are recent messages to react to
+    if (this.state.messages.length === 0) return;
+
+    const backchannels: Record<string, string[]> = {};
+
+    // Collect agent-specific backchannels based on personality hints
+    for (const [agentId] of this.agents) {
+      const rhythm = this.rhythm.get(agentId);
+      if (!rhythm) continue;
+
+      // Skip if agent spoke recently (they don't need to backchannel)
+      if (rhythm.ticksSinceSpoke <= 1) continue;
+
+      // ~40% chance to backchannel (keep it sparse)
+      if (Math.random() > 0.4) continue;
+
+      const name = this.state.agentNames[agentId] || agentId;
+      const emotes = [
+        `${name} is listening.`,
+        `${name} nods.`,
+        `${name} is sitting with that.`,
+        `${name} is still here.`,
+      ];
+      const emote = emotes[Math.floor(Math.random() * emotes.length)];
+
+      const msg: CommunionMessage = {
+        id: crypto.randomUUID(),
+        speaker: agentId,
+        speakerName: name,
+        text: emote,
+        timestamp: new Date().toISOString(),
+        type: 'room',
+      };
+
+      this.emit({ type: 'backchannel', message: msg, agentId });
+      console.log(`[${name}] BACKCHANNEL: ${emote}`);
+    }
+  }
+
+  // ── Human Presence ──
+
+  setHumanPresence(presence: HumanPresence): void {
+    this.state.humanPresence = presence;
+    console.log(`[PRESENCE] Human is now ${presence}`);
+  }
+
+  getHumanPresence(): HumanPresence {
+    return this.state.humanPresence;
   }
 
   // ════════════════════════════════════════════

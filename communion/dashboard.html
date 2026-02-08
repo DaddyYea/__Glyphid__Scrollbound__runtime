@@ -135,6 +135,16 @@
       margin-bottom: 12px;
       animation: fadeIn 0.4s ease;
     }
+    .room-message.backchannel {
+      opacity: 0.5;
+      font-style: italic;
+      margin-bottom: 6px;
+    }
+    .room-message.backchannel .message-text {
+      border-left: none;
+      padding-left: 0;
+      font-size: 0.85em;
+    }
 
     .room-message .speaker-name {
       font-size: 0.75em;
@@ -275,6 +285,26 @@
       font-family: 'Courier New', monospace;
       font-size: 0.75em;
       min-width: 30px;
+    }
+    .presence-btn {
+      padding: 4px 14px;
+      background: rgba(142, 218, 126, 0.12);
+      border: 1px solid rgba(142, 218, 126, 0.35);
+      border-radius: 4px;
+      color: #8eda7e;
+      font-family: 'Courier New', monospace;
+      font-size: 0.75em;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: all 0.2s ease;
+    }
+    .presence-btn:hover {
+      background: rgba(142, 218, 126, 0.2);
+    }
+    .presence-btn.away {
+      color: #888;
+      border-color: rgba(136, 136, 136, 0.3);
+      background: rgba(136, 136, 136, 0.08);
     }
     .import-btn {
       padding: 4px 14px;
@@ -454,6 +484,7 @@
     <div class="tick-counter" id="tickCounter">tick 0</div>
     <div class="controls-row">
       <button class="control-btn" id="pauseBtn" title="Pause/Resume">&#9208;</button>
+      <button class="presence-btn" id="presenceBtn" title="Toggle here/away">HERE</button>
       <label class="speed-label" for="speedSlider">Speed</label>
       <input type="range" id="speedSlider" min="3" max="60" value="15" class="speed-slider" title="Tick interval (seconds)" />
       <span class="speed-value" id="speedValue">15s</span>
@@ -525,6 +556,9 @@
     const speedSlider = document.getElementById('speedSlider');
     const speedValue = document.getElementById('speedValue');
 
+    const presenceBtn = document.getElementById('presenceBtn');
+    let humanPresence = 'here';
+
     // ── Pause / Resume ──
     let isPaused = false;
 
@@ -532,6 +566,16 @@
       const endpoint = isPaused ? '/resume' : '/pause';
       await fetch(endpoint, { method: 'POST' });
       // State will update via SSE 'control' event
+    });
+
+    // ── Here / Away ──
+    presenceBtn.addEventListener('click', async () => {
+      const newPresence = humanPresence === 'here' ? 'away' : 'here';
+      await fetch('/presence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ presence: newPresence }),
+      });
     });
 
     // ── Speed Slider ──
@@ -556,6 +600,11 @@
       const secs = Math.round(data.tickSpeed / 1000);
       speedSlider.value = secs;
       speedValue.textContent = secs + 's';
+      if (data.humanPresence) {
+        humanPresence = data.humanPresence;
+        presenceBtn.textContent = humanPresence.toUpperCase();
+        presenceBtn.classList.toggle('away', humanPresence === 'away');
+      }
     }).catch(() => {});
 
     // Dynamic state
@@ -641,7 +690,7 @@
       return panel;
     }
 
-    function addRoomMessage(speaker, speakerName, text, timestamp) {
+    function addRoomMessage(speaker, speakerName, text, timestamp, isBackchannel) {
       if (!roomHasMessages) {
         roomMessages.innerHTML = '';
         roomHasMessages = true;
@@ -650,7 +699,7 @@
       const color = config ? (config.agentColors[speaker] || '#8eda7e') : '#8eda7e';
 
       const div = document.createElement('div');
-      div.className = 'room-message';
+      div.className = 'room-message' + (isBackchannel ? ' backchannel' : '');
       div.innerHTML = `
         <div class="speaker-name" style="color: ${color}">${escapeHtml(speakerName)}</div>
         <div class="message-text" style="border-left-color: ${hexToRgba(color, 0.3)}">${escapeHtml(text)}</div>
@@ -659,8 +708,10 @@
 
       roomMessages.appendChild(div);
       roomMessages.scrollTop = roomMessages.scrollHeight;
-      messageCount++;
-      roomStats.textContent = `${messageCount} messages`;
+      if (!isBackchannel) {
+        messageCount++;
+        roomStats.textContent = `${messageCount} messages`;
+      }
     }
 
     function addJournalEntry(agentId, text, timestamp) {
@@ -697,6 +748,8 @@
         addJournalEntry(data.speaker, data.text, data.timestamp);
       } else if (data.type === 'tick') {
         tickCounter.textContent = `tick ${data.tickCount}`;
+      } else if (data.type === 'backchannel') {
+        addRoomMessage(data.speaker, data.speakerName, data.text, data.timestamp, true);
       } else if (data.type === 'control') {
         isPaused = data.paused;
         pauseBtn.textContent = isPaused ? '\u25B6' : '\u23F8';
@@ -705,6 +758,11 @@
           const secs = Math.round(data.tickSpeed / 1000);
           speedSlider.value = secs;
           speedValue.textContent = secs + 's';
+        }
+        if (data.humanPresence) {
+          humanPresence = data.humanPresence;
+          presenceBtn.textContent = humanPresence.toUpperCase();
+          presenceBtn.classList.toggle('away', humanPresence === 'away');
         }
       } else if (data.type === 'import-status') {
         handleImportStatus(data);
