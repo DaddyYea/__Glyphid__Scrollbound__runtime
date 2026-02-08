@@ -10,6 +10,12 @@
 import { streamChatGPTExport } from './chatgpt';
 import { IngestSession } from './ingest';
 
+// Redirect console.log to stderr — stdout is reserved for the JSON result
+const _origLog = console.log;
+console.log = (...args: unknown[]) => {
+  process.stderr.write(args.map(String).join(' ') + '\n');
+};
+
 async function run() {
   const [, , source, filePath, dataDir, humanName] = process.argv;
 
