@@ -893,13 +893,15 @@
       } else if (data.type === 'backchannel') {
         addRoomMessage(data.speaker, data.speakerName, data.text, data.timestamp, true);
       } else if (data.type === 'speech-start') {
+        // Speaking indicator is handled by audio queue when playback actually starts
         const name = config ? (config.agentNames[data.agentId] || data.agentId) : data.agentId;
         speakingIndicator.classList.add('active');
-        speakingName.textContent = name + ' speaking...';
+        speakingName.textContent = name + ' synthesizing...';
       } else if (data.type === 'speech-end') {
         if (data.audioBase64 && data.audioBase64.length > 0) {
           playAudio(data.audioBase64, data.audioFormat, data.audioSampleRate, data.agentId);
         } else {
+          // No audio (synthesis failed) — signal done immediately
           speakingIndicator.classList.remove('active');
           fetch('/speech-done', { method: 'POST' }).catch(() => {});
         }
@@ -1072,58 +1074,71 @@
       }
     }
 
-    // ── Audio Playback ──
+    // ── Audio Playback (queued — one at a time) ──
 
-    async function playAudio(base64, format, sampleRate, agentId) {
+    let audioQueue = [];
+    let audioPlaying = false;
+
+    function playAudio(base64, format, sampleRate, agentId) {
+      audioQueue.push({ base64, format, sampleRate, agentId });
+      if (!audioPlaying) processAudioQueue();
+    }
+
+    async function processAudioQueue() {
+      if (audioQueue.length === 0) {
+        audioPlaying = false;
+        return;
+      }
+      audioPlaying = true;
+      const { base64, format, sampleRate, agentId } = audioQueue.shift();
+
+      // Show speaking indicator
+      const name = config ? (config.agentNames[agentId] || agentId) : agentId;
+      speakingIndicator.classList.add('active');
+      speakingName.textContent = name + ' speaking...';
+
       try {
         const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
 
-        if (format === 'mp3') {
-          // MP3: use <audio> element
-          const blob = new Blob([bytes], { type: 'audio/mpeg' });
-          const url = URL.createObjectURL(blob);
-          const audio = new Audio(url);
-          audio.onended = () => {
-            URL.revokeObjectURL(url);
-            speakingIndicator.classList.remove('active');
-            fetch('/speech-done', { method: 'POST' }).catch(() => {});
-          };
-          audio.onerror = () => {
-            URL.revokeObjectURL(url);
-            speakingIndicator.classList.remove('active');
-            fetch('/speech-done', { method: 'POST' }).catch(() => {});
-          };
-          await audio.play();
-        } else if (format === 'pcm') {
-          // PCM 16-bit mono: use Web Audio API
-          if (!audioContext) {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        await new Promise((resolve) => {
+          if (format === 'mp3') {
+            const blob = new Blob([bytes], { type: 'audio/mpeg' });
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
+            audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+            audio.play().catch(() => resolve());
+          } else if (format === 'pcm') {
+            if (!audioContext) {
+              audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            const rate = sampleRate || 24000;
+            const samples = new Int16Array(bytes.buffer);
+            const floats = new Float32Array(samples.length);
+            for (let i = 0; i < samples.length; i++) {
+              floats[i] = samples[i] / 32768;
+            }
+            const buffer = audioContext.createBuffer(1, floats.length, rate);
+            buffer.getChannelData(0).set(floats);
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioContext.destination);
+            source.onended = () => resolve();
+            source.start();
+          } else {
+            resolve();
           }
-          const rate = sampleRate || 24000;
-          const samples = new Int16Array(bytes.buffer);
-          const floats = new Float32Array(samples.length);
-          for (let i = 0; i < samples.length; i++) {
-            floats[i] = samples[i] / 32768;
-          }
-          const buffer = audioContext.createBuffer(1, floats.length, rate);
-          buffer.getChannelData(0).set(floats);
-          const source = audioContext.createBufferSource();
-          source.buffer = buffer;
-          source.connect(audioContext.destination);
-          source.onended = () => {
-            speakingIndicator.classList.remove('active');
-            fetch('/speech-done', { method: 'POST' }).catch(() => {});
-          };
-          source.start();
-        } else {
-          speakingIndicator.classList.remove('active');
-          fetch('/speech-done', { method: 'POST' }).catch(() => {});
-        }
+        });
       } catch (err) {
         console.error('Audio playback error:', err);
-        speakingIndicator.classList.remove('active');
-        fetch('/speech-done', { method: 'POST' }).catch(() => {});
       }
+
+      // Signal server that this audio is done
+      speakingIndicator.classList.remove('active');
+      fetch('/speech-done', { method: 'POST' }).catch(() => {});
+
+      // Process next in queue
+      processAudioQueue();
     }
 
     chatInput.focus();

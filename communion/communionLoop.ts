@@ -192,6 +192,8 @@ export class CommunionLoop {
   // Voice — per-agent TTS configuration
   private voiceConfigs: Map<string, AgentVoiceConfig> = new Map();
   private speaking = false; // Global speech lock — clock pauses when anyone is speaking
+  private speechResolve: (() => void) | null = null; // Resolves when client reports playback done
+  private speechTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(config: CommunionConfig) {
     this.tickIntervalMs = config.tickIntervalMs || 15000;
@@ -1309,7 +1311,8 @@ export class CommunionLoop {
 
   /**
    * Synthesize speech for an agent and emit audio events.
-   * Sets the global speaking flag to pause the master clock.
+   * WAITS for the client to finish playing before returning.
+   * This ensures agents speak one at a time — no overlap.
    */
   private async synthesizeAndEmit(agentId: string, agentConfig: AgentConfig, text: string): Promise<void> {
     const voiceConfig = this.voiceConfigs.get(agentId);
@@ -1329,9 +1332,6 @@ export class CommunionLoop {
         if (agent.config.baseUrl?.includes('x.ai')) {
           apiKeys.xai = agent.config.apiKey;
         }
-        if (agent.config.provider === 'anthropic') {
-          // Claude doesn't have TTS — use OpenAI key if available
-        }
       }
       // Also check env vars as fallback
       if (!apiKeys.openai && process.env.OPENAI_API_KEY) {
@@ -1342,6 +1342,7 @@ export class CommunionLoop {
       }
 
       const result = await synthesize(text, voiceConfig, apiKeys);
+      console.log(`[${agentConfig.name}] VOICE: ${Math.round((result.durationMs || 0) / 1000)}s audio — sending to client...`);
 
       this.emit({
         type: 'speech-end',
@@ -1351,14 +1352,43 @@ export class CommunionLoop {
         audioSampleRate: result.sampleRate,
         durationMs: result.durationMs,
       });
-      console.log(`[${agentConfig.name}] VOICE: ${Math.round((result.durationMs || 0) / 1000)}s audio ready`);
+
+      // Wait for the client to finish playing (or timeout after 90s)
+      await this.waitForSpeechDone(Math.max(90000, (result.durationMs || 0) + 10000));
+      console.log(`[${agentConfig.name}] VOICE: playback complete`);
 
     } catch (err) {
       console.error(`[${agentConfig.name}] VOICE ERROR:`, err);
       this.emit({ type: 'speech-end', agentId, durationMs: 0 });
-    } finally {
       this.speaking = false;
     }
+  }
+
+  /**
+   * Wait for the client to report playback done, with a timeout.
+   */
+  private waitForSpeechDone(timeoutMs: number): Promise<void> {
+    return new Promise<void>((resolve) => {
+      // Clear any previous timeout
+      if (this.speechTimeout) clearTimeout(this.speechTimeout);
+
+      this.speechResolve = () => {
+        if (this.speechTimeout) clearTimeout(this.speechTimeout);
+        this.speechTimeout = null;
+        this.speechResolve = null;
+        this.speaking = false;
+        resolve();
+      };
+
+      // Safety timeout — never stay stuck
+      this.speechTimeout = setTimeout(() => {
+        console.log(`[VOICE] Speech timeout (${Math.round(timeoutMs / 1000)}s) — forcing resume`);
+        this.speechResolve = null;
+        this.speechTimeout = null;
+        this.speaking = false;
+        resolve();
+      }, timeoutMs);
+    });
   }
 
   /**
@@ -1392,10 +1422,15 @@ export class CommunionLoop {
 
   /**
    * Report speech completion from client (after audio finishes playing).
-   * This allows the master clock to resume.
+   * Resolves the waiting promise in synthesizeAndEmit, allowing the next agent to speak.
    */
   reportSpeechComplete(): void {
-    this.speaking = false;
+    console.log('[VOICE] Client reported playback complete');
+    if (this.speechResolve) {
+      this.speechResolve();
+    } else {
+      this.speaking = false;
+    }
   }
 
   isSpeaking(): boolean {
