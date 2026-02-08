@@ -32,9 +32,10 @@
  * ]
  */
 
-import { readFileSync, createReadStream } from 'fs';
+import { readFileSync, createReadStream, openSync, readSync, closeSync } from 'fs';
 import { parser } from 'stream-json';
 import { streamArray } from 'stream-json/streamers/StreamArray';
+import { pick } from 'stream-json/filters/Pick';
 import {
   ImportedMessage,
   ImportedConversation,
@@ -319,11 +320,31 @@ function extractTextContent(msg: ChatGPTMessage): string {
 // ── Streaming Parser (for large files) ──
 
 /**
+ * Probe the first non-whitespace byte of a file to determine JSON structure.
+ * Returns '[' for array, '{' for object, or '' if unknown.
+ */
+function probeJsonFormat(filePath: string): string {
+  const fd = openSync(filePath, 'r');
+  try {
+    const buf = Buffer.alloc(256);
+    readSync(fd, buf, 0, 256, 0);
+    const start = buf.toString('utf-8').trimStart();
+    return start[0] || '';
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
  * Stream-parse a ChatGPT conversations.json file.
  * Processes one conversation at a time — never loads the full file into memory.
  *
+ * Handles both formats:
+ * - Top-level array: [ {...}, {...}, ... ]
+ * - Wrapped object: { "conversations": [...] } or { "data": [...] } etc.
+ *
  * Calls `onConversation` for each parsed conversation so the caller can
- * ingest incrementally.
+ * ingest incrementally. Uses backpressure to prevent memory buildup.
  */
 export function streamChatGPTExport(
   filePath: string,
@@ -344,30 +365,59 @@ export function streamChatGPTExport(
     let earliest = Infinity;
     let latest = -Infinity;
 
-    const pipeline = createReadStream(filePath)
-      .pipe(parser())
-      .pipe(streamArray());
+    // Detect format: top-level array vs wrapped object
+    const firstChar = probeJsonFormat(filePath);
+    const isWrapped = firstChar === '{';
+
+    if (isWrapped) {
+      console.log('[CHATGPT PARSER] Detected wrapped object format — using pick filter');
+    }
+
+    const fileStream = createReadStream(filePath, { highWaterMark: 64 * 1024 });
+    const jsonParser = parser();
+
+    // For wrapped objects, use pick to extract the array from known keys
+    // pick({filter}) selects tokens at that JSON path, then streamArray reads items
+    let pipeline: NodeJS.ReadableStream;
+    if (isWrapped) {
+      // Try common wrapper keys — pick will match whichever exists
+      // pick with RegExp matches any of: conversations, data, items
+      pipeline = fileStream
+        .pipe(jsonParser)
+        .pipe(pick({ filter: /^(conversations|data|items)$/ }) as any)
+        .pipe(streamArray());
+    } else {
+      pipeline = fileStream
+        .pipe(jsonParser)
+        .pipe(streamArray());
+    }
 
     pipeline.on('data', ({ value: convo }: { value: ChatGPTConversation }) => {
+      // ── Backpressure: pause stream while processing ──
+      (pipeline as any).pause?.();
+
       // ── Date filters ──
       const createdMs = (convo.create_time || 0) * 1000;
       const createdISO = new Date(createdMs).toISOString();
 
-      if (options.after && createdISO < options.after) return;
-      if (options.before && createdISO > options.before) return;
+      if (options.after && createdISO < options.after) { (pipeline as any).resume?.(); return; }
+      if (options.before && createdISO > options.before) { (pipeline as any).resume?.(); return; }
 
       // ── Title filter ──
       if (options.titleFilter) {
         const regex = new RegExp(options.titleFilter, 'i');
-        if (!regex.test(convo.title || '')) return;
+        if (!regex.test(convo.title || '')) { (pipeline as any).resume?.(); return; }
       }
 
       // ── Max conversations ──
-      if (options.maxConversations && result.totalConversations >= options.maxConversations) return;
+      if (options.maxConversations && result.totalConversations >= options.maxConversations) {
+        (pipeline as any).resume?.();
+        return;
+      }
 
       try {
         const messages = extractMessages(convo, options);
-        if (messages.length === 0) return;
+        if (messages.length === 0) { (pipeline as any).resume?.(); return; }
 
         const updatedMs = (convo.update_time || convo.create_time || 0) * 1000;
 
@@ -383,21 +433,31 @@ export function streamChatGPTExport(
 
         result.totalConversations++;
         result.totalMessages += messages.length;
-        result.conversationTitles.push(imported.title);
+        // Cap stored titles to prevent unbounded growth
+        if (result.conversationTitles.length < 500) {
+          result.conversationTitles.push(imported.title);
+        }
 
-        // Track date range
-        for (const msg of messages) {
-          const t = new Date(msg.timestamp).getTime();
-          if (t < earliest) earliest = t;
-          if (t > latest) latest = t;
+        // Track date range from first/last message only (avoid iterating all)
+        if (messages.length > 0) {
+          const first = new Date(messages[0].timestamp).getTime();
+          const last = new Date(messages[messages.length - 1].timestamp).getTime();
+          if (first < earliest) earliest = first;
+          if (last > latest) latest = last;
         }
 
         // Emit to caller for incremental ingestion
         onConversation(imported);
 
       } catch (err) {
-        result.errors.push(`Error parsing "${convo.title}": ${err}`);
+        // Cap stored errors too
+        if (result.errors.length < 100) {
+          result.errors.push(`Error parsing "${convo.title}": ${err}`);
+        }
       }
+
+      // Resume stream after processing
+      (pipeline as any).resume?.();
     });
 
     pipeline.on('end', () => {

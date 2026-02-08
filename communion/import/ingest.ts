@@ -9,7 +9,7 @@
  */
 
 import * as crypto from 'crypto';
-import { mkdirSync, existsSync } from 'fs';
+import { mkdirSync, existsSync, createWriteStream, writeFileSync } from 'fs';
 import { ImportedConversation, ImportedMessage, ImportSource } from './types';
 import { ScrollArchive } from '../../src/memory/scrollArchive';
 import { Journal } from '../../src/memory/journal';
@@ -156,7 +156,6 @@ export async function ingestConversations(
   if (!options.dryRun) {
     const archiveData = archive.export();
     const archivePath = `${dataDir}/import-archive-${agentId}.json`;
-    const { writeFileSync } = await import('fs');
     writeFileSync(archivePath, JSON.stringify(archiveData, null, 2));
     console.log(`  [INGEST] Archive saved: ${archivePath} (${archiveData.scrolls.length} scrolls)`);
   }
@@ -173,7 +172,7 @@ export async function ingestConversations(
  * (one JSON object per line). Never holds all scrolls in memory.
  */
 export class IngestSession {
-  private archiveStream: import('fs').WriteStream | null = null;
+  private archiveStream: ReturnType<typeof createWriteStream> | null = null;
   private dataDir: string;
   private agentId: string;
   private journalAssistant: boolean;
@@ -189,7 +188,6 @@ export class IngestSession {
   }
 
   async initialize(): Promise<void> {
-    const { createWriteStream } = await import('fs');
     if (!existsSync(this.dataDir)) mkdirSync(this.dataDir, { recursive: true });
 
     // Write scrolls as NDJSON — one scroll per line, constant memory

@@ -153,7 +153,10 @@ async function handleImportFile(filePath: string, source: string, config: Commun
       const child = spawn(
         process.execPath,
         ['--max-old-space-size=4096', ...process.execArgv, workerPath, source, filePath, dataDir, config.humanName],
-        { stdio: ['ignore', 'pipe', 'pipe'] }
+        {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: { ...process.env, NODE_OPTIONS: '--max-old-space-size=4096' },
+        }
       );
 
       let stdout = '';
