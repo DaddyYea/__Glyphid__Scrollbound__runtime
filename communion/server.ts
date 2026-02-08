@@ -306,6 +306,20 @@ async function main() {
   const server = createServer((req, res) => {
     const url = req.url || '/';
 
+    // Log all requests for debugging
+    console.log(`[HTTP] ${req.method} ${url}`);
+
+    // Handle CORS preflight for any route
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      });
+      res.end();
+      return;
+    }
+
     // Dashboard
     if (url === '/' || url === '/index.html') {
       res.writeHead(200, {
@@ -513,54 +527,70 @@ async function main() {
 
     // Import chat history — stream file directly to disk
     if (url?.startsWith('/import') && req.method === 'POST') {
-      const importParams = new URLSearchParams(url.split('?')[1] || '');
-      const source = importParams.get('source') || 'chatgpt';
+      console.log(`[IMPORT] Upload started (Content-Type: ${req.headers['content-type']}, Content-Length: ${req.headers['content-length']})`);
+      try {
+        const importParams = new URLSearchParams(url.split('?')[1] || '');
+        const source = importParams.get('source') || 'chatgpt';
 
-      const dataDir = config.dataDir || 'data/communion';
-      if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
-      const tmpPath = join(dataDir, `_import-upload-${Date.now()}.json`);
+        const dataDir = config.dataDir || 'data/communion';
+        if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
+        const tmpPath = join(dataDir, `_import-upload-${Date.now()}.json`);
 
-      // Stream request body directly to temp file (no memory buffering)
-      const ws = createWriteStream(tmpPath);
-      let totalBytes = 0;
-      const MAX_UPLOAD = 500 * 1024 * 1024; // 500MB limit
+        // Stream request body directly to temp file (no memory buffering)
+        const ws = createWriteStream(tmpPath);
+        let totalBytes = 0;
+        const MAX_UPLOAD = 500 * 1024 * 1024; // 500MB limit
+        let aborted = false;
 
-      req.on('data', (chunk: Buffer) => {
-        totalBytes += chunk.length;
-        if (totalBytes > MAX_UPLOAD) {
-          req.destroy();
+        req.on('data', (chunk: Buffer) => {
+          if (aborted) return;
+          totalBytes += chunk.length;
+          if (totalBytes > MAX_UPLOAD) {
+            aborted = true;
+            req.destroy();
+            ws.end();
+            try { unlinkSync(tmpPath); } catch {}
+            if (!res.headersSent) {
+              res.writeHead(413, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Upload too large (max 500MB)' }));
+            }
+            return;
+          }
+          ws.write(chunk);
+        });
+
+        req.on('end', () => {
+          if (aborted) return;
+          console.log(`[IMPORT] Upload complete: ${(totalBytes / 1024 / 1024).toFixed(1)}MB received`);
+          ws.end(() => {
+            handleImportFile(tmpPath, source, config, res).catch((e) => {
+              console.error('[IMPORT] Unhandled error:', e);
+              try { unlinkSync(tmpPath); } catch {}
+              if (!res.headersSent) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+              }
+            });
+          });
+        });
+
+        req.on('error', (err) => {
+          console.error('[IMPORT] Upload error:', err.message);
+          aborted = true;
           ws.end();
           try { unlinkSync(tmpPath); } catch {}
           if (!res.headersSent) {
-            res.writeHead(413, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Upload too large (max 500MB)' }));
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
           }
-          return;
-        }
-        ws.write(chunk);
-      });
-
-      req.on('end', () => {
-        ws.end(() => {
-          handleImportFile(tmpPath, source, config, res).catch((e) => {
-            console.error('[IMPORT] Unhandled error:', e);
-            try { unlinkSync(tmpPath); } catch {}
-            if (!res.headersSent) {
-              res.writeHead(500, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
-            }
-          });
         });
-      });
-
-      req.on('error', (err) => {
-        ws.end();
-        try { unlinkSync(tmpPath); } catch {}
+      } catch (err) {
+        console.error('[IMPORT] Route error:', err);
         if (!res.headersSent) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: err.message }));
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
         }
-      });
+      }
       return;
     }
 
