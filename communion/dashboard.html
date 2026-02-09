@@ -1119,6 +1119,11 @@
       audioPlaying = true;
       const { base64, format, sampleRate, agentId } = audioQueue.shift();
 
+      // Pause mic recognition while agents speak (prevents feedback loop)
+      if (recognition && micListening) {
+        try { recognition.stop(); } catch(e) {}
+      }
+
       // Show speaking indicator
       const name = config ? (config.agentNames[agentId] || agentId) : agentId;
       speakingIndicator.classList.add('active');
@@ -1163,6 +1168,16 @@
       // Signal server that this audio is done
       speakingIndicator.classList.remove('active');
       fetch('/speech-done', { method: 'POST' }).catch(() => {});
+
+      // Resume mic after playback if no more queued audio
+      if (audioQueue.length === 0 && recognition && micListening) {
+        // Small delay so the speaker's last sound doesn't get picked up
+        setTimeout(() => {
+          if (micListening) {
+            try { recognition.start(); } catch(e) {}
+          }
+        }, 500);
+      }
 
       // Process next in queue
       processAudioQueue();
@@ -1216,7 +1231,7 @@
 
       recognition.onend = () => {
         // Chrome stops recognition after ~60s or on silence.
-        // If mic is still "on", restart it to keep listening.
+        // If mic is still "on", restart it — unless audio is playing (feedback prevention).
         if (micListening) {
           // Send anything pending first
           clearTimeout(sendTimer);
@@ -1224,8 +1239,10 @@
           if (text) {
             sendMessage();
           }
-          // Restart recognition
-          try { recognition.start(); } catch(e) {}
+          // Only restart if no audio is playing (otherwise processAudioQueue will restart us)
+          if (!audioPlaying) {
+            try { recognition.start(); } catch(e) {}
+          }
         }
       };
 
