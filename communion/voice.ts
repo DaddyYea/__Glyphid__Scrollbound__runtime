@@ -1,15 +1,19 @@
 /**
  * Voice System — Text-to-Speech for Communion Agents
  *
- * Uses Microsoft Edge TTS (free, no API key needed).
- * ~400 natural-sounding neural voices across many languages.
+ * Uses Microsoft Edge TTS via node-edge-tts (free, no API key needed).
+ * Natural-sounding neural voices across many languages.
  *
  * Each agent can have a voice assigned. When they speak, their text
  * is synthesized to audio and played through the dashboard.
  * The master clock pauses during playback.
  */
 
-import { tts } from 'edge-tts';
+import { EdgeTTS } from 'node-edge-tts';
+import { readFileSync, unlinkSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import crypto from 'crypto';
 
 // ── Voice definitions ──
 
@@ -71,16 +75,24 @@ export async function synthesize(
 
   console.log(`[TTS] Edge: voice=${voiceConfig.voiceId}, text=${text.length} chars`);
 
-  const audio = await tts(text, {
-    voice: voiceConfig.voiceId,
-  });
+  // node-edge-tts writes to a file, so use a temp file
+  const tmpFile = join(tmpdir(), `scrollbound-tts-${crypto.randomBytes(6).toString('hex')}.mp3`);
 
-  console.log(`[TTS] Edge: received ${audio.length} bytes MP3`);
+  try {
+    const tts = new EdgeTTS({ voice: voiceConfig.voiceId });
+    await tts.ttsPromise(text, tmpFile);
 
-  // Rough estimate: ~150 words/min, ~5 chars/word = ~750 chars/min
-  const durationMs = Math.max(1000, (text.length / 750) * 60000);
+    const audio = readFileSync(tmpFile);
+    console.log(`[TTS] Edge: received ${audio.length} bytes MP3`);
 
-  return { audio, format: 'mp3', durationMs };
+    // Rough estimate: ~150 words/min, ~5 chars/word = ~750 chars/min
+    const durationMs = Math.max(1000, (text.length / 750) * 60000);
+
+    return { audio, format: 'mp3', durationMs };
+  } finally {
+    // Clean up temp file
+    try { unlinkSync(tmpFile); } catch {}
+  }
 }
 
 /**
