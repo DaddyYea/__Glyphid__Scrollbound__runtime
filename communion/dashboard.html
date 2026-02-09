@@ -213,6 +213,32 @@
       border-color: rgba(100, 200, 80, 0.5);
     }
 
+    .mic-btn {
+      padding: 10px 14px;
+      background: rgba(126, 184, 218, 0.08);
+      border: 1px solid rgba(126, 184, 218, 0.25);
+      border-radius: 4px;
+      color: #7eb8da;
+      font-size: 1em;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      line-height: 1;
+    }
+    .mic-btn:hover {
+      background: rgba(126, 184, 218, 0.15);
+      border-color: rgba(126, 184, 218, 0.4);
+    }
+    .mic-btn.listening {
+      color: #da5050;
+      border-color: rgba(218, 80, 80, 0.5);
+      background: rgba(218, 80, 80, 0.15);
+      animation: pulse 1s ease-in-out infinite;
+    }
+    .mic-btn.unsupported {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
     .error-message {
       padding: 6px 10px;
       margin: 6px 0;
@@ -599,6 +625,7 @@
       </div>
       <div class="chat-input-area">
         <input type="text" id="chatInput" class="chat-input" placeholder="Speak into the room..." autocomplete="off" />
+        <button id="micBtn" class="mic-btn" title="Hold or click to speak (uses browser speech recognition)">&#127908;</button>
         <button id="sendBtn" class="send-btn">Send</button>
       </div>
     </div>
@@ -1139,6 +1166,82 @@
 
       // Process next in queue
       processAudioQueue();
+    }
+
+    // ── Mic Button (Web Speech API) ──
+
+    const micBtn = document.getElementById('micBtn');
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let micListening = false;
+
+    if (SpeechRecognition) {
+      recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      let finalTranscript = '';
+      let interimTranscript = '';
+
+      recognition.onresult = (event) => {
+        interimTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript + ' ';
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+        // Show live transcription in the input box
+        chatInput.value = (finalTranscript + interimTranscript).trim();
+      };
+
+      recognition.onend = () => {
+        if (micListening) {
+          // Auto-send whatever was captured when recognition stops
+          const text = finalTranscript.trim();
+          if (text) {
+            chatInput.value = text;
+            sendMessage();
+          }
+          micListening = false;
+          micBtn.classList.remove('listening');
+          finalTranscript = '';
+          interimTranscript = '';
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        if (event.error === 'not-allowed') {
+          micBtn.title = 'Mic access denied — check browser permissions';
+        }
+        micListening = false;
+        micBtn.classList.remove('listening');
+        finalTranscript = '';
+        interimTranscript = '';
+      };
+
+      micBtn.addEventListener('click', () => {
+        if (micListening) {
+          // Stop listening — this triggers onend which auto-sends
+          recognition.stop();
+        } else {
+          // Start listening
+          finalTranscript = '';
+          interimTranscript = '';
+          chatInput.value = '';
+          micListening = true;
+          micBtn.classList.add('listening');
+          recognition.start();
+        }
+      });
+    } else {
+      // Browser doesn't support Web Speech API
+      micBtn.classList.add('unsupported');
+      micBtn.title = 'Speech recognition not supported in this browser (use Chrome or Edge)';
     }
 
     chatInput.focus();
