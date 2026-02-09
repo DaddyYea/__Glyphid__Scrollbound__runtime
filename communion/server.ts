@@ -367,8 +367,8 @@ async function main() {
       return;
     }
 
-    // Human message
-    if (url === '/message' && req.method === 'POST') {
+    // Human message (also accepts /transcript from Whisper STT bridge)
+    if ((url === '/message' || url === '/transcript') && req.method === 'POST') {
       let body = '';
       req.on('data', chunk => { body += chunk.toString(); });
       req.on('end', () => {
