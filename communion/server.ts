@@ -509,6 +509,24 @@ async function main() {
       return;
     }
 
+    // Mic state — client signals human is speaking into mic
+    if (url === '/mic' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk: string) => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const { active } = JSON.parse(body);
+          communion.setHumanSpeaking(!!active);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ micActive: !!active }));
+        } catch {
+          res.writeHead(400);
+          res.end('Bad request');
+        }
+      });
+      return;
+    }
+
     // Speech done — client reports audio playback finished
     if (url === '/speech-done' && req.method === 'POST') {
       communion.reportSpeechComplete();

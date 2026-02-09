@@ -1256,6 +1256,14 @@
         // For 'no-speech' errors, just let onend restart it
       };
 
+      function signalMicState(active) {
+        fetch('/mic', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ active }),
+        }).catch(() => {});
+      }
+
       micBtn.addEventListener('click', () => {
         if (micListening) {
           // Turn off mic
@@ -1263,6 +1271,7 @@
           micBtn.classList.remove('listening');
           clearTimeout(sendTimer);
           recognition.stop();
+          signalMicState(false);
           // Send any remaining text
           const text = chatInput.value.trim();
           if (text) sendMessage();
@@ -1271,6 +1280,7 @@
           chatInput.value = '';
           micListening = true;
           micBtn.classList.add('listening');
+          signalMicState(true);
           recognition.start();
         }
       });

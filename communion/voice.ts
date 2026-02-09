@@ -297,18 +297,17 @@ export async function synthesize(
   }
 
   if (voiceConfig.voiceProvider === 'xai') {
-    if (!apiKeys.xai) throw new Error('xAI API key required for xAI TTS');
-    try {
-      return await synthesizeXAI(text, voiceConfig.voiceId, apiKeys.xai);
-    } catch (err) {
-      // Fallback to OpenAI TTS if xAI fails and OpenAI key is available
-      if (apiKeys.openai) {
-        const fallbackVoice = XAI_TO_OPENAI_FALLBACK[voiceConfig.voiceId] || 'alloy';
-        console.warn(`[TTS] xAI failed (${(err as Error).message}), falling back to OpenAI/${fallbackVoice}`);
-        return synthesizeOpenAI(text, fallbackVoice, apiKeys.openai);
-      }
-      throw err;
+    // xAI doesn't have a standalone TTS endpoint yet — their Realtime API is
+    // a conversational voice agent, not a text-to-speech service.
+    // Route through OpenAI TTS with a mapped voice until xAI ships real TTS.
+    if (apiKeys.openai) {
+      const mappedVoice = XAI_TO_OPENAI_FALLBACK[voiceConfig.voiceId] || 'alloy';
+      console.log(`[TTS] xAI voice "${voiceConfig.voiceId}" → OpenAI/${mappedVoice} (xAI TTS not yet available)`);
+      return synthesizeOpenAI(text, mappedVoice, apiKeys.openai);
     }
+    // If only xAI key available, try the Realtime API as best-effort
+    if (!apiKeys.xai) throw new Error('No API key available for TTS (need OpenAI or xAI key)');
+    return synthesizeXAI(text, voiceConfig.voiceId, apiKeys.xai);
   }
 
   throw new Error(`Unknown voice provider: ${voiceConfig.voiceProvider}`);

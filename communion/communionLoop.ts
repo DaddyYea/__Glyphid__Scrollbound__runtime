@@ -192,6 +192,7 @@ export class CommunionLoop {
   // Voice — per-agent TTS configuration
   private voiceConfigs: Map<string, AgentVoiceConfig> = new Map();
   private speaking = false; // Global speech lock — clock pauses when anyone is speaking
+  private humanSpeaking = false; // True while human mic is active — suppress ticks
   private speechResolve: (() => void) | null = null; // Resolves when client reports playback done
   private speechTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -700,7 +701,7 @@ export class CommunionLoop {
 
     // Human spoke — trigger an immediate tick so agents can respond,
     // regardless of the scheduled clock (even if next tick is 30 min away)
-    if (!this.processing && !this.speaking) {
+    if (!this.processing && !this.speaking && !this.humanSpeaking) {
       console.log('[COMMUNION] Human spoke — triggering immediate tick');
       this.tick().catch(err => console.error('[COMMUNION] Immediate tick error:', err));
     }
@@ -829,7 +830,7 @@ export class CommunionLoop {
    * 6. Post-tick memory processing (scrollfire, patterns, etc.)
    */
   async tick(): Promise<void> {
-    if (this.processing || this.paused || this.speaking) return;
+    if (this.processing || this.paused || this.speaking || this.humanSpeaking) return;
     this.processing = true;
 
     this.state.tickCount++;
@@ -1443,6 +1444,25 @@ export class CommunionLoop {
 
   isSpeaking(): boolean {
     return this.speaking;
+  }
+
+  /**
+   * Set whether the human is actively speaking into the mic.
+   * While true, ticks are suppressed so agents wait for the human to finish.
+   * When mic goes off, trigger an immediate tick if there's a pending message.
+   */
+  setHumanSpeaking(active: boolean): void {
+    const was = this.humanSpeaking;
+    this.humanSpeaking = active;
+    if (was && !active) {
+      console.log('[COMMUNION] Human mic off — ready for next tick');
+    } else if (!was && active) {
+      console.log('[COMMUNION] Human mic on — suppressing ticks');
+    }
+  }
+
+  isHumanSpeaking(): boolean {
+    return this.humanSpeaking;
   }
 
   // ── Human Presence ──
