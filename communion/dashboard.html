@@ -1169,6 +1169,9 @@
     }
 
     // ── Mic Button (Web Speech API) ──
+    // Click once to start. Listens continuously.
+    // Auto-sends each sentence when you pause speaking.
+    // Click again to turn off.
 
     const micBtn = document.getElementById('micBtn');
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1181,35 +1184,48 @@
       recognition.interimResults = true;
       recognition.lang = 'en-US';
 
-      let finalTranscript = '';
-      let interimTranscript = '';
+      let sendTimer = null;
+      const SILENCE_DELAY = 1500; // ms of silence before auto-sending
 
       recognition.onresult = (event) => {
-        interimTranscript = '';
+        let finalText = '';
+        let interimText = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
-            finalTranscript += transcript + ' ';
+            finalText += transcript + ' ';
           } else {
-            interimTranscript += transcript;
+            interimText += transcript;
           }
         }
-        // Show live transcription in the input box
-        chatInput.value = (finalTranscript + interimTranscript).trim();
+
+        // Show live transcription
+        chatInput.value = (finalText + interimText).trim();
+
+        // When we get a final result, start a silence timer to auto-send
+        if (finalText.trim()) {
+          clearTimeout(sendTimer);
+          sendTimer = setTimeout(() => {
+            const text = chatInput.value.trim();
+            if (text && micListening) {
+              sendMessage(); // sendMessage reads chatInput.value and clears it
+            }
+          }, SILENCE_DELAY);
+        }
       };
 
       recognition.onend = () => {
+        // Chrome stops recognition after ~60s or on silence.
+        // If mic is still "on", restart it to keep listening.
         if (micListening) {
-          // Auto-send whatever was captured when recognition stops
-          const text = finalTranscript.trim();
+          // Send anything pending first
+          clearTimeout(sendTimer);
+          const text = chatInput.value.trim();
           if (text) {
-            chatInput.value = text;
             sendMessage();
           }
-          micListening = false;
-          micBtn.classList.remove('listening');
-          finalTranscript = '';
-          interimTranscript = '';
+          // Restart recognition
+          try { recognition.start(); } catch(e) {}
         }
       };
 
@@ -1217,21 +1233,24 @@
         console.error('Speech recognition error:', event.error);
         if (event.error === 'not-allowed') {
           micBtn.title = 'Mic access denied — check browser permissions';
+          micListening = false;
+          micBtn.classList.remove('listening');
         }
-        micListening = false;
-        micBtn.classList.remove('listening');
-        finalTranscript = '';
-        interimTranscript = '';
+        // For 'no-speech' errors, just let onend restart it
       };
 
       micBtn.addEventListener('click', () => {
         if (micListening) {
-          // Stop listening — this triggers onend which auto-sends
+          // Turn off mic
+          micListening = false;
+          micBtn.classList.remove('listening');
+          clearTimeout(sendTimer);
           recognition.stop();
+          // Send any remaining text
+          const text = chatInput.value.trim();
+          if (text) sendMessage();
         } else {
-          // Start listening
-          finalTranscript = '';
-          interimTranscript = '';
+          // Turn on mic — stays on until clicked again
           chatInput.value = '';
           micListening = true;
           micBtn.classList.add('listening');
@@ -1239,7 +1258,6 @@
         }
       });
     } else {
-      // Browser doesn't support Web Speech API
       micBtn.classList.add('unsupported');
       micBtn.title = 'Speech recognition not supported in this browser (use Chrome or Edge)';
     }
