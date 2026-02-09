@@ -46,12 +46,10 @@ export interface CommunionEvent {
   tickCount?: number;
   error?: string;
   agentId?: string;
-  /** Base64 audio data for speech events */
+  /** Base64 audio data for speech events (MP3) */
   audioBase64?: string;
   /** Audio format */
-  audioFormat?: 'mp3' | 'pcm';
-  /** Audio sample rate (for PCM) */
-  audioSampleRate?: number;
+  audioFormat?: 'mp3';
   /** Estimated speech duration in ms */
   durationMs?: number;
 }
@@ -1330,27 +1328,9 @@ export class CommunionLoop {
     try {
       this.speaking = true;
       this.emit({ type: 'speech-start', agentId, durationMs: 0 });
-      console.log(`[${agentConfig.name}] VOICE: synthesizing (${voiceConfig.voiceProvider}/${voiceConfig.voiceId})...`);
+      console.log(`[${agentConfig.name}] VOICE: synthesizing (${voiceConfig.voiceId})...`);
 
-      // Collect API keys from agent configs
-      const apiKeys: { openai?: string; xai?: string } = {};
-      for (const [, agent] of this.agents) {
-        if (agent.config.baseUrl?.includes('openai.com')) {
-          apiKeys.openai = agent.config.apiKey;
-        }
-        if (agent.config.baseUrl?.includes('x.ai')) {
-          apiKeys.xai = agent.config.apiKey;
-        }
-      }
-      // Also check env vars as fallback
-      if (!apiKeys.openai && process.env.OPENAI_API_KEY) {
-        apiKeys.openai = process.env.OPENAI_API_KEY;
-      }
-      if (!apiKeys.xai && process.env.XAI_API_KEY) {
-        apiKeys.xai = process.env.XAI_API_KEY;
-      }
-
-      const result = await synthesize(text, voiceConfig, apiKeys);
+      const result = await synthesize(text, voiceConfig);
       console.log(`[${agentConfig.name}] VOICE: ${Math.round((result.durationMs || 0) / 1000)}s audio — sending to client...`);
 
       this.emit({
@@ -1358,7 +1338,6 @@ export class CommunionLoop {
         agentId,
         audioBase64: result.audio.toString('base64'),
         audioFormat: result.format,
-        audioSampleRate: result.sampleRate,
         durationMs: result.durationMs,
       });
 
@@ -1407,7 +1386,7 @@ export class CommunionLoop {
     const existing = this.voiceConfigs.get(agentId);
     if (existing) {
       Object.assign(existing, config);
-      console.log(`[VOICE] ${agentId}: ${existing.enabled ? `${existing.voiceProvider}/${existing.voiceId}` : 'disabled'}`);
+      console.log(`[VOICE] ${agentId}: ${existing.enabled ? existing.voiceId : 'disabled'}`);
     }
   }
 

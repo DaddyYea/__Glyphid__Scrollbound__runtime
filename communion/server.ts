@@ -12,7 +12,7 @@ import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
 import { CommunionLoop, CommunionEvent } from './communionLoop';
 import { CommunionConfig, AgentConfig } from './types';
-import { ALL_VOICES, OPENAI_VOICES, XAI_VOICES } from './voice';
+import { VOICES } from './voice';
 // Import parsing happens in a child worker process (communion/import/worker.ts)
 import dotenv from 'dotenv';
 
@@ -278,8 +278,6 @@ async function main() {
         type: 'speech-end',
         agentId: event.agentId,
         audioBase64: event.audioBase64,
-        audioFormat: event.audioFormat,
-        audioSampleRate: event.audioSampleRate,
         durationMs: event.durationMs,
       });
     } else if (event.type === 'error') {
@@ -336,7 +334,7 @@ async function main() {
         agentColors: state.agentColors,
         humanName: state.humanName,
         voiceConfigs: communion.getAllVoiceConfigs(),
-        voices: { openai: OPENAI_VOICES, xai: XAI_VOICES },
+        voices: VOICES,
       })}\n\n`);
 
       // Replay existing messages
@@ -476,7 +474,7 @@ async function main() {
       req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
       req.on('end', () => {
         try {
-          const { agentId, voiceId, voiceProvider, enabled } = JSON.parse(body);
+          const { agentId, voiceId, enabled } = JSON.parse(body);
           if (!agentId) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Missing agentId' }));
@@ -484,7 +482,6 @@ async function main() {
           }
           communion.setVoiceConfig(agentId, {
             ...(voiceId !== undefined && { voiceId }),
-            ...(voiceProvider !== undefined && { voiceProvider }),
             ...(enabled !== undefined && { enabled }),
           });
           const updated = communion.getVoiceConfig(agentId);
@@ -504,7 +501,7 @@ async function main() {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         configs: communion.getAllVoiceConfigs(),
-        voices: { openai: OPENAI_VOICES, xai: XAI_VOICES },
+        voices: VOICES,
       }));
       return;
     }

@@ -33,7 +33,6 @@ export interface AgentConfig {
   /** Voice configuration */
   voice?: {
     voiceId: string;
-    voiceProvider: 'openai' | 'xai';
     enabled: boolean;
   };
 }

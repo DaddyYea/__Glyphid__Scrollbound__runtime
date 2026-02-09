@@ -709,9 +709,8 @@
     let roomHasMessages = false;
     let journalPanels = {}; // agentId → { container, entries, hasEntries }
     let messageCount = 0;
-    let voiceConfigs = {}; // agentId → { voiceId, voiceProvider, enabled }
-    let availableVoices = { openai: [], xai: [] };
-    let audioContext = null; // Web Audio API context (lazy init)
+    let voiceConfigs = {}; // agentId → { voiceId, enabled }
+    let availableVoices = []; // flat array of VoiceOption
 
     function hexToRgba(hex, alpha) {
       const r = parseInt(hex.slice(1, 3), 16);
@@ -772,7 +771,7 @@
     function createJournalPanel(agentId, cfg) {
       const color = cfg.agentColors[agentId] || '#7eb8da';
       const name = cfg.agentNames[agentId] || agentId;
-      const vc = voiceConfigs[agentId] || { voiceId: 'alloy', voiceProvider: 'openai', enabled: false };
+      const vc = voiceConfigs[agentId] || { voiceId: 'en-US-AriaNeural', enabled: false };
 
       const panel = document.createElement('div');
       panel.className = 'journal-panel';
@@ -796,31 +795,12 @@
       toggleBtn.textContent = vc.enabled ? 'VOICE' : 'MUTE';
       toggleBtn.title = 'Toggle voice for ' + name;
 
-      const providerSelect = document.createElement('select');
-      providerSelect.className = 'voice-select';
-      providerSelect.title = 'Voice provider';
-      providerSelect.innerHTML = '<option value="openai">OpenAI</option><option value="xai">xAI</option>';
-      providerSelect.value = vc.voiceProvider;
-
       const voiceSelect = document.createElement('select');
       voiceSelect.className = 'voice-select';
       voiceSelect.title = 'Voice';
-
-      function populateVoices(provider) {
-        const voices = availableVoices[provider] || [];
-        voiceSelect.innerHTML = voices.map(v =>
-          `<option value="${v.id}" ${v.id === vc.voiceId ? 'selected' : ''}>${v.name}</option>`
-        ).join('');
-      }
-      populateVoices(vc.voiceProvider);
-
-      providerSelect.addEventListener('change', () => {
-        populateVoices(providerSelect.value);
-        updateVoice(agentId, {
-          voiceProvider: providerSelect.value,
-          voiceId: voiceSelect.value,
-        });
-      });
+      voiceSelect.innerHTML = (availableVoices || []).map(v =>
+        `<option value="${v.id}" ${v.id === vc.voiceId ? 'selected' : ''}>${v.name} (${v.description || v.gender})</option>`
+      ).join('');
 
       voiceSelect.addEventListener('change', () => {
         updateVoice(agentId, { voiceId: voiceSelect.value });
@@ -835,7 +815,6 @@
       });
 
       voiceRow.appendChild(toggleBtn);
-      voiceRow.appendChild(providerSelect);
       voiceRow.appendChild(voiceSelect);
       header.appendChild(voiceRow);
       panel.appendChild(header);
@@ -845,7 +824,7 @@
       entries.innerHTML = '<div class="empty-state">Waiting for first reflection...</div>';
       panel.appendChild(entries);
 
-      journalPanels[agentId] = { container: panel, entries, hasEntries: false, color, toggleBtn, providerSelect, voiceSelect };
+      journalPanels[agentId] = { container: panel, entries, hasEntries: false, color, toggleBtn, voiceSelect };
       return panel;
     }
 
@@ -926,7 +905,7 @@
         speakingName.textContent = name + ' synthesizing...';
       } else if (data.type === 'speech-end') {
         if (data.audioBase64 && data.audioBase64.length > 0) {
-          playAudio(data.audioBase64, data.audioFormat, data.audioSampleRate, data.agentId);
+          playAudio(data.audioBase64, data.agentId);
         } else {
           // No audio (synthesis failed) — signal done immediately
           speakingIndicator.classList.remove('active');
@@ -1106,8 +1085,8 @@
     let audioQueue = [];
     let audioPlaying = false;
 
-    function playAudio(base64, format, sampleRate, agentId) {
-      audioQueue.push({ base64, format, sampleRate, agentId });
+    function playAudio(base64, agentId) {
+      audioQueue.push({ base64, agentId });
       if (!audioPlaying) processAudioQueue();
     }
 
@@ -1117,7 +1096,7 @@
         return;
       }
       audioPlaying = true;
-      const { base64, format, sampleRate, agentId } = audioQueue.shift();
+      const { base64, agentId } = audioQueue.shift();
 
       // Pause mic recognition while agents speak (prevents feedback loop)
       if (recognition && micListening) {
@@ -1133,33 +1112,12 @@
         const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
 
         await new Promise((resolve) => {
-          if (format === 'mp3') {
-            const blob = new Blob([bytes], { type: 'audio/mpeg' });
-            const url = URL.createObjectURL(blob);
-            const audio = new Audio(url);
-            audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
-            audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
-            audio.play().catch(() => resolve());
-          } else if (format === 'pcm') {
-            if (!audioContext) {
-              audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            }
-            const rate = sampleRate || 24000;
-            const samples = new Int16Array(bytes.buffer);
-            const floats = new Float32Array(samples.length);
-            for (let i = 0; i < samples.length; i++) {
-              floats[i] = samples[i] / 32768;
-            }
-            const buffer = audioContext.createBuffer(1, floats.length, rate);
-            buffer.getChannelData(0).set(floats);
-            const source = audioContext.createBufferSource();
-            source.buffer = buffer;
-            source.connect(audioContext.destination);
-            source.onended = () => resolve();
-            source.start();
-          } else {
-            resolve();
-          }
+          const blob = new Blob([bytes], { type: 'audio/mpeg' });
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
+          audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+          audio.play().catch(() => resolve());
         });
       } catch (err) {
         console.error('Audio playback error:', err);
