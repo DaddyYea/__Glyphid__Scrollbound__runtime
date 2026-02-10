@@ -190,6 +190,7 @@ export class CommunionLoop {
   // Voice — per-agent TTS configuration
   private voiceConfigs: Map<string, AgentVoiceConfig> = new Map();
   private speaking = false; // Global speech lock — clock pauses when anyone is speaking
+  private humanSpeaking = false; // True while human is actively speaking (interim results from mic)
   private speechResolve: (() => void) | null = null; // Resolves when client reports playback done
   private speechTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -834,7 +835,7 @@ export class CommunionLoop {
    * 6. Post-tick memory processing (scrollfire, patterns, etc.)
    */
   async tick(): Promise<void> {
-    if (this.processing || this.paused || this.speaking) return;
+    if (this.processing || this.paused || this.speaking || this.humanSpeaking) return;
     this.processing = true;
 
     this.state.tickCount++;
@@ -1464,14 +1465,18 @@ export class CommunionLoop {
 
   /**
    * Set whether the human is actively speaking into the mic.
-   * Kept for /mic endpoint compatibility — tick control is silence-based now.
+   * Driven by client-side speech detection: true when interim results are
+   * flowing in, false after silence. Blocks scheduled ticks while true.
    */
   setHumanSpeaking(active: boolean): void {
-    console.log(`[COMMUNION] Mic ${active ? 'on' : 'off'}`);
+    if (this.humanSpeaking !== active) {
+      this.humanSpeaking = active;
+      console.log(`[COMMUNION] Human ${active ? 'speaking' : 'silent'}`);
+    }
   }
 
   isHumanSpeaking(): boolean {
-    return false;
+    return this.humanSpeaking;
   }
 
   // ── Human Presence ──
