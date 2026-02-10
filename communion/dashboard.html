@@ -1157,8 +1157,8 @@
       recognition.interimResults = true;
       recognition.lang = 'en-US';
 
-      let sendTimer = null;
-      const SILENCE_DELAY = 1500; // ms of silence before auto-sending
+      let silenceTimer = null;
+      const SILENCE_DELAY = 3000; // 3s of silence = done talking, send + tick
 
       recognition.onresult = (event) => {
         let finalText = '';
@@ -1175,16 +1175,14 @@
         // Show live transcription
         chatInput.value = (finalText + interimText).trim();
 
-        // When we get a final result, start a silence timer to auto-send
-        if (finalText.trim()) {
-          clearTimeout(sendTimer);
-          sendTimer = setTimeout(() => {
-            const text = chatInput.value.trim();
-            if (text && micListening) {
-              sendMessage(); // sendMessage reads chatInput.value and clears it
-            }
-          }, SILENCE_DELAY);
-        }
+        // Any speech activity resets the silence timer
+        clearTimeout(silenceTimer);
+        silenceTimer = setTimeout(() => {
+          const text = chatInput.value.trim();
+          if (text && micListening) {
+            sendMessage();
+          }
+        }, SILENCE_DELAY);
       };
 
       recognition.onend = () => {
@@ -1192,7 +1190,7 @@
         // If mic is still "on", restart it — unless audio is playing (feedback prevention).
         if (micListening) {
           // Send anything pending first
-          clearTimeout(sendTimer);
+          clearTimeout(silenceTimer);
           const text = chatInput.value.trim();
           if (text) {
             sendMessage();
@@ -1227,7 +1225,7 @@
           // Turn off mic
           micListening = false;
           micBtn.classList.remove('listening');
-          clearTimeout(sendTimer);
+          clearTimeout(silenceTimer);
           recognition.stop();
           signalMicState(false);
           // Send any remaining text
