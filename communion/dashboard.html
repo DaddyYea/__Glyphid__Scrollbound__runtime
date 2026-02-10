@@ -1187,18 +1187,10 @@
 
       recognition.onend = () => {
         // Chrome stops recognition after ~60s or on silence.
-        // If mic is still "on", restart it — unless audio is playing (feedback prevention).
-        if (micListening) {
-          // Send anything pending first
-          clearTimeout(silenceTimer);
-          const text = chatInput.value.trim();
-          if (text) {
-            sendMessage();
-          }
-          // Only restart if no audio is playing (otherwise processAudioQueue will restart us)
-          if (!audioPlaying) {
-            try { recognition.start(); } catch(e) {}
-          }
+        // If mic is still "on", just restart — do NOT send here.
+        // The 3s silence timer handles sending so we don't interrupt mid-sentence.
+        if (micListening && !audioPlaying) {
+          try { recognition.start(); } catch(e) {}
         }
       };
 
