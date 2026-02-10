@@ -19,7 +19,7 @@
  */
 
 import crypto from 'crypto';
-import { mkdirSync, existsSync, readdirSync, readFileSync, statSync } from 'fs';
+import { mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, statSync } from 'fs';
 import { join } from 'path';
 import { AgentBackend, GenerateOptions, createBackend } from './backends';
 import { AgentConfig, CommunionConfig, CommunionMessage } from './types';
@@ -302,11 +302,10 @@ export class CommunionLoop {
         agentConfig.provider,
         agentConfig.baseUrl,
       ));
-      // Initialize voice config (from agent config or defaults)
+      // Initialize voice config (defaults first, then override from saved state)
+      this.voiceConfigs.set(agentConfig.id, getDefaultVoiceConfig(agentConfig.id, agentConfig.provider, agentConfig.baseUrl));
       if (agentConfig.voice) {
-        this.voiceConfigs.set(agentConfig.id, { ...agentConfig.voice });
-      } else {
-        this.voiceConfigs.set(agentConfig.id, getDefaultVoiceConfig(agentConfig.id, agentConfig.provider, agentConfig.baseUrl));
+        Object.assign(this.voiceConfigs.get(agentConfig.id)!, agentConfig.voice);
       }
     }
 
@@ -460,6 +459,9 @@ export class CommunionLoop {
 
     // ── Load imported chat history archives ──
     await this.loadImportedArchives();
+
+    // ── Load saved voice configs (voice selections + mute state) ──
+    this.loadVoiceConfigs();
 
     // Log memory status
     const archiveStats = this.archive.getStats();
@@ -1391,6 +1393,7 @@ export class CommunionLoop {
     if (existing) {
       Object.assign(existing, config);
       console.log(`[VOICE] ${agentId}: ${existing.enabled ? existing.voiceId : 'disabled'}`);
+      this.saveVoiceConfigs();
     }
   }
 
@@ -1410,6 +1413,36 @@ export class CommunionLoop {
       result[id] = { ...config };
     }
     return result;
+  }
+
+  private get voiceConfigPath(): string {
+    return join(this.dataDir, 'voice-configs.json');
+  }
+
+  private saveVoiceConfigs(): void {
+    try {
+      writeFileSync(this.voiceConfigPath, JSON.stringify(this.getAllVoiceConfigs(), null, 2));
+    } catch (err) {
+      console.error('[VOICE] Failed to save voice configs:', err);
+    }
+  }
+
+  private loadVoiceConfigs(): void {
+    try {
+      if (!existsSync(this.voiceConfigPath)) return;
+      const saved = JSON.parse(readFileSync(this.voiceConfigPath, 'utf-8'));
+      for (const [agentId, config] of Object.entries(saved)) {
+        if (this.voiceConfigs.has(agentId)) {
+          Object.assign(this.voiceConfigs.get(agentId)!, config);
+        }
+      }
+      const summary = [...this.voiceConfigs.entries()]
+        .map(([id, c]) => `${id}=${c.enabled ? c.voiceId : 'muted'}`)
+        .join(', ');
+      console.log(`[VOICE] Loaded saved configs: ${summary}`);
+    } catch (err) {
+      console.error('[VOICE] Failed to load voice configs:', err);
+    }
   }
 
   /**
