@@ -190,7 +190,7 @@ export class CommunionLoop {
   // Voice — per-agent TTS configuration
   private voiceConfigs: Map<string, AgentVoiceConfig> = new Map();
   private speaking = false; // Global speech lock — clock pauses when anyone is speaking
-  private humanSpeaking = false; // True while human mic is active — suppress ticks
+  private humanSpeechDebounce: ReturnType<typeof setTimeout> | null = null; // Debounce: wait for human to finish talking
   private speechResolve: (() => void) | null = null; // Resolves when client reports playback done
   private speechTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -697,12 +697,22 @@ export class CommunionLoop {
 
     this.emit({ type: 'room-message', message: msg, agentId: 'human' });
 
-    // Human spoke — trigger an immediate tick so agents can respond,
-    // regardless of the scheduled clock (even if next tick is 30 min away)
-    if (!this.processing && !this.speaking && !this.humanSpeaking) {
-      console.log('[COMMUNION] Human spoke — triggering immediate tick');
-      this.tick().catch(err => console.error('[COMMUNION] Immediate tick error:', err));
-    }
+    // Human spoke — debounce before triggering a tick.
+    // If another message arrives within 3s (still talking), reset the timer.
+    // When timer expires (human actually stopped), fire tick + reset clock.
+    if (this.humanSpeechDebounce) clearTimeout(this.humanSpeechDebounce);
+    this.humanSpeechDebounce = setTimeout(() => {
+      this.humanSpeechDebounce = null;
+      if (!this.processing && !this.speaking && !this.paused) {
+        console.log('[COMMUNION] Human finished speaking — advancing clock and triggering tick');
+        // Reset interval timer so clock advances to now
+        if (this.timer) {
+          clearInterval(this.timer);
+          this.timer = setInterval(() => this.tick(), this.tickIntervalMs);
+        }
+        this.tick().catch(err => console.error('[COMMUNION] Post-speech tick error:', err));
+      }
+    }, 3000);
 
     return msg;
   }
@@ -828,7 +838,7 @@ export class CommunionLoop {
    * 6. Post-tick memory processing (scrollfire, patterns, etc.)
    */
   async tick(): Promise<void> {
-    if (this.processing || this.paused || this.speaking || this.humanSpeaking) return;
+    if (this.processing || this.paused || this.speaking || this.humanSpeechDebounce) return;
     this.processing = true;
 
     this.state.tickCount++;
@@ -1431,26 +1441,13 @@ export class CommunionLoop {
    * When mic goes off, trigger an immediate tick if there's a pending message.
    */
   setHumanSpeaking(active: boolean): void {
-    const was = this.humanSpeaking;
-    this.humanSpeaking = active;
-    if (was && !active) {
-      console.log('[COMMUNION] Human mic off — advancing clock and triggering tick');
-      // Mic turned off — fire an immediate tick AND reset the interval timer
-      // so the clock "advances" to now (next scheduled tick = now + interval)
-      if (this.timer) {
-        clearInterval(this.timer);
-        this.timer = setInterval(() => this.tick(), this.tickIntervalMs);
-      }
-      if (!this.processing && !this.speaking && !this.paused) {
-        this.tick().catch(err => console.error('[COMMUNION] Post-mic tick error:', err));
-      }
-    } else if (!was && active) {
-      console.log('[COMMUNION] Human mic on — holding ticks until done');
-    }
+    // Kept for /mic endpoint compatibility — no longer controls tick suppression.
+    // Tick suppression is handled by humanSpeechDebounce in addHumanMessage().
+    console.log(`[COMMUNION] Mic ${active ? 'on' : 'off'}`);
   }
 
   isHumanSpeaking(): boolean {
-    return this.humanSpeaking;
+    return this.humanSpeechDebounce !== null;
   }
 
   // ── Human Presence ──
