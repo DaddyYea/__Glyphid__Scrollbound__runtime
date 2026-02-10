@@ -828,7 +828,7 @@ export class CommunionLoop {
    * 6. Post-tick memory processing (scrollfire, patterns, etc.)
    */
   async tick(): Promise<void> {
-    if (this.processing || this.paused || this.speaking) return;
+    if (this.processing || this.paused || this.speaking || this.humanSpeaking) return;
     this.processing = true;
 
     this.state.tickCount++;
@@ -1434,13 +1434,18 @@ export class CommunionLoop {
     const was = this.humanSpeaking;
     this.humanSpeaking = active;
     if (was && !active) {
-      console.log('[COMMUNION] Human mic off — triggering tick');
-      // Mic turned off — fire a tick so agents respond to anything said
+      console.log('[COMMUNION] Human mic off — advancing clock and triggering tick');
+      // Mic turned off — fire an immediate tick AND reset the interval timer
+      // so the clock "advances" to now (next scheduled tick = now + interval)
+      if (this.timer) {
+        clearInterval(this.timer);
+        this.timer = setInterval(() => this.tick(), this.tickIntervalMs);
+      }
       if (!this.processing && !this.speaking && !this.paused) {
         this.tick().catch(err => console.error('[COMMUNION] Post-mic tick error:', err));
       }
     } else if (!was && active) {
-      console.log('[COMMUNION] Human mic on — suppressing immediate ticks');
+      console.log('[COMMUNION] Human mic on — holding ticks until done');
     }
   }
 
