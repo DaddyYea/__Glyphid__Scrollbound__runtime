@@ -486,16 +486,16 @@ export class CommunionLoop {
       return;
     }
 
-    const MAX_DOC_CHARS = 50000; // Cap total document context at ~12k tokens
+    const MAX_DOC_CHARS = 200000; // Cap total document context
+    const MAX_FILE_CHARS = 100000; // Per-file cap
     const docs: string[] = [];
     let totalChars = 0;
     for (const file of files) {
       try {
         let content = readFileSync(join(this.documentsDir, file), 'utf-8');
-        // Truncate individual files if too large
-        if (content.length > 10000) {
-          console.log(`[DOCS] Truncating ${file}: ${content.length} → 10000 chars`);
-          content = content.substring(0, 10000) + '\n[... truncated ...]';
+        if (content.length > MAX_FILE_CHARS) {
+          console.log(`[DOCS] Truncating ${file}: ${content.length} → ${MAX_FILE_CHARS} chars`);
+          content = content.substring(0, MAX_FILE_CHARS) + '\n[... truncated ...]';
         }
         if (totalChars + content.length > MAX_DOC_CHARS) {
           console.log(`[DOCS] Skipping ${file}: would exceed ${MAX_DOC_CHARS} char limit`);
@@ -519,8 +519,8 @@ export class CommunionLoop {
     for (const file of files) {
       try {
         let content = readFileSync(join(this.documentsDir, file), 'utf-8');
-        if (content.length > 10000) {
-          content = content.substring(0, 10000) + '\n[... truncated ...]';
+        if (content.length > MAX_FILE_CHARS) {
+          content = content.substring(0, MAX_FILE_CHARS) + '\n[... truncated ...]';
         }
         const tags = file.replace(/\.(txt|md)$/, '').split(/[-_.\s]+/).filter(t => t.length > 2);
         this.documentItems.push({
@@ -1009,7 +1009,7 @@ export class CommunionLoop {
       systemPrompt: agent.systemPrompt,
       conversationContext: assembledContext + (ramManifest ? '\n\n' + ramManifest : ''),
       journalContext: '', // Already in RAM
-      documentsContext: undefined, // Already in RAM
+      documentsContext: this.documentsContext || undefined, // Always include shared docs directly
       memoryContext: undefined, // Already in RAM
       provider: agent.config.provider,
     };
