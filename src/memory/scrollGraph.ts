@@ -100,7 +100,11 @@ export type GraphNodeType =
   | 'Agent'
   | 'CommunionMessage'
   | 'LearnedPreference'
-  | 'ImportedConversation';
+  | 'ImportedConversation'
+  | 'Folder'
+  | 'Document'
+  | 'DocumentChunk'
+  | 'ImportedArchive';
 
 // ── Relationship Types ──
 
@@ -123,7 +127,13 @@ export type RelationshipType =
   | 'importedFrom'
   | 'triggeredRecall'
   | 'recalledBy'
-  | 'occurredDuring';
+  | 'occurredDuring'
+  | 'contains'
+  | 'containedIn'
+  | 'partOf'
+  | 'hasPart'
+  | 'follows'
+  | 'followedBy';
 
 /** The inverse of each relationship (for automatic bidirectional linking) */
 const INVERSE_RELATIONS: Partial<Record<RelationshipType, RelationshipType>> = {
@@ -146,6 +156,12 @@ const INVERSE_RELATIONS: Partial<Record<RelationshipType, RelationshipType>> = {
   triggeredRecall: 'recalledBy',
   recalledBy: 'triggeredRecall',
   occurredDuring: 'containsScroll',
+  contains: 'containedIn',
+  containedIn: 'contains',
+  partOf: 'hasPart',
+  hasPart: 'partOf',
+  follows: 'followedBy',
+  followedBy: 'follows',
 };
 
 // ── Edge ──
