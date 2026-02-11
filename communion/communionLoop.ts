@@ -324,8 +324,13 @@ export class CommunionLoop {
   }
 
   async initialize(): Promise<void> {
-    // Load shared documents
+    // Load shared documents (metadata only — content read on demand)
     this.loadDocuments();
+
+    // Set up lazy browse callback for all agents' RAM
+    for (const [, ram] of this.ram) {
+      ram.setBrowseCallback((keyword, r) => this.browseFiles(keyword, r));
+    }
 
     // ── Load graph from disk ──
     await this.graph.load();
@@ -474,19 +479,17 @@ export class CommunionLoop {
    * Load all text files from the documents directory into context
    */
   /**
-   * Crawl the entire documents directory tree, building JSON-LD graph nodes
-   * for every folder, file, and chunk. Agents can navigate the tree via
-   * graph traversal and load specific chunks into RAM.
+   * Crawl the entire documents directory tree. Registers JSON-LD graph nodes
+   * for every folder and file (metadata only — no file content read at startup).
+   * Content is read lazily when agents BROWSE or LOAD specific chunks.
    */
   private loadDocuments(): void {
     if (!existsSync(this.documentsDir)) return;
 
-    const CHUNK_SIZE = 2000;
     const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.json', '.csv', '.log', '.yml', '.yaml', '.toml', '.ini', '.cfg', '.xml', '.html', '.css', '.js', '.ts', '.py', '.sh']);
     this.documentItems = [];
     let totalFiles = 0;
     let totalFolders = 0;
-    let totalChunks = 0;
 
     // Register root folder
     const rootUri = `folder:${this.documentsDir}`;
@@ -495,8 +498,9 @@ export class CommunionLoop {
       name: this.documentsDir.split('/').pop() || this.documentsDir,
     });
 
-    // Recursive crawler
-    const crawl = (dirPath: string, parentUri: string) => {
+    // Recursive crawler — metadata only, no file reads
+    const crawl = (dirPath: string, parentUri: string, depth: number) => {
+      if (depth > 10) return; // safety cap
       let entries;
       try {
         entries = readdirSync(dirPath, { withFileTypes: true });
@@ -505,7 +509,6 @@ export class CommunionLoop {
         return;
       }
 
-      // Sort: folders first, then files
       entries.sort((a, b) => {
         if (a.isDirectory() && !b.isDirectory()) return -1;
         if (!a.isDirectory() && b.isDirectory()) return 1;
@@ -518,7 +521,6 @@ export class CommunionLoop {
         const relativePath = fullPath.replace(this.documentsDir + '/', '');
 
         if (entry.isDirectory()) {
-          // Register folder node
           const folderUri = `folder:${relativePath}`;
           this.graph.addNode(folderUri, 'Folder', {
             path: relativePath,
@@ -526,101 +528,46 @@ export class CommunionLoop {
           });
           this.graph.link(parentUri, 'contains', folderUri);
           totalFolders++;
-
-          // Recurse
-          crawl(fullPath, folderUri);
+          crawl(fullPath, folderUri, depth + 1);
 
         } else if (entry.isFile()) {
           const ext = entry.name.substring(entry.name.lastIndexOf('.')).toLowerCase();
           if (!TEXT_EXTENSIONS.has(ext)) continue;
 
-          let content: string;
+          // Only read file size, not content
+          let fileSize = 0;
           try {
-            content = readFileSync(fullPath, 'utf-8').trim();
-          } catch (err) {
-            console.error(`[DOCS] Failed to read ${relativePath}:`, err);
-            continue;
-          }
+            fileSize = statSync(fullPath).size;
+          } catch { continue; }
 
           const docUri = `doc:${relativePath}`;
-          const numChunks = Math.ceil(content.length / CHUNK_SIZE);
           this.graph.addNode(docUri, 'Document', {
             path: relativePath,
+            fullPath,
             filename: entry.name,
-            chars: content.length,
-            chunks: numChunks,
-            preview: content.substring(0, 200).replace(/\n/g, ' '),
+            sizeBytes: fileSize,
+            sizeKB: Math.round(fileSize / 1024),
           });
           this.graph.link(parentUri, 'contains', docUri);
           totalFiles++;
-
-          // Chunk the file
-          const fileTags = entry.name.replace(/\.[^.]+$/, '').split(/[-_.\s]+/).filter(t => t.length > 2);
-          const lines = content.split('\n');
-          let chunk = '';
-          let chunkIdx = 0;
-          let chunkStartLine = 1;
-          let lineNum = 0;
-
-          const flushChunk = () => {
-            if (!chunk.trim()) return;
-            const chunkId = `doc:${relativePath}:${chunkIdx}`;
-            const preview = chunk.trim().substring(0, 80).replace(/\n/g, ' ');
-            const label = `${relativePath} [${chunkStartLine}-${lineNum}] "${preview}..."`;
-
-            this.documentItems.push({
-              id: chunkId,
-              label,
-              content: `--- ${relativePath} (lines ${chunkStartLine}-${lineNum}) ---\n${chunk.trim()}`,
-              chars: chunk.length,
-              tags: fileTags,
-            });
-
-            this.graph.addNode(chunkId, 'DocumentChunk', {
-              path: relativePath,
-              chunkIndex: chunkIdx,
-              lines: `${chunkStartLine}-${lineNum}`,
-              preview,
-            });
-            this.graph.link(chunkId, 'partOf', docUri);
-            if (chunkIdx > 0) {
-              this.graph.link(chunkId, 'follows', `doc:${relativePath}:${chunkIdx - 1}`);
-            }
-
-            chunkIdx++;
-            totalChunks++;
-            chunk = '';
-            chunkStartLine = lineNum + 1;
-          };
-
-          for (const line of lines) {
-            lineNum++;
-            chunk += line + '\n';
-            if (chunk.length >= CHUNK_SIZE) {
-              flushChunk();
-            }
-          }
-          flushChunk();
-
-          console.log(`[DOCS] ${relativePath}: ${content.length} chars → ${chunkIdx} chunks`);
         }
       }
     };
 
-    crawl(this.documentsDir, rootUri);
+    crawl(this.documentsDir, rootUri, 0);
 
     if (totalFiles === 0) {
       console.log(`[DOCS] No text files in ${this.documentsDir}/`);
       return;
     }
 
-    // Build document index summary for agents
+    // Build tree view for agents (metadata only, no content loaded)
     const summaryLines = [
-      `SHARED DOCUMENTS (${this.documentsDir}/) — ${totalFolders} folders, ${totalFiles} files, ${totalChunks} browseable chunks:`,
+      `SHARED DOCUMENTS (${this.documentsDir}/) — ${totalFolders} folders, ${totalFiles} files:`,
+      'Content is loaded on-demand. Use [RAM:BROWSE keyword] to search files and load matching sections.',
       '',
     ];
 
-    // Build a simple tree view
     const buildTree = (parentUri: string, indent: string) => {
       const node = this.graph.getNode(parentUri);
       if (!node) return;
@@ -632,34 +579,102 @@ export class CommunionLoop {
           summaryLines.push(`${indent}${child.data.name}/`);
           buildTree(edge.target, indent + '  ');
         } else if (child['@type'] === 'Document') {
-          const chunks = (child.data.chunks as number) || 0;
-          summaryLines.push(`${indent}${child.data.filename} (${child.data.chars} chars, ${chunks} chunks)`);
+          summaryLines.push(`${indent}${child.data.filename} (${child.data.sizeKB}KB)`);
         }
       }
     };
     buildTree(rootUri, '  ');
 
     summaryLines.push('');
-    summaryLines.push('Use [RAM:BROWSE keyword] to search and load matching chunks.');
-    summaryLines.push('Use [RAM:LOAD doc:path/file:N] to load a specific chunk by index.');
+    summaryLines.push('Commands:');
+    summaryLines.push('  [RAM:BROWSE keyword] — search all files for keyword, load matching chunks');
+    summaryLines.push('  [RAM:LOAD doc:path/file:N] — load a specific chunk');
+    summaryLines.push('  [RAM:DROP doc:path/file:N] — unload a chunk');
     this.documentsContext = summaryLines.join('\n');
 
-    console.log(`[DOCS] Crawled: ${totalFolders} folders, ${totalFiles} files, ${totalChunks} chunks`);
+    console.log(`[DOCS] Crawled: ${totalFolders} folders, ${totalFiles} files (metadata only, content loaded on-demand)`);
+  }
 
-    // Offer all chunks to each agent's RAM pool, auto-load first 3 chunks per file
-    const AUTO_LOAD_CHUNKS = 3;
-    for (const [agentId, ram] of this.ram) {
-      for (const doc of this.documentItems) {
-        ram.offerItem('documents', doc);
-      }
-      for (const doc of this.documentItems) {
-        const chunkIdx = parseInt(doc.id.split(':').pop() || '999');
-        if (chunkIdx < AUTO_LOAD_CHUNKS) {
-          ram.processCommand({ action: 'load', target: doc.id });
+  /**
+   * Lazy BROWSE: search files on disk for a keyword, create chunks from
+   * matching regions, and load them into the agent's RAM pool.
+   * Called from ContextRAM's browseCallback.
+   */
+  private browseFiles(keyword: string, ram: ContextRAM): string {
+    const CHUNK_SIZE = 2000;
+    const CONTEXT_LINES = 5; // lines of context around each match
+    const MAX_RESULTS = 5;
+    const searchLower = keyword.toLowerCase();
+
+    // Collect all Document nodes from the graph
+    const results: { path: string; fullPath: string; matchCount: number; excerpts: string[] }[] = [];
+
+    for (const node of this.graph.getByType('Document')) {
+      const fullPath = node.data.fullPath as string;
+      if (!fullPath || !existsSync(fullPath)) continue;
+
+      try {
+        const content = readFileSync(fullPath, 'utf-8');
+        if (!content.toLowerCase().includes(searchLower)) continue;
+
+        const lines = content.split('\n');
+        const matchLines: number[] = [];
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].toLowerCase().includes(searchLower)) {
+            matchLines.push(i);
+          }
         }
+
+        if (matchLines.length === 0) continue;
+
+        // Extract excerpts around matches
+        const excerpts: string[] = [];
+        const used = new Set<number>();
+        for (const lineIdx of matchLines) {
+          if (used.has(lineIdx)) continue;
+          const start = Math.max(0, lineIdx - CONTEXT_LINES);
+          const end = Math.min(lines.length - 1, lineIdx + CONTEXT_LINES);
+          const excerpt = lines.slice(start, end + 1).join('\n');
+          for (let i = start; i <= end; i++) used.add(i);
+          excerpts.push(excerpt);
+          if (excerpts.length >= 3) break; // max 3 excerpts per file
+        }
+
+        results.push({
+          path: node.data.path as string,
+          fullPath,
+          matchCount: matchLines.length,
+          excerpts,
+        });
+      } catch {
+        continue;
       }
-      console.log(`[DOCS] Offered ${this.documentItems.length} chunks to ${agentId} RAM (first ${AUTO_LOAD_CHUNKS}/file auto-loaded)`);
     }
+
+    if (results.length === 0) return `No files contain "${keyword}"`;
+
+    // Sort by match count, take top results
+    results.sort((a, b) => b.matchCount - a.matchCount);
+    const loaded: string[] = [];
+
+    for (const result of results.slice(0, MAX_RESULTS)) {
+      // Create a chunk from the excerpts and offer it to RAM
+      const chunkContent = `--- ${result.path} (${result.matchCount} matches for "${keyword}") ---\n\n${result.excerpts.join('\n\n...\n\n')}`;
+      const chunkId = `doc:${result.path}:browse-${keyword.replace(/\s+/g, '-').substring(0, 20)}`;
+      const tags = result.path.replace(/\.[^.]+$/, '').split(/[-_.\s/]+/).filter(t => t.length > 2);
+
+      ram.offerItem('documents', {
+        id: chunkId,
+        label: `${result.path} [${result.matchCount}× "${keyword}"]`,
+        content: chunkContent,
+        chars: chunkContent.length,
+        tags: [...tags, ...keyword.toLowerCase().split(/\s+/)],
+      });
+      ram.processCommand({ action: 'load', target: chunkId });
+      loaded.push(`${result.path} (${result.matchCount} matches)`);
+    }
+
+    return `BROWSE "${keyword}": found in ${results.length} files, loaded excerpts from: ${loaded.join(', ')}`;
   }
 
   /**

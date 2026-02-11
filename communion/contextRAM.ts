@@ -144,6 +144,9 @@ export class ContextRAM {
   // Pinned items (agent explicitly wants to keep these)
   private pinnedItems: Set<string> = new Set();
 
+  // Lazy browse callback — set by communionLoop to search files on disk
+  private browseCallback: ((keyword: string, ram: ContextRAM) => string) | null = null;
+
   constructor(agentId: string, agentName: string, provider: string, baseUrl?: string) {
     this.agentId = agentId;
     this.agentName = agentName;
@@ -207,6 +210,13 @@ export class ContextRAM {
 
     slot.content = content;
     slot.chars = content.length;
+  }
+
+  /**
+   * Set a callback for lazy BROWSE — reads files from disk on demand.
+   */
+  setBrowseCallback(cb: (keyword: string, ram: ContextRAM) => string): void {
+    this.browseCallback = cb;
   }
 
   // ════════════════════════════════════════
@@ -678,57 +688,28 @@ export class ContextRAM {
   }
 
   /**
-   * Browse documents pool by keyword — search all items (loaded or not),
-   * load matching ones into RAM, evict lowest-relevance if needed.
+   * Browse documents by keyword — delegates to the lazy browse callback
+   * which searches files on disk and loads matching chunks into RAM.
    */
   private browseDocuments(keyword: string): string {
+    if (!keyword) return 'BROWSE requires a keyword (e.g., [RAM:BROWSE sacred rhythm])';
+    if (this.browseCallback) {
+      return this.browseCallback(keyword, this);
+    }
+
+    // Fallback: search already-loaded pool items
     const pool = this.pools.get('documents');
     const slot = this.slots.get('documents');
-    if (!pool || !slot) return 'No documents pool available';
-    if (!keyword) return 'BROWSE requires a keyword (e.g., [RAM:BROWSE sacred rhythm])';
+    if (!pool || !slot) return 'No documents available';
 
     const searchLower = keyword.toLowerCase();
     const matches: { item: RAMItem; score: number }[] = [];
-
     for (const item of pool.items.values()) {
-      const contentLower = item.content.toLowerCase();
-      const labelLower = item.label.toLowerCase();
-      // Score: count keyword occurrences in content + label bonus
-      let score = 0;
-      let idx = 0;
-      while ((idx = contentLower.indexOf(searchLower, idx)) !== -1) {
-        score++;
-        idx += searchLower.length;
-      }
-      if (labelLower.includes(searchLower)) score += 3;
-      // Also match individual words
-      const words = searchLower.split(/\s+/);
-      if (words.length > 1) {
-        for (const word of words) {
-          if (word.length > 2 && contentLower.includes(word)) score += 0.5;
-        }
-      }
+      const score = item.content.toLowerCase().includes(searchLower) ? 1 : 0;
       if (score > 0) matches.push({ item, score });
     }
-
-    if (matches.length === 0) return `No documents match "${keyword}"`;
-
-    // Sort by score descending, load top results
-    matches.sort((a, b) => b.score - a.score);
-    const loaded: string[] = [];
-    const MAX_BROWSE_LOAD = 5;
-
-    for (const { item } of matches.slice(0, MAX_BROWSE_LOAD)) {
-      if (item.loaded) {
-        loaded.push(`${item.label} (already loaded)`);
-        continue;
-      }
-      // Try to load, evicting low-relevance items if needed
-      const result = this.loadItem(pool, slot, item.id);
-      loaded.push(item.label);
-    }
-
-    return `BROWSE "${keyword}": ${matches.length} matches, loaded: ${loaded.join(', ')}`;
+    if (matches.length === 0) return `No loaded documents match "${keyword}"`;
+    return `Found ${matches.length} matches in loaded items`;
   }
 
   private getLowestPriorityLoadedSlot(exclude: SlotName): ContextSlot | null {
