@@ -72,7 +72,7 @@ export class AnthropicBackend implements AgentBackend {
     const response = await this.client.messages.create({
       model: this.model,
       max_tokens: this.maxTokens,
-      system: options.systemPrompt,
+      system: options.systemPrompt.replace(/[\uD800-\uDFFF]/g, ''),
       messages: [
         {
           role: 'user',
@@ -118,7 +118,7 @@ export class OpenAICompatibleBackend implements AgentBackend {
       body: JSON.stringify({
         model: this.model,
         messages: [
-          { role: 'system', content: options.systemPrompt },
+          { role: 'system', content: options.systemPrompt.replace(/[\uD800-\uDFFF]/g, '') },
           { role: 'user', content: buildUserPrompt(options) },
         ],
         max_tokens: this.maxTokens,
@@ -168,6 +168,9 @@ function buildUserPrompt(options: GenerateOptions): string {
       `\n\n[... ${truncated} characters truncated to fit context window ...]\n\n` +
       prompt.substring(prompt.length - keepEnd);
   }
+
+  // Strip unpaired surrogates and other chars that break JSON serialization
+  prompt = prompt.replace(/[\uD800-\uDFFF]/g, '');
 
   return prompt;
 }
