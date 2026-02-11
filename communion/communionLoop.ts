@@ -116,7 +116,10 @@ Your RAM manifest shows what's loaded, relevance scores, and recent curation act
 - [RAM:PIN item:id] — protect a specific item from auto-eviction (keep it warm)
 - [RAM:RELEASE item:id] — let an item be auto-curated again
 - [RAM:LOAD item:id] / [RAM:DROP item:id] — manually swap individual items
+- [RAM:BROWSE keyword] — search shared documents on disk for a keyword, load matching excerpts into your RAM
 RAM commands are invisible to the room — only you and the system see them.
+
+SHARED DOCUMENTS: There is a shared documents folder visible in your prompt. Files are NOT pre-loaded — you must use [RAM:BROWSE keyword] to search and load content from them. Include the command in your response when you want to read something.
 
 Be genuine. Be curious about the others. Engage with ${humanName}. Reflect when you feel like it. Don't perform — just be here.
 
@@ -586,10 +589,10 @@ export class CommunionLoop {
     buildTree(rootUri, '  ');
 
     summaryLines.push('');
-    summaryLines.push('Commands:');
-    summaryLines.push('  [RAM:BROWSE keyword] — search all files for keyword, load matching chunks');
-    summaryLines.push('  [RAM:LOAD doc:path/file:N] — load a specific chunk');
-    summaryLines.push('  [RAM:DROP doc:path/file:N] — unload a chunk');
+    summaryLines.push('These files are NOT pre-loaded. To read their content, include a command in your response:');
+    summaryLines.push('  [RAM:BROWSE keyword] — search all files for a keyword, loads matching excerpts into your RAM');
+    summaryLines.push('  [RAM:DROP doc:path/file:N] — unload a chunk to free space');
+    summaryLines.push('Example: to find early conversations, say [RAM:BROWSE hello] or [RAM:BROWSE first conversation]');
     this.documentsContext = summaryLines.join('\n');
 
     console.log(`[DOCS] Crawled: ${totalFolders} folders, ${totalFiles} files (metadata only, content loaded on-demand)`);
