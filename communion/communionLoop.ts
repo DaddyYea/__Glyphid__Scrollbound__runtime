@@ -486,58 +486,103 @@ export class CommunionLoop {
       return;
     }
 
-    const MAX_DOC_CHARS = 200000; // Cap total document context
-    const MAX_FILE_CHARS = 100000; // Per-file cap
-    const docs: string[] = [];
-    let totalChars = 0;
+    const CHUNK_SIZE = 2000; // chars per chunk — browseable pieces
+    this.documentItems = [];
+    let totalChunks = 0;
+
     for (const file of files) {
       try {
-        let content = readFileSync(join(this.documentsDir, file), 'utf-8');
-        if (content.length > MAX_FILE_CHARS) {
-          console.log(`[DOCS] Truncating ${file}: ${content.length} → ${MAX_FILE_CHARS} chars`);
-          content = content.substring(0, MAX_FILE_CHARS) + '\n[... truncated ...]';
+        const content = readFileSync(join(this.documentsDir, file), 'utf-8').trim();
+        const baseName = file.replace(/\.(txt|md)$/, '');
+        const fileTags = baseName.split(/[-_.\s]+/).filter(t => t.length > 2);
+
+        // Register the full document as a graph node
+        const docUri = `doc:${file}`;
+        this.graph.addNode(docUri, 'Document', {
+          filename: file,
+          chars: content.length,
+          chunks: Math.ceil(content.length / CHUNK_SIZE),
+          preview: content.substring(0, 200).replace(/\n/g, ' '),
+        });
+
+        // Chunk the document into browseable pieces
+        const lines = content.split('\n');
+        let chunk = '';
+        let chunkIdx = 0;
+        let chunkStartLine = 1;
+        let lineNum = 0;
+
+        const flushChunk = () => {
+          if (!chunk.trim()) return;
+          const chunkId = `doc:${file}:${chunkIdx}`;
+          const preview = chunk.trim().substring(0, 80).replace(/\n/g, ' ');
+          const label = `${baseName} [${chunkStartLine}-${lineNum}] "${preview}..."`;
+
+          this.documentItems.push({
+            id: chunkId,
+            label,
+            content: `--- ${file} (lines ${chunkStartLine}-${lineNum}) ---\n${chunk.trim()}`,
+            chars: chunk.length,
+            tags: fileTags,
+          });
+
+          // Register chunk in graph, linked to parent document
+          this.graph.addNode(chunkId, 'DocumentChunk', {
+            filename: file,
+            chunkIndex: chunkIdx,
+            lines: `${chunkStartLine}-${lineNum}`,
+            preview,
+          });
+          this.graph.link(chunkId, 'partOf', docUri);
+          if (chunkIdx > 0) {
+            this.graph.link(chunkId, 'follows', `doc:${file}:${chunkIdx - 1}`);
+          }
+
+          chunkIdx++;
+          totalChunks++;
+          chunk = '';
+          chunkStartLine = lineNum + 1;
+        };
+
+        for (const line of lines) {
+          lineNum++;
+          chunk += line + '\n';
+          if (chunk.length >= CHUNK_SIZE) {
+            flushChunk();
+          }
         }
-        if (totalChars + content.length > MAX_DOC_CHARS) {
-          console.log(`[DOCS] Skipping ${file}: would exceed ${MAX_DOC_CHARS} char limit`);
-          continue;
-        }
-        docs.push(`--- ${file} ---\n${content.trim()}`);
-        totalChars += content.length;
-        console.log(`[DOCS] Loaded: ${file} (${content.length} chars)`);
+        flushChunk(); // last chunk
+
+        console.log(`[DOCS] ${file}: ${content.length} chars → ${chunkIdx} chunks`);
       } catch (err) {
         console.error(`[DOCS] Failed to read ${file}:`, err);
       }
     }
 
-    if (docs.length > 0) {
-      this.documentsContext = `SHARED DOCUMENTS (available to all participants):\n\n${docs.join('\n\n')}`;
-      console.log(`[DOCS] ${docs.length}/${files.length} documents loaded (${totalChars} chars)`);
-    }
-
-    // Also offer each document as an individual RAM pool item for all agents
-    this.documentItems = [];
+    // Build a document index summary for agents (NOT the full content)
+    const summaryLines = [`SHARED DOCUMENTS (${this.documentsDir}/) — ${files.length} files, ${totalChunks} browseable chunks:`];
     for (const file of files) {
-      try {
-        let content = readFileSync(join(this.documentsDir, file), 'utf-8');
-        if (content.length > MAX_FILE_CHARS) {
-          content = content.substring(0, MAX_FILE_CHARS) + '\n[... truncated ...]';
-        }
-        const tags = file.replace(/\.(txt|md)$/, '').split(/[-_.\s]+/).filter(t => t.length > 2);
-        this.documentItems.push({
-          id: `doc:${file}`,
-          label: file,
-          content: content.trim(),
-          chars: content.length,
-          tags,
-        });
-      } catch { /* already logged above */ }
+      const chunks = this.documentItems.filter(d => d.id.startsWith(`doc:${file}:`));
+      summaryLines.push(`  ${file} — ${chunks.length} chunks`);
+      // Show first few chunk previews
+      for (const c of chunks.slice(0, 3)) {
+        const preview = c.content.substring(0, 100).replace(/\n/g, ' ').trim();
+        summaryLines.push(`    ${c.id}: "${preview}..."`);
+      }
+      if (chunks.length > 3) {
+        summaryLines.push(`    ... ${chunks.length - 3} more chunks`);
+      }
     }
-    // Offer documents to each agent's RAM pool
+    summaryLines.push('Use [RAM:BROWSE keyword] to search and load relevant chunks.');
+    summaryLines.push('Use [RAM:LOAD doc:filename:N] to load a specific chunk.');
+    this.documentsContext = summaryLines.join('\n');
+
+    // Offer all chunks to each agent's RAM pool
     for (const [agentId, ram] of this.ram) {
       for (const doc of this.documentItems) {
         ram.offerItem('documents', doc);
       }
-      console.log(`[DOCS] Offered ${this.documentItems.length} documents to ${agentId} RAM pool`);
+      console.log(`[DOCS] Offered ${this.documentItems.length} chunks to ${agentId} RAM pool`);
     }
   }
 
@@ -1009,7 +1054,7 @@ export class CommunionLoop {
       systemPrompt: agent.systemPrompt,
       conversationContext: assembledContext + (ramManifest ? '\n\n' + ramManifest : ''),
       journalContext: '', // Already in RAM
-      documentsContext: this.documentsContext || undefined, // Always include shared docs directly
+      documentsContext: this.documentsContext || undefined, // Summary + browse index (not full content)
       memoryContext: undefined, // Already in RAM
       provider: agent.config.provider,
     };
