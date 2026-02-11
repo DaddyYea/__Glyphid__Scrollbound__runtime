@@ -577,12 +577,20 @@ export class CommunionLoop {
     summaryLines.push('Use [RAM:LOAD doc:filename:N] to load a specific chunk.');
     this.documentsContext = summaryLines.join('\n');
 
-    // Offer all chunks to each agent's RAM pool
+    // Offer all chunks to each agent's RAM pool, auto-load first 3 chunks per file
+    const AUTO_LOAD_CHUNKS = 3;
     for (const [agentId, ram] of this.ram) {
       for (const doc of this.documentItems) {
         ram.offerItem('documents', doc);
       }
-      console.log(`[DOCS] Offered ${this.documentItems.length} chunks to ${agentId} RAM pool`);
+      // Auto-load the first few chunks so agents have something to read immediately
+      for (const doc of this.documentItems) {
+        const chunkIdx = parseInt(doc.id.split(':').pop() || '999');
+        if (chunkIdx < AUTO_LOAD_CHUNKS) {
+          ram.processCommand({ action: 'load', target: doc.id });
+        }
+      }
+      console.log(`[DOCS] Offered ${this.documentItems.length} chunks to ${agentId} RAM pool (auto-loaded first ${AUTO_LOAD_CHUNKS} per file)`);
     }
   }
 

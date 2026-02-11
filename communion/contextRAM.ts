@@ -797,7 +797,16 @@ export class ContextRAM {
           lines.push(`    ├─ ${item.label} (${Math.round(item.chars / 1000)}k chars, relevance ${item.relevance.toFixed(2)})${pinTag}${relTag}`);
         }
         if (unloadedItems.length > 0) {
-          lines.push(`    └─ ${unloadedItems.length} more available (not loaded)`);
+          // Show unloaded item IDs so agents know what they can load/browse
+          const shown = unloadedItems.slice(0, 10);
+          for (const item of shown) {
+            lines.push(`    │  ${item.id} — "${item.label.substring(0, 60)}"`);
+          }
+          if (unloadedItems.length > 10) {
+            lines.push(`    └─ ... ${unloadedItems.length - 10} more (use [RAM:BROWSE keyword] to find)`);
+          } else {
+            lines.push(`    └─ Use [RAM:LOAD id] to load, or [RAM:BROWSE keyword] to search`);
+          }
         }
       }
     }
