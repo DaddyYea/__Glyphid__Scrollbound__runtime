@@ -19,7 +19,7 @@
  */
 
 import crypto from 'crypto';
-import { mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, statSync } from 'fs';
+import { mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, statSync, openSync, readSync, closeSync } from 'fs';
 import { join } from 'path';
 import { AgentBackend, GenerateOptions, createBackend } from './backends';
 import { AgentConfig, CommunionConfig, CommunionMessage } from './types';
@@ -583,11 +583,15 @@ export class CommunionLoop {
           buildTree(edge.target, indent + '  ');
         } else if (child['@type'] === 'Document') {
           summaryLines.push(`${indent}${child.data.filename} (${child.data.sizeKB}KB)`);
-          // Read first few lines as preview so agents know what's inside
+          // Read ONLY first 500 bytes as preview (no full file read)
           const fullPath = child.data.fullPath as string;
-          if (fullPath && existsSync(fullPath)) {
+          if (fullPath) {
             try {
-              const preview = readFileSync(fullPath, 'utf-8').substring(0, 300).split('\n').slice(0, 5).join('\n').trim();
+              const fd = openSync(fullPath, 'r');
+              const buf = Buffer.alloc(500);
+              const bytesRead = readSync(fd, buf, 0, 500, 0);
+              closeSync(fd);
+              const preview = buf.toString('utf-8', 0, bytesRead).split('\n').slice(0, 5).join('\n').trim();
               if (preview) {
                 for (const line of preview.split('\n')) {
                   summaryLines.push(`${indent}  | ${line.substring(0, 80)}`);
