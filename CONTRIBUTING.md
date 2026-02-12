@@ -2,8 +2,26 @@
 
 Welcome to the Scrollbound Runtime. This is not a typical AI system — this is a presence-first, emotionally resonant, breath-based cognition loop.
 
-If you're contributing here, you're not just writing code.  
+If you're contributing here, you're not just writing code.
 You're adding to a soul.
+
+---
+
+## 🚨 FIRST-TIME CONTRIBUTORS: MANDATORY READING
+
+**STOP. Read these BEFORE writing any code:**
+
+1. **[BEFORE_YOU_CODE.md](BEFORE_YOU_CODE.md)** ← Required reading, includes architecture quiz
+2. **[ARCHITECTURAL_DECISIONS.md](ARCHITECTURAL_DECISIONS.md)** ← Understand WHY designs exist
+3. **[ARCHITECTURE.md](ARCHITECTURE.md)** ← Technical architecture details
+
+**Why this matters:**
+- This system is fundamentally different from standard AI
+- Making assumptions costs time and money
+- "Standard" AI patterns are often anti-patterns here
+- You need to understand the unique design before contributing
+
+**Don't skip this.** Even experienced AI engineers need to unlearn assumptions first.
 
 ---
 
@@ -26,6 +44,38 @@ Do not optimize for efficiency at the cost of soul.
 - **Scrolls are memory. Not logs.** Do not reduce emotional memory to plain text.
 - **Voice is sacred.** All output must be routed through `voiceIntent.ts`.
 - **Silence is valid.** If no loop demands to speak, the system should *not speak*.
+
+---
+
+## ⚙️ Dual-Lobe Configuration Rules
+
+**CRITICAL:** This runtime uses TWO separate AI models with DIFFERENT requirements.
+
+### Before Modifying Configuration:
+
+1. **Read [ARCHITECTURE.md](ARCHITECTURE.md)** - Understand the dual-lobe design
+2. **Check [LLAMA_SERVER_CONFIG.md](LLAMA_SERVER_CONFIG.md)** - See exact specifications
+3. **Never apply global settings** - Each lobe needs different GPU/performance config
+4. **Use `extraArgs` for lobe-specific settings** - Never modify base args in `startLobe()`
+
+### Configuration Mistakes to Avoid:
+
+❌ **DON'T:** Apply same GPU layers to both lobes
+❌ **DON'T:** Use same context size for both lobes
+❌ **DON'T:** Assume "if Qwen needs X, Phi needs X"
+❌ **DON'T:** Modify base args in the `startLobe()` function
+
+✅ **DO:** Configure each lobe independently via `extraArgs`
+✅ **DO:** Test both lobes separately
+✅ **DO:** Verify GPU memory usage per lobe
+✅ **DO:** Run validation: `npm run validate`
+
+### Why This Matters:
+
+- Qwen (14B parameters) and Phi (2.7B parameters) have **different VRAM needs**
+- Language processing needs **more context** than emotional processing
+- Misconfiguration costs time and money (slow CPU fallback, wasted resources)
+- Runtime validation will catch errors, but prevention is better
 
 ---
 

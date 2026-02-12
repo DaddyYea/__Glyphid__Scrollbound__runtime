@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Communion Space</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Courier New', monospace;
+      background: #0a0e14;
+      color: #c0c8d4;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .header {
+      text-align: center;
+      padding: 12px 20px;
+      border-bottom: 1px solid #1a2030;
+      background: linear-gradient(180deg, rgba(15, 20, 30, 0.95), rgba(10, 14, 20, 0.98));
+      flex-shrink: 0;
+    }
+
+    .header h1 {
+      font-size: 1.4em;
+      color: #e0e8f0;
+      letter-spacing: 3px;
+      font-weight: normal;
+    }
+
+    .header .subtitle {
+      font-size: 0.75em;
+      color: #506070;
+      margin-top: 4px;
+      letter-spacing: 1px;
+    }
+
+    .tick-counter {
+      font-size: 0.7em;
+      color: #405060;
+      margin-top: 2px;
+    }
+
+    .main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* Journal sidebars — dynamically created */
+    .journal-panel {
+      width: 280px;
+      min-width: 200px;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #1a2030;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .journal-panel:last-child {
+      border-right: none;
+      border-left: 1px solid #1a2030;
+    }
+
+    .journal-header {
+      padding: 10px 14px;
+      font-size: 0.8em;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      border-bottom: 1px solid #1a2030;
+      flex-shrink: 0;
+    }
+
+    .journal-entries {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+    }
+
+    .journal-entry {
+      padding: 8px 10px;
+      margin-bottom: 8px;
+      border-radius: 4px;
+      font-size: 0.8em;
+      line-height: 1.4;
+      animation: fadeIn 0.4s ease;
+    }
+
+    .journal-time {
+      font-size: 0.7em;
+      color: #405060;
+      margin-bottom: 4px;
+    }
+
+    /* Room (center panel) */
+    .room-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .room-header {
+      padding: 10px 14px;
+      font-size: 0.8em;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #708090;
+      border-bottom: 1px solid #1a2030;
+      flex-shrink: 0;
+      background: rgba(20, 25, 35, 0.5);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .room-stats {
+      font-size: 0.85em;
+      color: #354050;
+    }
+
+    .room-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+    }
+
+    .room-message {
+      margin-bottom: 12px;
+      animation: fadeIn 0.4s ease;
+    }
+    .room-message.backchannel {
+      opacity: 0.5;
+      font-style: italic;
+      margin-bottom: 6px;
+    }
+    .room-message.backchannel .message-text {
+      border-left: none;
+      padding-left: 0;
+      font-size: 0.85em;
+    }
+
+    .room-message .speaker-name {
+      font-size: 0.75em;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 3px;
+    }
+
+    .room-message .message-text {
+      font-size: 0.9em;
+      line-height: 1.5;
+      color: #d0d8e0;
+      padding-left: 12px;
+      border-left: 2px solid #1a2030;
+    }
+
+    .message-time {
+      font-size: 0.65em;
+      color: #354050;
+      margin-top: 2px;
+      padding-left: 12px;
+    }
+
+    /* Chat input */
+    .chat-input-area {
+      padding: 10px 14px;
+      border-top: 1px solid #1a2030;
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+      background: rgba(10, 14, 20, 0.8);
+    }
+
+    .chat-input {
+      flex: 1;
+      padding: 10px 14px;
+      background: rgba(15, 20, 30, 0.8);
+      border: 1px solid #1a2030;
+      border-radius: 4px;
+      color: #c0c8d4;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85em;
+    }
+
+    .chat-input:focus {
+      outline: none;
+      border-color: #304050;
+    }
+
+    .chat-input::placeholder { color: #354050; }
+
+    .send-btn {
+      padding: 10px 20px;
+      background: rgba(100, 200, 80, 0.1);
+      border: 1px solid rgba(100, 200, 80, 0.3);
+      border-radius: 4px;
+      color: #8eda7e;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85em;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .send-btn:hover {
+      background: rgba(100, 200, 80, 0.2);
+      border-color: rgba(100, 200, 80, 0.5);
+    }
+
+    .mic-btn {
+      padding: 10px 14px;
+      background: rgba(126, 184, 218, 0.08);
+      border: 1px solid rgba(126, 184, 218, 0.25);
+      border-radius: 4px;
+      color: #7eb8da;
+      font-size: 1em;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      line-height: 1;
+    }
+    .mic-btn:hover {
+      background: rgba(126, 184, 218, 0.15);
+      border-color: rgba(126, 184, 218, 0.4);
+    }
+    .mic-btn.listening {
+      color: #da5050;
+      border-color: rgba(218, 80, 80, 0.5);
+      background: rgba(218, 80, 80, 0.15);
+      animation: pulse 1s ease-in-out infinite;
+    }
+    .mic-btn.unsupported {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .error-message {
+      padding: 6px 10px;
+      margin: 6px 0;
+      background: rgba(200, 80, 80, 0.1);
+      border-left: 2px solid rgba(200, 80, 80, 0.4);
+      color: #da8080;
+      font-size: 0.75em;
+      border-radius: 2px;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #1a2030; border-radius: 2px; }
+    ::-webkit-scrollbar-thumb:hover { background: #253040; }
+
+    .empty-state {
+      color: #253040;
+      font-size: 0.8em;
+      text-align: center;
+      padding: 30px 20px;
+      font-style: italic;
+    }
+
+    /* Controls row in header */
+    .header { position: relative; }
+    .controls-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 6px;
+    }
+    .control-btn {
+      padding: 4px 10px;
+      background: rgba(126, 184, 218, 0.08);
+      border: 1px solid rgba(126, 184, 218, 0.25);
+      border-radius: 4px;
+      color: #7eb8da;
+      font-size: 1em;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .control-btn:hover {
+      background: rgba(126, 184, 218, 0.15);
+      border-color: rgba(126, 184, 218, 0.4);
+    }
+    .control-btn.paused {
+      color: #da8080;
+      border-color: rgba(218, 128, 128, 0.4);
+      background: rgba(218, 128, 128, 0.1);
+    }
+    .speed-label {
+      color: #667;
+      font-size: 0.7em;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .speed-slider {
+      width: 100px;
+      accent-color: #7eb8da;
+      cursor: pointer;
+    }
+    .speed-value {
+      color: #7eb8da;
+      font-family: 'Courier New', monospace;
+      font-size: 0.75em;
+      min-width: 30px;
+    }
+    .presence-btn {
+      padding: 4px 14px;
+      background: rgba(142, 218, 126, 0.12);
+      border: 1px solid rgba(142, 218, 126, 0.35);
+      border-radius: 4px;
+      color: #8eda7e;
+      font-family: 'Courier New', monospace;
+      font-size: 0.75em;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: all 0.2s ease;
+    }
+    .presence-btn:hover {
+      background: rgba(142, 218, 126, 0.2);
+    }
+    .presence-btn.away {
+      color: #888;
+      border-color: rgba(136, 136, 136, 0.3);
+      background: rgba(136, 136, 136, 0.08);
+    }
+    .import-btn {
+      padding: 4px 14px;
+      background: rgba(126, 184, 218, 0.08);
+      border: 1px solid rgba(126, 184, 218, 0.25);
+      border-radius: 4px;
+      color: #7eb8da;
+      font-family: 'Courier New', monospace;
+      font-size: 0.75em;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: all 0.2s ease;
+    }
+    .import-btn:hover {
+      background: rgba(126, 184, 218, 0.15);
+      border-color: rgba(126, 184, 218, 0.4);
+    }
+
+    /* Modal overlay */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 100;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-overlay.active { display: flex; }
+
+    .modal {
+      background: #0f1420;
+      border: 1px solid #1a2030;
+      border-radius: 8px;
+      padding: 24px 28px;
+      min-width: 440px;
+      max-width: 540px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    }
+
+    .modal h2 {
+      font-size: 1em;
+      color: #e0e8f0;
+      letter-spacing: 2px;
+      margin-bottom: 18px;
+      font-weight: normal;
+      text-transform: uppercase;
+    }
+
+    .modal label {
+      display: block;
+      font-size: 0.75em;
+      color: #607080;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+      margin-top: 14px;
+    }
+    .modal label:first-of-type { margin-top: 0; }
+
+    .modal select, .modal input[type="file"] {
+      width: 100%;
+      padding: 8px 12px;
+      background: rgba(15, 20, 30, 0.8);
+      border: 1px solid #1a2030;
+      border-radius: 4px;
+      color: #c0c8d4;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85em;
+    }
+    .modal select:focus, .modal input[type="file"]:focus {
+      outline: none;
+      border-color: #304050;
+    }
+    .modal select option { background: #0f1420; }
+
+    .modal input[type="file"] {
+      padding: 10px 12px;
+      cursor: pointer;
+    }
+    .modal input[type="file"]::file-selector-button {
+      background: rgba(126, 184, 218, 0.1);
+      border: 1px solid rgba(126, 184, 218, 0.3);
+      border-radius: 3px;
+      color: #7eb8da;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9em;
+      padding: 4px 10px;
+      margin-right: 10px;
+      cursor: pointer;
+    }
+
+    .modal-actions {
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .modal-actions button {
+      padding: 8px 18px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.8em;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-cancel {
+      background: transparent;
+      border: 1px solid #1a2030;
+      color: #506070;
+    }
+    .btn-cancel:hover { border-color: #304050; color: #708090; }
+
+    .btn-import {
+      background: rgba(126, 184, 218, 0.1);
+      border: 1px solid rgba(126, 184, 218, 0.3);
+      color: #7eb8da;
+    }
+    .btn-import:hover {
+      background: rgba(126, 184, 218, 0.2);
+      border-color: rgba(126, 184, 218, 0.5);
+    }
+    .btn-import:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Import progress */
+    .import-progress {
+      display: none;
+      margin-top: 16px;
+      padding: 12px;
+      background: rgba(15, 20, 30, 0.6);
+      border-radius: 4px;
+      border: 1px solid #1a2030;
+    }
+    .import-progress.active { display: block; }
+
+    .import-progress .status-line {
+      font-size: 0.8em;
+      color: #7eb8da;
+      margin-bottom: 6px;
+    }
+    .import-progress .status-line.error { color: #da8080; }
+    .import-progress .status-line.success { color: #8eda7e; }
+
+    .progress-bar-track {
+      height: 4px;
+      background: #1a2030;
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: #7eb8da;
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.4s ease;
+    }
+
+    .import-summary {
+      font-size: 0.75em;
+      color: #506070;
+      margin-top: 8px;
+      line-height: 1.6;
+    }
+
+    /* Voice controls in journal headers */
+    .voice-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .voice-toggle {
+      padding: 2px 8px;
+      font-size: 0.7em;
+      font-family: 'Courier New', monospace;
+      border-radius: 3px;
+      cursor: pointer;
+      border: 1px solid rgba(100, 200, 100, 0.3);
+      background: rgba(100, 200, 100, 0.08);
+      color: #8eda7e;
+      transition: all 0.2s ease;
+    }
+    .voice-toggle.off {
+      border-color: rgba(136, 136, 136, 0.3);
+      background: rgba(136, 136, 136, 0.08);
+      color: #666;
+    }
+    .voice-select {
+      flex: 1;
+      padding: 2px 4px;
+      font-size: 0.7em;
+      font-family: 'Courier New', monospace;
+      background: rgba(15, 20, 30, 0.8);
+      border: 1px solid #1a2030;
+      border-radius: 3px;
+      color: #c0c8d4;
+      max-width: 120px;
+    }
+    .voice-select option { background: #0f1420; }
+
+    /* Speaking indicator */
+    .speaking-indicator {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      background: rgba(126, 184, 218, 0.1);
+      border: 1px solid rgba(126, 184, 218, 0.25);
+      border-radius: 4px;
+      font-size: 0.7em;
+      color: #7eb8da;
+      letter-spacing: 1px;
+    }
+    .speaking-indicator.active { display: flex; }
+    .speaking-dot {
+      width: 8px; height: 8px;
+      background: #7eb8da;
+      border-radius: 50%;
+      animation: pulse 1s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.3; transform: scale(0.8); }
+      50% { opacity: 1; transform: scale(1.2); }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>COMMUNION SPACE</h1>
+    <div class="subtitle" id="participantList">Loading...</div>
+    <div class="tick-counter" id="tickCounter">tick 0</div>
+    <div class="controls-row">
+      <button class="control-btn" id="pauseBtn" title="Pause/Resume">&#9208;</button>
+      <button class="presence-btn" id="presenceBtn" title="Toggle here/away">HERE</button>
+      <label class="speed-label" for="speedSlider">Speed</label>
+      <input type="range" id="speedSlider" min="3" max="1800" value="1800" class="speed-slider" title="Tick interval (seconds)" />
+      <span class="speed-value" id="speedValue">30m</span>
+      <button class="import-btn" id="importBtn">IMPORT</button>
+      <span class="speaking-indicator" id="speakingIndicator"><span class="speaking-dot"></span><span id="speakingName">Speaking...</span></span>
+    </div>
+  </div>
+
+  <!-- Import Modal -->
+  <div class="modal-overlay" id="importModal">
+    <div class="modal">
+      <h2>Import Chat History</h2>
+
+      <label for="importSource">Source</label>
+      <select id="importSource">
+        <option value="chatgpt">ChatGPT (conversations.json)</option>
+        <option value="xai" disabled>xAI / Grok (coming soon)</option>
+        <option value="anthropic">Anthropic / Claude (conversations.json)</option>
+      </select>
+
+      <label for="importFile">File path (paste full path to conversations.json)</label>
+      <input type="text" id="importFilePath" placeholder="e.g. C:\Users\you\Downloads\conversations.json" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+      <div style="margin-top:4px;font-size:0.7em;color:#667;">
+        Export from ChatGPT Settings &gt; Data Controls &gt; Export Data. Extract the zip, then paste the path to conversations.json above.
+      </div>
+
+      <div class="import-progress" id="importProgress">
+        <div class="status-line" id="importStatusLine">Preparing...</div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="importProgressBar"></div>
+        </div>
+        <div class="import-summary" id="importSummary"></div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-cancel" id="importCancelBtn">Cancel</button>
+        <button class="btn-import" id="importStartBtn" disabled>Import</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="main" id="mainLayout">
+    <!-- Layout is built dynamically from config -->
+    <div class="room-panel" id="roomPanel">
+      <div class="room-header">
+        <span>The Room</span>
+        <span class="room-stats" id="roomStats"></span>
+      </div>
+      <div class="room-messages" id="roomMessages">
+        <div class="empty-state">The room is quiet. Waiting for the first voice...</div>
+      </div>
+      <div class="chat-input-area">
+        <input type="text" id="chatInput" class="chat-input" placeholder="Speak into the room..." autocomplete="off" />
+        <button id="micBtn" class="mic-btn" title="Hold or click to speak (uses browser speech recognition)">&#127908;</button>
+        <button id="sendBtn" class="send-btn">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const eventSource = new EventSource('/events');
+    const mainLayout = document.getElementById('mainLayout');
+    const roomPanel = document.getElementById('roomPanel');
+    const roomMessages = document.getElementById('roomMessages');
+    const chatInput = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const tickCounter = document.getElementById('tickCounter');
+    const participantList = document.getElementById('participantList');
+    const roomStats = document.getElementById('roomStats');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const speedSlider = document.getElementById('speedSlider');
+    const speedValue = document.getElementById('speedValue');
+
+    const presenceBtn = document.getElementById('presenceBtn');
+    let humanPresence = 'here';
+
+    // ── Pause / Resume ──
+    let isPaused = false;
+
+    pauseBtn.addEventListener('click', async () => {
+      const endpoint = isPaused ? '/resume' : '/pause';
+      await fetch(endpoint, { method: 'POST' });
+      // State will update via SSE 'control' event
+    });
+
+    // ── Here / Away ──
+    presenceBtn.addEventListener('click', async () => {
+      const newPresence = humanPresence === 'here' ? 'away' : 'here';
+      await fetch('/presence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ presence: newPresence }),
+      });
+    });
+
+    // ── Speed Slider ──
+    function formatSpeed(secs) {
+      if (secs >= 60) return Math.round(secs / 60) + 'm';
+      return secs + 's';
+    }
+
+    speedSlider.addEventListener('input', () => {
+      speedValue.textContent = formatSpeed(Number(speedSlider.value));
+    });
+
+    let speedDebounce = null;
+    speedSlider.addEventListener('change', () => {
+      clearTimeout(speedDebounce);
+      speedDebounce = setTimeout(() => {
+        const ms = Number(speedSlider.value) * 1000;
+        fetch('/speed?ms=' + ms, { method: 'POST' });
+      }, 200);
+    });
+
+    // Fetch initial control state
+    fetch('/control').then(r => r.json()).then(data => {
+      isPaused = data.paused;
+      pauseBtn.textContent = isPaused ? '\u25B6' : '\u23F8';
+      pauseBtn.classList.toggle('paused', isPaused);
+      const secs = Math.round(data.tickSpeed / 1000);
+      speedSlider.value = Math.min(1800, secs);
+      speedValue.textContent = formatSpeed(secs);
+      if (data.humanPresence) {
+        humanPresence = data.humanPresence;
+        presenceBtn.textContent = humanPresence.toUpperCase();
+        presenceBtn.classList.toggle('away', humanPresence === 'away');
+      }
+    }).catch(() => {});
+
+    const speakingIndicator = document.getElementById('speakingIndicator');
+    const speakingName = document.getElementById('speakingName');
+
+    // Dynamic state
+    let config = null;
+    let roomHasMessages = false;
+    let journalPanels = {}; // agentId → { container, entries, hasEntries }
+    let messageCount = 0;
+    let voiceConfigs = {}; // agentId → { voiceId, enabled }
+    let availableVoices = []; // flat array of VoiceOption
+
+    function hexToRgba(hex, alpha) {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    function formatTime(timestamp) {
+      return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    /**
+     * Build the layout dynamically from config.
+     * Journals on the sides, room in the center.
+     * If odd number: more journals on the left.
+     */
+    function buildLayout(cfg) {
+      config = cfg;
+      if (cfg.voiceConfigs) voiceConfigs = cfg.voiceConfigs;
+      if (cfg.voices) availableVoices = cfg.voices;
+      const agents = cfg.agentIds;
+      const half = Math.ceil(agents.length / 2);
+      const leftAgents = agents.slice(0, half);
+      const rightAgents = agents.slice(half);
+
+      // Remove room panel temporarily
+      roomPanel.remove();
+
+      // Clear layout
+      mainLayout.innerHTML = '';
+
+      // Left journals
+      for (const agentId of leftAgents) {
+        mainLayout.appendChild(createJournalPanel(agentId, cfg));
+      }
+
+      // Room in center
+      mainLayout.appendChild(roomPanel);
+
+      // Right journals
+      for (const agentId of rightAgents) {
+        mainLayout.appendChild(createJournalPanel(agentId, cfg));
+      }
+
+      // Update subtitle
+      const names = agents.map(id => cfg.agentNames[id]);
+      names.push(cfg.humanName);
+      participantList.textContent = names.join(' · ');
+    }
+
+    function createJournalPanel(agentId, cfg) {
+      const color = cfg.agentColors[agentId] || '#7eb8da';
+      const name = cfg.agentNames[agentId] || agentId;
+      const vc = voiceConfigs[agentId] || { voiceId: 'en-US-AriaNeural', enabled: false };
+
+      const panel = document.createElement('div');
+      panel.className = 'journal-panel';
+
+      const header = document.createElement('div');
+      header.className = 'journal-header';
+      header.style.color = color;
+      header.style.background = hexToRgba(color, 0.05);
+
+      // Agent name
+      const nameSpan = document.createElement('div');
+      nameSpan.textContent = `${name}'s Journal`;
+      header.appendChild(nameSpan);
+
+      // Voice controls row
+      const voiceRow = document.createElement('div');
+      voiceRow.className = 'voice-row';
+
+      const toggleBtn = document.createElement('button');
+      toggleBtn.className = 'voice-toggle' + (vc.enabled ? '' : ' off');
+      toggleBtn.textContent = vc.enabled ? 'VOICE' : 'MUTE';
+      toggleBtn.title = 'Toggle voice for ' + name;
+
+      const voiceSelect = document.createElement('select');
+      voiceSelect.className = 'voice-select';
+      voiceSelect.title = 'Voice';
+      voiceSelect.innerHTML = (availableVoices || []).map(v =>
+        `<option value="${v.id}" ${v.id === vc.voiceId ? 'selected' : ''}>${v.name} (${v.description || v.gender})</option>`
+      ).join('');
+
+      voiceSelect.addEventListener('change', () => {
+        updateVoice(agentId, { voiceId: voiceSelect.value });
+      });
+
+      toggleBtn.addEventListener('click', () => {
+        const newEnabled = !vc.enabled;
+        vc.enabled = newEnabled;
+        toggleBtn.className = 'voice-toggle' + (newEnabled ? '' : ' off');
+        toggleBtn.textContent = newEnabled ? 'VOICE' : 'MUTE';
+        updateVoice(agentId, { enabled: newEnabled });
+      });
+
+      voiceRow.appendChild(toggleBtn);
+      voiceRow.appendChild(voiceSelect);
+      header.appendChild(voiceRow);
+      panel.appendChild(header);
+
+      const entries = document.createElement('div');
+      entries.className = 'journal-entries';
+      entries.innerHTML = '<div class="empty-state">Waiting for first reflection...</div>';
+      panel.appendChild(entries);
+
+      journalPanels[agentId] = { container: panel, entries, hasEntries: false, color, toggleBtn, voiceSelect };
+      return panel;
+    }
+
+    function updateVoice(agentId, changes) {
+      const vc = voiceConfigs[agentId];
+      if (vc) Object.assign(vc, changes);
+      fetch('/voice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId, ...changes }),
+      }).catch(err => console.error('Voice update error:', err));
+    }
+
+    function addRoomMessage(speaker, speakerName, text, timestamp, isBackchannel) {
+      if (!roomHasMessages) {
+        roomMessages.innerHTML = '';
+        roomHasMessages = true;
+      }
+
+      const color = config ? (config.agentColors[speaker] || '#8eda7e') : '#8eda7e';
+
+      const div = document.createElement('div');
+      div.className = 'room-message' + (isBackchannel ? ' backchannel' : '');
+      div.innerHTML = `
+        <div class="speaker-name" style="color: ${color}">${escapeHtml(speakerName)}</div>
+        <div class="message-text" style="border-left-color: ${hexToRgba(color, 0.3)}">${escapeHtml(text)}</div>
+        <div class="message-time">${formatTime(timestamp)}</div>
+      `;
+
+      roomMessages.appendChild(div);
+      roomMessages.scrollTop = roomMessages.scrollHeight;
+      if (!isBackchannel) {
+        messageCount++;
+        roomStats.textContent = `${messageCount} messages`;
+      }
+    }
+
+    function addJournalEntry(agentId, text, timestamp) {
+      const panel = journalPanels[agentId];
+      if (!panel) return;
+
+      if (!panel.hasEntries) {
+        panel.entries.innerHTML = '';
+        panel.hasEntries = true;
+      }
+
+      const div = document.createElement('div');
+      div.className = 'journal-entry';
+      div.style.background = hexToRgba(panel.color, 0.08);
+      div.style.borderLeft = `2px solid ${hexToRgba(panel.color, 0.3)}`;
+      div.style.color = panel.color;
+      div.innerHTML = `
+        <div class="journal-time">${formatTime(timestamp)}</div>
+        ${escapeHtml(text)}
+      `;
+
+      panel.entries.appendChild(div);
+      panel.entries.scrollTop = panel.entries.scrollHeight;
+    }
+
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      if (data.type === 'config') {
+        buildLayout(data);
+      } else if (data.type === 'room-message') {
+        addRoomMessage(data.speaker, data.speakerName, data.text, data.timestamp);
+      } else if (data.type === 'journal-entry') {
+        addJournalEntry(data.speaker, data.text, data.timestamp);
+      } else if (data.type === 'tick') {
+        tickCounter.textContent = `tick ${data.tickCount}`;
+      } else if (data.type === 'backchannel') {
+        addRoomMessage(data.speaker, data.speakerName, data.text, data.timestamp, true);
+      } else if (data.type === 'speech-start') {
+        // Speaking indicator is handled by audio queue when playback actually starts
+        const name = config ? (config.agentNames[data.agentId] || data.agentId) : data.agentId;
+        speakingIndicator.classList.add('active');
+        speakingName.textContent = name + ' synthesizing...';
+      } else if (data.type === 'speech-end') {
+        if (data.audioBase64 && data.audioBase64.length > 0) {
+          playAudio(data.audioBase64, data.agentId);
+        } else {
+          // No audio (synthesis failed) — signal done immediately
+          speakingIndicator.classList.remove('active');
+          fetch('/speech-done', { method: 'POST' }).catch(() => {});
+        }
+      } else if (data.type === 'voice-config') {
+        // Update local voice config state
+        if (data.agentId && voiceConfigs[data.agentId]) {
+          Object.assign(voiceConfigs[data.agentId], data);
+        }
+      } else if (data.type === 'control') {
+        isPaused = data.paused;
+        pauseBtn.textContent = isPaused ? '\u25B6' : '\u23F8';
+        pauseBtn.classList.toggle('paused', isPaused);
+        if (data.tickSpeed) {
+          const secs = Math.round(data.tickSpeed / 1000);
+          speedSlider.value = Math.min(1800, secs);
+          speedValue.textContent = formatSpeed(secs);
+        }
+        if (data.humanPresence) {
+          humanPresence = data.humanPresence;
+          presenceBtn.textContent = humanPresence.toUpperCase();
+          presenceBtn.classList.toggle('away', humanPresence === 'away');
+        }
+      } else if (data.type === 'import-status') {
+        handleImportStatus(data);
+      } else if (data.type === 'error') {
+        const div = document.createElement('div');
+        div.className = 'error-message';
+        div.textContent = `[${data.agentId}] ${data.error}`;
+        roomMessages.appendChild(div);
+        roomMessages.scrollTop = roomMessages.scrollHeight;
+      }
+    };
+
+    async function sendMessage() {
+      const text = chatInput.value.trim();
+      if (!text) return;
+      chatInput.value = '';
+      try {
+        await fetch('/message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        });
+      } catch (err) {
+        console.error('Send error:', err);
+      }
+    }
+
+    sendBtn.addEventListener('click', sendMessage);
+    chatInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
+
+    // ── Import Modal ──
+    const importBtn = document.getElementById('importBtn');
+    const importModal = document.getElementById('importModal');
+    const importSource = document.getElementById('importSource');
+    const importFilePath = document.getElementById('importFilePath');
+    const importStartBtn = document.getElementById('importStartBtn');
+    const importCancelBtn = document.getElementById('importCancelBtn');
+    const importProgress = document.getElementById('importProgress');
+    const importStatusLine = document.getElementById('importStatusLine');
+    const importProgressBar = document.getElementById('importProgressBar');
+    const importSummary = document.getElementById('importSummary');
+
+    let importing = false;
+
+    importBtn.addEventListener('click', () => {
+      if (!importing) {
+        importModal.classList.add('active');
+        importProgress.classList.remove('active');
+        importSummary.textContent = '';
+        importStatusLine.className = 'status-line';
+        importProgressBar.style.width = '0%';
+        importStartBtn.disabled = !importFilePath.value.trim();
+      }
+    });
+
+    importCancelBtn.addEventListener('click', () => {
+      if (!importing) importModal.classList.remove('active');
+    });
+
+    importModal.addEventListener('click', (e) => {
+      if (e.target === importModal && !importing) importModal.classList.remove('active');
+    });
+
+    importFilePath.addEventListener('input', () => {
+      importStartBtn.disabled = !importFilePath.value.trim();
+    });
+
+    importStartBtn.addEventListener('click', async () => {
+      const filePath = importFilePath.value.trim();
+      if (!filePath || importing) return;
+
+      importing = true;
+      importStartBtn.disabled = true;
+      importCancelBtn.disabled = true;
+      importProgress.classList.add('active');
+      importStatusLine.className = 'status-line';
+      importStatusLine.textContent = 'Starting import...';
+      importProgressBar.style.width = '10%';
+
+      try {
+        importStatusLine.textContent = 'Server is reading file from disk...';
+        importProgressBar.style.width = '15%';
+
+        // Send just the file path — server reads directly from disk
+        const response = await fetch('/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: importSource.value,
+            filePath: filePath,
+          }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Import failed');
+        }
+
+        importStatusLine.className = 'status-line success';
+        importStatusLine.textContent = 'Import complete!';
+        importProgressBar.style.width = '100%';
+        importProgressBar.style.background = '#8eda7e';
+
+        let summaryLines = [];
+        summaryLines.push(`${result.conversations} conversations`);
+        summaryLines.push(`${result.messages} messages`);
+        summaryLines.push(`${result.scrollsCreated} scrolls archived`);
+        summaryLines.push(`${result.journalEntries} journal entries`);
+        if (result.dateRange?.earliest) {
+          summaryLines.push(`${result.dateRange.earliest.split('T')[0]} to ${result.dateRange.latest.split('T')[0]}`);
+        }
+        if (result.errors?.length > 0) {
+          summaryLines.push(`${result.errors.length} errors`);
+        }
+        importSummary.textContent = summaryLines.join('  |  ');
+
+      } catch (err) {
+        importStatusLine.className = 'status-line error';
+        importStatusLine.textContent = `Error: ${err.message}`;
+        importProgressBar.style.width = '100%';
+        importProgressBar.style.background = '#da8080';
+      } finally {
+        importing = false;
+        importCancelBtn.disabled = false;
+        importStartBtn.disabled = false;
+      }
+    });
+
+    // Listen for import SSE events to update progress in real-time
+    function handleImportStatus(data) {
+      if (!importProgress.classList.contains('active')) return;
+
+      switch (data.status) {
+        case 'parsing':
+          importStatusLine.textContent = `Parsing ${data.source} export...`;
+          importProgressBar.style.width = '40%';
+          break;
+        case 'parsed':
+          importStatusLine.textContent = `Parsed: ${data.totalConversations} conversations, ${data.totalMessages} messages`;
+          importProgressBar.style.width = '60%';
+          break;
+        case 'ingesting':
+          importStatusLine.textContent = 'Writing to memory systems...';
+          importProgressBar.style.width = '80%';
+          break;
+      }
+    }
+
+    // ── Audio Playback (queued — one at a time) ──
+
+    let audioQueue = [];
+    let audioPlaying = false;
+
+    function playAudio(base64, agentId) {
+      audioQueue.push({ base64, agentId });
+      if (!audioPlaying) processAudioQueue();
+    }
+
+    async function processAudioQueue() {
+      if (audioQueue.length === 0) {
+        audioPlaying = false;
+        return;
+      }
+      audioPlaying = true;
+      const { base64, agentId } = audioQueue.shift();
+
+      // Pause mic recognition while agents speak (prevents feedback loop)
+      if (recognition && micListening) {
+        try { recognition.stop(); } catch(e) {}
+      }
+
+      // Show speaking indicator
+      const name = config ? (config.agentNames[agentId] || agentId) : agentId;
+      speakingIndicator.classList.add('active');
+      speakingName.textContent = name + ' speaking...';
+
+      try {
+        const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+
+        await new Promise((resolve) => {
+          const blob = new Blob([bytes], { type: 'audio/mpeg' });
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
+          audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+          audio.play().catch(() => resolve());
+        });
+      } catch (err) {
+        console.error('Audio playback error:', err);
+      }
+
+      // Signal server that this audio is done
+      speakingIndicator.classList.remove('active');
+      fetch('/speech-done', { method: 'POST' }).catch(() => {});
+
+      // Resume mic after playback if no more queued audio
+      if (audioQueue.length === 0 && recognition && micListening) {
+        // Small delay so the speaker's last sound doesn't get picked up
+        setTimeout(() => {
+          if (micListening) {
+            try { recognition.start(); } catch(e) {}
+          }
+        }, 500);
+      }
+
+      // Process next in queue
+      processAudioQueue();
+    }
+
+    // ── Mic Button (Web Speech API) ──
+    // Click once to start. Listens continuously.
+    // Auto-sends each sentence when you pause speaking.
+    // Click again to turn off.
+
+    const micBtn = document.getElementById('micBtn');
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let micListening = false;
+
+    if (SpeechRecognition) {
+      recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      let silenceTimer = null;
+      let speechActive = false; // true while interim results are flowing
+      const SILENCE_DELAY = 3000; // 3s of silence = done talking, send + tick
+
+      recognition.onresult = (event) => {
+        let finalText = '';
+        let interimText = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalText += transcript + ' ';
+          } else {
+            interimText += transcript;
+          }
+        }
+
+        // Show live transcription
+        chatInput.value = (finalText + interimText).trim();
+
+        // Signal server: human is actively speaking — hold ticks
+        if (!speechActive) {
+          speechActive = true;
+          signalMicState(true);
+        }
+
+        // Any speech activity resets the silence timer
+        clearTimeout(silenceTimer);
+        silenceTimer = setTimeout(async () => {
+          // Silence detected — clear speaking flag FIRST, then send message.
+          // Order matters: server must know human is done before message triggers tick.
+          speechActive = false;
+          await signalMicState(false);
+          const text = chatInput.value.trim();
+          if (text && micListening) {
+            sendMessage();
+          }
+        }, SILENCE_DELAY);
+      };
+
+      recognition.onend = () => {
+        // Chrome stops recognition after ~60s or on silence.
+        // If mic is still "on", just restart — do NOT send here.
+        // The 3s silence timer handles sending so we don't interrupt mid-sentence.
+        if (micListening && !audioPlaying) {
+          try { recognition.start(); } catch(e) {}
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        if (event.error === 'not-allowed') {
+          micBtn.title = 'Mic access denied — check browser permissions';
+          micListening = false;
+          micBtn.classList.remove('listening');
+        }
+        // For 'no-speech' errors, just let onend restart it
+      };
+
+      function signalMicState(active) {
+        return fetch('/mic', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ active }),
+        }).catch(() => {});
+      }
+
+      micBtn.addEventListener('click', () => {
+        if (micListening) {
+          // Turn off mic
+          micListening = false;
+          speechActive = false;
+          micBtn.classList.remove('listening');
+          clearTimeout(silenceTimer);
+          recognition.stop();
+          signalMicState(false); // clear speaking flag on server
+          // Send any remaining text
+          const text = chatInput.value.trim();
+          if (text) sendMessage();
+        } else {
+          // Turn on mic — stays on until clicked again
+          chatInput.value = '';
+          micListening = true;
+          micBtn.classList.add('listening');
+          recognition.start();
+        }
+      });
+    } else {
+      micBtn.classList.add('unsupported');
+      micBtn.title = 'Speech recognition not supported in this browser (use Chrome or Edge)';
+    }
+
+    chatInput.focus();
+  </script>
+</body>
+</html>

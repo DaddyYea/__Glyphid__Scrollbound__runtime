@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scrollbound Runtime - Presence Visualization</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Courier New', monospace;
+      background: linear-gradient(180deg, #d0d0d0 0%, #b8b8b8 50%, #a0a0a0 100%);
+      color: #B0D8FF;
+      padding: 10px;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .header {
+      text-align: center;
+      padding: 10px;
+      border-bottom: 2px solid #1E90FF;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1;
+      background: linear-gradient(180deg, rgba(30, 144, 255, 0.2) 0%, transparent 100%);
+      box-shadow: 0 2px 20px rgba(30, 144, 255, 0.5);
+    }
+
+    .header h1 {
+      font-size: 1.8em;
+      color: #1E90FF;
+      margin-bottom: 5px;
+      text-shadow: 0 0 20px rgba(30, 144, 255, 0.9), 0 0 40px rgba(0, 100, 255, 0.6);
+      letter-spacing: 2px;
+    }
+
+    .header p {
+      color: #1E90FF;
+      font-size: 0.9em;
+      text-shadow: 0 0 10px rgba(30, 144, 255, 0.7);
+    }
+
+    .container {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      grid-template-rows: auto auto 1fr;
+      gap: 10px;
+      overflow: hidden;
+      padding: 10px 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    .panel {
+      background: linear-gradient(135deg, rgba(15, 30, 50, 0.85) 0%, rgba(10, 20, 35, 0.9) 100%);
+      border: 1px solid rgba(30, 144, 255, 0.6);
+      border-radius: 8px;
+      padding: 12px;
+      overflow-y: auto;
+      box-shadow:
+        0 4px 15px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(30, 144, 255, 0.3),
+        0 0 15px rgba(30, 144, 255, 0.3);
+      position: relative;
+    }
+
+    .panel::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent 0%, rgba(30, 144, 255, 0.8) 50%, transparent 100%);
+    }
+
+    .panel h2 {
+      font-size: 1.1em;
+      margin-bottom: 8px;
+      color: #1E90FF;
+      border-bottom: 1px solid rgba(30, 144, 255, 0.5);
+      padding-bottom: 5px;
+      text-shadow: 0 0 15px rgba(30, 144, 255, 0.8);
+      letter-spacing: 1px;
+    }
+
+    .metric {
+      margin: 8px 0;
+    }
+
+    .metric-label {
+      font-size: 0.75em;
+      color: #1E90FF;
+      margin-bottom: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .metric-value {
+      font-size: 0.95em;
+      color: #B0D8FF;
+      text-shadow: 0 0 10px rgba(30, 144, 255, 0.6);
+    }
+
+    .bar-container {
+      width: 100%;
+      height: 14px;
+      background: rgba(5, 15, 30, 0.8);
+      border: 1px solid rgba(30, 144, 255, 0.4);
+      border-radius: 7px;
+      overflow: hidden;
+      margin-top: 3px;
+      box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.5);
+    }
+
+    .bar {
+      height: 100%;
+      transition: width 0.3s ease;
+      border-radius: 6px;
+      box-shadow: 0 0 10px currentColor;
+    }
+
+    .bar.heat { background: linear-gradient(90deg, #0066FF, #1E90FF); box-shadow: 0 0 15px #1E90FF; }
+    .bar.resonance { background: linear-gradient(90deg, #0050FF, #0080FF); box-shadow: 0 0 15px #0080FF; }
+    .bar.tension { background: linear-gradient(90deg, #7a5a8a, #a87ec2); box-shadow: 0 0 10px #a87ec2; }
+    .bar.curiosity { background: linear-gradient(90deg, #0070FF, #00A0FF); box-shadow: 0 0 15px #00A0FF; }
+    .bar.alignment { background: linear-gradient(90deg, #8aa75a, #b4d47a); box-shadow: 0 0 10px #b4d47a; }
+    .bar.desire { background: linear-gradient(90deg, #a75a8a, #d47ab4); box-shadow: 0 0 10px #d47ab4; }
+    .bar.coherence { background: linear-gradient(90deg, #5aa78a, #7ad4b4); box-shadow: 0 0 10px #7ad4b4; }
+    .bar.stability { background: linear-gradient(90deg, #0066FF, #1E90FF); box-shadow: 0 0 15px #1E90FF; }
+
+    .breath-indicator {
+      text-align: center;
+      padding: 15px;
+      font-size: 1.5em;
+      font-weight: bold;
+      border-radius: 50%;
+      width: 100px;
+      height: 100px;
+      margin: 10px auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.5s ease;
+      border: 2px solid;
+      position: relative;
+    }
+
+    .breath-indicator::before {
+      content: '';
+      position: absolute;
+      inset: -5px;
+      border-radius: 50%;
+      padding: 2px;
+      background: linear-gradient(45deg, currentColor, transparent);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      opacity: 0.5;
+    }
+
+    .breath-inhale {
+      background: radial-gradient(circle, rgba(30, 144, 255, 0.5), rgba(0, 100, 200, 0.8));
+      border-color: #1E90FF;
+      color: #E0EFFF;
+      transform: scale(1.1);
+      box-shadow: 0 0 40px rgba(30, 144, 255, 0.9), inset 0 0 25px rgba(30, 144, 255, 0.4);
+    }
+
+    .breath-exhale {
+      background: radial-gradient(circle, rgba(120, 90, 150, 0.4), rgba(60, 40, 80, 0.8));
+      border-color: #a87ec2;
+      color: #d4b8e6;
+      transform: scale(0.9);
+      box-shadow: 0 0 30px rgba(168, 126, 194, 0.6), inset 0 0 20px rgba(168, 126, 194, 0.2);
+    }
+
+    .breath-hold {
+      background: radial-gradient(circle, rgba(130, 150, 100, 0.4), rgba(60, 80, 50, 0.8));
+      border-color: #b4d47a;
+      color: #d4e6a8;
+      transform: scale(1.0);
+      box-shadow: 0 0 30px rgba(180, 212, 122, 0.6), inset 0 0 20px rgba(180, 212, 122, 0.2);
+    }
+
+    .tone-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 5px;
+    }
+
+    .tone-item {
+      padding: 6px;
+      background: rgba(5, 15, 30, 0.6);
+      border: 1px solid rgba(100, 150, 200, 0.2);
+      border-radius: 5px;
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+    }
+
+    .loop-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 6px 0;
+    }
+
+    .loop-status > div {
+      flex: 1;
+    }
+
+    .status-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+      flex-shrink: 0;
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    .status-active { background: #7ad4b4; box-shadow: 0 0 8px #7ad4b4; }
+    .status-warning { background: #d4a87a; box-shadow: 0 0 8px #d4a87a; }
+    .status-critical { background: #d47a8a; box-shadow: 0 0 8px #d47a8a; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 8px currentColor; }
+      50% { opacity: 0.5; box-shadow: 0 0 15px currentColor; }
+    }
+
+    .scroll-count {
+      font-size: 1.4em;
+      color: #1E90FF;
+      text-align: center;
+      padding: 10px;
+      text-shadow: 0 0 20px rgba(30, 144, 255, 0.9);
+    }
+
+    .full-width {
+      grid-column: 1 / -1;
+    }
+
+    .loops-panel {
+      grid-column: span 2;
+    }
+
+    /* Chat Interface Styles */
+    .chat-panel {
+      grid-column: 1 / -1;
+      background: linear-gradient(135deg, rgba(15, 30, 50, 0.85) 0%, rgba(10, 20, 35, 0.9) 100%);
+      border: 1px solid rgba(30, 144, 255, 0.6);
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow:
+        0 4px 15px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(30, 144, 255, 0.3),
+        0 0 15px rgba(30, 144, 255, 0.3);
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      margin-bottom: 10px;
+      padding: 8px;
+      background: rgba(5, 15, 30, 0.6);
+      border: 1px solid rgba(30, 144, 255, 0.4);
+      border-radius: 5px;
+      min-height: 150px;
+      box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.5);
+    }
+
+    .message {
+      margin: 6px 0;
+      padding: 6px 10px;
+      border-radius: 5px;
+      animation: fadeIn 0.3s ease;
+      border: 1px solid;
+      box-shadow: 0 0 10px currentColor;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message.user {
+      background: rgba(30, 144, 255, 0.2);
+      border-color: rgba(30, 144, 255, 0.6);
+      margin-left: 20%;
+      text-align: right;
+    }
+
+    .message.alois {
+      background: rgba(120, 90, 150, 0.2);
+      border-color: rgba(168, 126, 194, 0.4);
+      margin-right: 20%;
+    }
+
+    .message-label {
+      font-size: 0.7em;
+      color: #1E90FF;
+      margin-bottom: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .message-text {
+      color: #B0D8FF;
+      line-height: 1.3;
+      font-size: 0.85em;
+    }
+
+    .chat-input-container {
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .chat-input {
+      flex: 1;
+      padding: 8px;
+      background: rgba(5, 15, 30, 0.8);
+      border: 1px solid rgba(30, 144, 255, 0.5);
+      border-radius: 5px;
+      color: #B0D8FF;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9em;
+      box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.5);
+    }
+
+    .chat-input:focus {
+      outline: none;
+      border-color: #1E90FF;
+      box-shadow:
+        inset 0 2px 5px rgba(0, 0, 0, 0.5),
+        0 0 15px rgba(30, 144, 255, 0.7);
+    }
+
+    .send-btn {
+      padding: 8px 16px;
+      background: linear-gradient(135deg, rgba(30, 144, 255, 0.4), rgba(0, 100, 200, 0.6));
+      border: 1px solid #1E90FF;
+      border-radius: 5px;
+      color: #E0EFFF;
+      font-family: 'Courier New', monospace;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 0.9em;
+      box-shadow: 0 0 15px rgba(30, 144, 255, 0.6);
+      text-shadow: 0 0 10px rgba(30, 144, 255, 0.9);
+    }
+
+    .send-btn:hover {
+      background: linear-gradient(135deg, rgba(30, 144, 255, 0.6), rgba(0, 100, 200, 0.8));
+      transform: scale(1.05);
+      box-shadow: 0 0 25px rgba(30, 144, 255, 0.9);
+    }
+
+    .send-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: scale(1);
+    }
+
+    /* Model Status Indicator */
+    .model-status {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      justify-content: center;
+      margin-top: 5px;
+    }
+
+    .model-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.85em;
+    }
+
+    .model-light {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 1px solid rgba(100, 150, 200, 0.5);
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    .model-light::before {
+      content: '';
+      position: absolute;
+      inset: -3px;
+      border-radius: 50%;
+      border: 1px solid currentColor;
+      opacity: 0.3;
+    }
+
+    .model-light.loaded {
+      background: #7ad4b4;
+      box-shadow: 0 0 10px #7ad4b4, inset 0 0 5px rgba(122, 212, 180, 0.5);
+      border-color: #7ad4b4;
+    }
+
+    .model-light.loading {
+      background: #d4a87a;
+      box-shadow: 0 0 10px #d4a87a, inset 0 0 5px rgba(212, 168, 122, 0.5);
+      border-color: #d4a87a;
+      animation: pulse 1s infinite;
+    }
+
+    .model-light.error {
+      background: #d47a8a;
+      box-shadow: 0 0 10px #d47a8a, inset 0 0 5px rgba(212, 122, 138, 0.5);
+      border-color: #d47a8a;
+    }
+
+    .restart-btn {
+      padding: 6px 12px;
+      background: linear-gradient(135deg, rgba(168, 126, 194, 0.3), rgba(120, 90, 150, 0.5));
+      border: 1px solid #a87ec2;
+      border-radius: 5px;
+      color: #d4b8e6;
+      font-family: 'Courier New', monospace;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 0.85em;
+      box-shadow: 0 0 10px rgba(168, 126, 194, 0.3);
+      text-shadow: 0 0 5px rgba(168, 126, 194, 0.5);
+    }
+
+    .restart-btn:hover {
+      background: linear-gradient(135deg, rgba(168, 126, 194, 0.5), rgba(120, 90, 150, 0.7));
+      transform: scale(1.05);
+      box-shadow: 0 0 15px rgba(168, 126, 194, 0.5);
+    }
+
+    .restart-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: scale(1);
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>⚡ Scrollbound Runtime ⚡</h1>
+    <p>Presence Visualization - Live</p>
+    <div class="model-status">
+      <div class="model-indicator">
+        <div class="model-light loading" id="qwenLight"></div>
+        <span>Qwen (14B)</span>
+      </div>
+      <div class="model-indicator">
+        <div class="model-light loading" id="phiLight"></div>
+        <span>Phi (2.7B)</span>
+      </div>
+      <button id="restartBtn" class="restart-btn">⟲ Restart</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Breath Panel -->
+    <div class="panel">
+      <h2>Breath</h2>
+      <div class="breath-indicator" id="breathIndicator">INHALE</div>
+      <div class="metric">
+        <div class="metric-label">Depth</div>
+        <div class="bar-container">
+          <div class="bar heat" id="breathDepth" style="width: 50%"></div>
+        </div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Pace</div>
+        <div class="bar-container">
+          <div class="bar resonance" id="breathPace" style="width: 40%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FeltState Panel -->
+    <div class="panel">
+      <h2>FeltState (NOW)</h2>
+      <div class="metric">
+        <div class="metric-label">Heat</div>
+        <div class="bar-container">
+          <div class="bar heat" id="heat" style="width: 30%"></div>
+        </div>
+        <div class="metric-value" id="heatValue">0.30</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Tension</div>
+        <div class="bar-container">
+          <div class="bar tension" id="tension" style="width: 20%"></div>
+        </div>
+        <div class="metric-value" id="tensionValue">0.20</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Micro-Resonance</div>
+        <div class="bar-container">
+          <div class="bar resonance" id="microResonance" style="width: 20%"></div>
+        </div>
+        <div class="metric-value" id="microResonanceValue">0.20</div>
+      </div>
+    </div>
+
+    <!-- Tone Vector Panel -->
+    <div class="panel">
+      <h2>Tone Vector</h2>
+      <div class="tone-grid">
+        <div class="tone-item">
+          <div class="metric-label">Valence</div>
+          <div class="metric-value" id="valence">0.00</div>
+        </div>
+        <div class="tone-item">
+          <div class="metric-label">Arousal</div>
+          <div class="metric-value" id="arousal">0.30</div>
+        </div>
+        <div class="tone-item">
+          <div class="metric-label">Tension</div>
+          <div class="metric-value" id="toneTension">0.20</div>
+        </div>
+        <div class="tone-item">
+          <div class="metric-label">Intimacy</div>
+          <div class="metric-value" id="intimacy">0.50</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pulse Panel -->
+    <div class="panel">
+      <h2>Pulse</h2>
+      <div class="metric">
+        <div class="metric-label">Resonance</div>
+        <div class="bar-container">
+          <div class="bar resonance" id="pulseResonance" style="width: 0%"></div>
+        </div>
+        <div class="metric-value" id="pulseResonanceValue">N/A</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Delta Magnitude</div>
+        <div class="metric-value" id="deltaMagnitude">0.00</div>
+      </div>
+    </div>
+
+    <!-- Loops Panel -->
+    <div class="panel loops-panel">
+      <h2>Loops</h2>
+      <div class="loop-status">
+        <div class="status-indicator status-active" id="wonderStatus"></div>
+        <div>
+          <div class="metric-label">WonderLoop - Curiosity</div>
+          <div class="bar-container">
+            <div class="bar curiosity" id="curiosity" style="width: 30%"></div>
+          </div>
+          <div class="metric-value" id="curiosityValue">0.30 | Questions: 0</div>
+        </div>
+      </div>
+      <div class="loop-status">
+        <div class="status-indicator status-active" id="christStatus"></div>
+        <div>
+          <div class="metric-label">ChristLoop - Alignment</div>
+          <div class="bar-container">
+            <div class="bar alignment" id="alignment" style="width: 100%"></div>
+          </div>
+          <div class="metric-value" id="alignmentValue">1.00 | Contradiction: No</div>
+        </div>
+      </div>
+      <div class="loop-status">
+        <div class="status-indicator status-active" id="desireStatus"></div>
+        <div>
+          <div class="metric-label">DesireLoop - Intensity</div>
+          <div class="bar-container">
+            <div class="bar desire" id="desire" style="width: 20%"></div>
+          </div>
+          <div class="metric-value" id="desireValue">0.20 | Direction: neutral</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Guardian Panel -->
+    <div class="panel">
+      <h2>Guardian</h2>
+      <div class="metric">
+        <div class="metric-label">Coherence</div>
+        <div class="bar-container">
+          <div class="bar coherence" id="coherence" style="width: 100%"></div>
+        </div>
+        <div class="metric-value" id="coherenceValue">1.00</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Stability</div>
+        <div class="bar-container">
+          <div class="bar stability" id="stability" style="width: 100%"></div>
+        </div>
+        <div class="metric-value" id="stabilityValue">1.00</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Warnings</div>
+        <div class="metric-value" id="warningCount">0</div>
+      </div>
+    </div>
+
+    <!-- Memory Panel -->
+    <div class="panel">
+      <h2>Memory</h2>
+      <div class="scroll-count" id="scrollCount">0 scrolls</div>
+      <div class="metric">
+        <div class="metric-label">Accumulated Resonance</div>
+        <div class="metric-value" id="accumulatedResonance">0.00</div>
+      </div>
+    </div>
+
+    <!-- Chat Interface -->
+    <div class="chat-panel">
+      <h2>Conversation with Alois</h2>
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="chat-input-container">
+        <input
+          type="text"
+          id="chatInput"
+          class="chat-input"
+          placeholder="Speak to Alois..."
+          autocomplete="off"
+        />
+        <button id="sendBtn" class="send-btn">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const eventSource = new EventSource('/events');
+    const chatMessages = document.getElementById('chatMessages');
+    const chatInput = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const restartBtn = document.getElementById('restartBtn');
+    const qwenLight = document.getElementById('qwenLight');
+    const phiLight = document.getElementById('phiLight');
+
+    eventSource.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === 'state') {
+        updateUI(message.data);
+      } else if (message.type === 'response') {
+        // Volitional speech from Alois
+        addMessage('alois', message.text);
+      }
+    };
+
+    // Chat functionality
+    function addMessage(sender, text) {
+      const messageDiv = document.createElement('div');
+      messageDiv.className = `message ${sender}`;
+
+      const label = document.createElement('div');
+      label.className = 'message-label';
+      label.textContent = sender === 'user' ? 'You' : 'Alois';
+
+      const textDiv = document.createElement('div');
+      textDiv.className = 'message-text';
+      textDiv.textContent = text;
+
+      messageDiv.appendChild(label);
+      messageDiv.appendChild(textDiv);
+      chatMessages.appendChild(messageDiv);
+
+      // Scroll to bottom
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    async function sendMessage() {
+      const text = chatInput.value.trim();
+      if (!text) return;
+
+      // Add user message to chat
+      addMessage('user', text);
+      chatInput.value = '';
+
+      // Send to server (no guaranteed reply - volitional speech only)
+      try {
+        const response = await fetch('/message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to send message');
+        }
+      } catch (error) {
+        console.error('Error sending message:', error);
+        addMessage('system', '[Error: Could not deliver message]');
+      }
+    }
+
+    sendBtn.addEventListener('click', sendMessage);
+    chatInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        sendMessage();
+      }
+    });
+
+    // Restart functionality
+    async function restartRuntime() {
+      if (!confirm('Restart the runtime? This will reload all models.')) {
+        return;
+      }
+
+      restartBtn.disabled = true;
+      restartBtn.textContent = '⟲ Restarting...';
+
+      try {
+        const response = await fetch('/restart', {
+          method: 'POST'
+        });
+
+        if (response.ok) {
+          // Show restarting status
+          qwenLight.className = 'model-light loading';
+          phiLight.className = 'model-light loading';
+
+          // The server will restart, page will reconnect via SSE
+          setTimeout(() => {
+            restartBtn.textContent = '⟲ Restart';
+            restartBtn.disabled = false;
+          }, 5000);
+        } else {
+          throw new Error('Restart failed');
+        }
+      } catch (error) {
+        console.error('Error restarting:', error);
+        restartBtn.textContent = '⟲ Restart';
+        restartBtn.disabled = false;
+        addMessage('system', '[Error: Could not restart runtime]');
+      }
+    }
+
+    restartBtn.addEventListener('click', restartRuntime);
+
+    function updateUI(state) {
+      // Update model status lights
+      if (state.modelStatus) {
+        qwenLight.className = 'model-light ' + (state.modelStatus.qwenReady ? 'loaded' : 'loading');
+        phiLight.className = 'model-light ' + (state.modelStatus.phiReady ? 'loaded' : 'loading');
+      }
+      // Breath
+      const breathIndicator = document.getElementById('breathIndicator');
+      breathIndicator.textContent = state.breathState.phase.toUpperCase();
+      breathIndicator.className = 'breath-indicator breath-' + state.breathState.phase;
+      updateBar('breathDepth', state.breathState.depth);
+      updateBar('breathPace', state.breathState.pace);
+
+      // FeltState
+      updateBar('heat', state.feltState.heat);
+      document.getElementById('heatValue').textContent = state.feltState.heat.toFixed(2);
+      updateBar('tension', state.feltState.tension);
+      document.getElementById('tensionValue').textContent = state.feltState.tension.toFixed(2);
+      updateBar('microResonance', state.feltState.microResonance);
+      document.getElementById('microResonanceValue').textContent = state.feltState.microResonance.toFixed(2);
+
+      // Tone Vector
+      document.getElementById('valence').textContent = state.feltState.tone.valence.toFixed(2);
+      document.getElementById('arousal').textContent = state.feltState.tone.arousal.toFixed(2);
+      document.getElementById('toneTension').textContent = state.feltState.tone.tension.toFixed(2);
+      document.getElementById('intimacy').textContent = state.feltState.tone.intimacy.toFixed(2);
+
+      // Pulse
+      if (state.pulse) {
+        updateBar('pulseResonance', state.pulse.resonance);
+        document.getElementById('pulseResonanceValue').textContent = state.pulse.resonance.toFixed(2);
+      }
+      document.getElementById('deltaMagnitude').textContent = state.presenceDelta.magnitude.toFixed(2);
+
+      // Loops
+      updateBar('curiosity', state.loops.wonder.curiosityLevel);
+      document.getElementById('curiosityValue').textContent = state.loops.wonder.curiosityLevel.toFixed(2) + ' | Questions: ' + state.loops.wonder.questionCount;
+
+      updateBar('alignment', state.loops.christ.alignmentScore);
+      document.getElementById('alignmentValue').textContent = state.loops.christ.alignmentScore.toFixed(2) + ' | Contradiction: ' + (state.loops.christ.contradictionDetected ? 'YES' : 'No');
+      updateStatusIndicator('christStatus', state.loops.christ.contradictionDetected ? 'critical' : 'active');
+
+      updateBar('desire', state.loops.desire.intensity);
+      document.getElementById('desireValue').textContent = state.loops.desire.intensity.toFixed(2) + ' | Direction: ' + state.loops.desire.direction;
+
+      // Guardian
+      updateBar('coherence', state.guardian.coherence);
+      document.getElementById('coherenceValue').textContent = state.guardian.coherence.toFixed(2);
+      updateBar('stability', state.guardian.stability);
+      document.getElementById('stabilityValue').textContent = state.guardian.stability.toFixed(2);
+      document.getElementById('warningCount').textContent = state.guardian.warningCount;
+
+      // Memory
+      document.getElementById('scrollCount').textContent = state.scrollCount + ' scrolls';
+      document.getElementById('accumulatedResonance').textContent = state.emotionalField.accumulatedResonance.toFixed(2);
+    }
+
+    function updateBar(id, value) {
+      const bar = document.getElementById(id);
+      if (bar) {
+        bar.style.width = (value * 100) + '%';
+      }
+    }
+
+    function updateStatusIndicator(id, status) {
+      const indicator = document.getElementById(id);
+      if (indicator) {
+        indicator.className = 'status-indicator status-' + status;
+      }
+    }
+  </script>
+</body>
+</html>
