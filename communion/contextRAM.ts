@@ -103,8 +103,8 @@ export interface RAMPool {
 export type CurationMode = 'active' | 'reflective';
 
 export interface RAMCommand {
-  action: 'focus' | 'drop' | 'load' | 'shrink' | 'expand' | 'pin' | 'release' | 'browse';
-  target: string; // slot name, "item:id" for pool items, or search keyword for browse
+  action: 'focus' | 'drop' | 'load' | 'shrink' | 'expand' | 'pin' | 'release' | 'browse' | 'graph';
+  target: string; // slot name, "item:id" for pool items, keyword for browse, node URI for graph
 }
 
 export interface CurationEvent {
@@ -146,6 +146,8 @@ export class ContextRAM {
 
   // Lazy browse callback — set by communionLoop to search files on disk
   private browseCallback: ((keyword: string, ram: ContextRAM) => string) | null = null;
+  // Graph traversal callback — set by communionLoop to navigate JSON-LD graph
+  private graphCallback: ((nodeUri: string) => string) | null = null;
 
   constructor(agentId: string, agentName: string, provider: string, baseUrl?: string) {
     this.agentId = agentId;
@@ -217,6 +219,10 @@ export class ContextRAM {
    */
   setBrowseCallback(cb: (keyword: string, ram: ContextRAM) => string): void {
     this.browseCallback = cb;
+  }
+
+  setGraphCallback(cb: (nodeUri: string) => string): void {
+    this.graphCallback = cb;
   }
 
   // ════════════════════════════════════════
@@ -554,9 +560,14 @@ export class ContextRAM {
    * Process RAM commands from agent responses.
    */
   processCommand(cmd: RAMCommand): string {
-    // BROWSE searches all document pool items by keyword — handle before item routing
+    // BROWSE searches files on disk by keyword
     if (cmd.action === 'browse') {
       return this.browseDocuments(cmd.target.trim());
+    }
+
+    // GRAPH traverses the JSON-LD graph from a node URI
+    if (cmd.action === 'graph') {
+      return this.traverseGraph(cmd.target.trim());
     }
 
     // Handle item-level commands (pin/release/load specific items)
@@ -712,6 +723,17 @@ export class ContextRAM {
     return `Found ${matches.length} matches in loaded items`;
   }
 
+  /**
+   * Traverse the JSON-LD graph from a node URI — shows the node and its neighbors.
+   */
+  private traverseGraph(nodeUri: string): string {
+    if (!nodeUri) return 'GRAPH requires a node URI (e.g., [RAM:GRAPH folder:subfolder])';
+    if (this.graphCallback) {
+      return this.graphCallback(nodeUri);
+    }
+    return 'Graph traversal not available';
+  }
+
   private getLowestPriorityLoadedSlot(exclude: SlotName): ContextSlot | null {
     let lowest: ContextSlot | null = null;
     for (const [name, slot] of this.slots) {
@@ -823,6 +845,7 @@ export class ContextRAM {
     lines.push('  [RAM:RELEASE item:id] — allow auto-eviction again');
     lines.push('  [RAM:LOAD item:id] / [RAM:DROP item:id] — manually swap items');
     lines.push('  [RAM:BROWSE keyword] — search documents for keyword, load matching chunks');
+    lines.push('  [RAM:GRAPH node:uri] — traverse the JSON-LD graph from a node, see neighbors and edges');
 
     return lines.join('\n');
   }
@@ -950,7 +973,7 @@ function contentSimilarity(a: string, b: string): number {
 
 export function parseRAMCommands(text: string): { cleanText: string; commands: RAMCommand[] } {
   const commands: RAMCommand[] = [];
-  const ramPattern = /\[RAM:(FOCUS|DROP|LOAD|SHRINK|EXPAND|PIN|RELEASE|BROWSE)\s+([^\]]+)\]/gi;
+  const ramPattern = /\[RAM:(FOCUS|DROP|LOAD|SHRINK|EXPAND|PIN|RELEASE|BROWSE|GRAPH)\s+([^\]]+)\]/gi;
 
   let match;
   while ((match = ramPattern.exec(text)) !== null) {

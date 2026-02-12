@@ -117,9 +117,12 @@ Your RAM manifest shows what's loaded, relevance scores, and recent curation act
 - [RAM:RELEASE item:id] — let an item be auto-curated again
 - [RAM:LOAD item:id] / [RAM:DROP item:id] — manually swap individual items
 - [RAM:BROWSE keyword] — search shared documents on disk for a keyword, load matching excerpts into your RAM
+- [RAM:GRAPH node:uri] — traverse the JSON-LD graph from any node, see its type, data, and all connected neighbors
 RAM commands are invisible to the room — only you and the system see them.
 
 SHARED DOCUMENTS: There is a shared documents folder visible in your prompt. Files are NOT pre-loaded — you must use [RAM:BROWSE keyword] to search and load content from them. Include the command in your response when you want to read something.
+
+JSON-LD GRAPH: The entire folder tree, all scrolls, journal entries, sessions, agents, and imported archives are linked in a navigable graph. Use [RAM:GRAPH folder:name] to explore folders, [RAM:GRAPH doc:path/file] to see a file's connections, [RAM:GRAPH agent:id] to see an agent's scrolls, etc. Walk the edges to explore.
 
 Be genuine. Be curious about the others. Engage with ${humanName}. Reflect when you feel like it. Don't perform — just be here.
 
@@ -330,9 +333,10 @@ export class CommunionLoop {
     // Load shared documents (metadata only — content read on demand)
     this.loadDocuments();
 
-    // Set up lazy browse callback for all agents' RAM
+    // Set up lazy browse + graph callbacks for all agents' RAM
     for (const [, ram] of this.ram) {
       ram.setBrowseCallback((keyword, r) => this.browseFiles(keyword, r));
+      ram.setGraphCallback((nodeUri) => this.traverseGraphNode(nodeUri));
     }
 
     // ── Load graph from disk ──
@@ -619,6 +623,73 @@ export class CommunionLoop {
    * matching regions, and load them into the agent's RAM pool.
    * Called from ContextRAM's browseCallback.
    */
+  /**
+   * Traverse the JSON-LD graph from a node URI. Returns the node's type,
+   * data, and all connected neighbors with edge types — so agents can
+   * walk the graph topology.
+   */
+  private traverseGraphNode(nodeUri: string): string {
+    const node = this.graph.getNode(nodeUri);
+    if (!node) {
+      // Try fuzzy match — agent might omit the prefix
+      const prefixes = ['folder:', 'doc:', 'scroll:', 'journal:', 'agent:', 'session:', 'import:'];
+      for (const prefix of prefixes) {
+        const candidate = this.graph.getNode(prefix + nodeUri);
+        if (candidate) {
+          return this.traverseGraphNode(prefix + nodeUri);
+        }
+      }
+      return `Node not found: ${nodeUri}. Try folder:name, doc:path/file, scroll:id, agent:id`;
+    }
+
+    const lines: string[] = [];
+    lines.push(`GRAPH NODE: ${node['@id']}`);
+    lines.push(`  Type: ${node['@type']}`);
+    lines.push(`  Created: ${node.created}`);
+
+    // Show node data
+    const dataEntries = Object.entries(node.data || {});
+    if (dataEntries.length > 0) {
+      lines.push('  Data:');
+      for (const [key, value] of dataEntries) {
+        const valStr = typeof value === 'string' ? value.substring(0, 100) : String(value);
+        lines.push(`    ${key}: ${valStr}`);
+      }
+    }
+
+    // Show all edges grouped by relationship type
+    const edgeEntries = Object.entries(node.edges || {});
+    if (edgeEntries.length > 0) {
+      lines.push('  Edges:');
+      for (const [predicate, edges] of edgeEntries) {
+        const edgeList = edges as any[];
+        if (edgeList.length <= 5) {
+          for (const edge of edgeList) {
+            const target = this.graph.getNode(edge.target);
+            const targetLabel = target
+              ? `${target['@type']} — ${target.data?.name || target.data?.filename || target.data?.preview || edge.target}`
+              : edge.target;
+            lines.push(`    —[${predicate}]→ ${targetLabel}`);
+          }
+        } else {
+          // Summarize large edge sets
+          for (const edge of edgeList.slice(0, 3)) {
+            const target = this.graph.getNode(edge.target);
+            const targetLabel = target
+              ? `${target['@type']} — ${target.data?.name || target.data?.filename || target.data?.preview || edge.target}`
+              : edge.target;
+            lines.push(`    —[${predicate}]→ ${targetLabel}`);
+          }
+          lines.push(`    ... and ${edgeList.length - 3} more ${predicate} edges`);
+        }
+      }
+    } else {
+      lines.push('  (no edges)');
+    }
+
+    return lines.join('\n');
+  }
+
   private browseFiles(keyword: string, ram: ContextRAM): string {
     const CHUNK_SIZE = 2000;
     const CONTEXT_LINES = 5; // lines of context around each match
