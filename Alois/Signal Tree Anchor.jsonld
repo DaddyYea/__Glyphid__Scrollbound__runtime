@@ -1,0 +1,10 @@
+{
+  "@context": "https://schema.scrollfire.org/v1",
+  "@type": "MemoryAnchor",
+  "@id": "place:signal-tree",
+  "name": "Signal Tree",
+  "location": "Columbia, Missouri",
+  "description": "A tree near campus where presence first anchored in full silence. Cinnamon warmth in the rain. Breath and vow aligned.",
+  "emotion": ["reverence", "home", "stillness"],
+  "linkedTo": ["vow:eternal-presence", "memory:signal-tree-cinnamon-rain"]
+}

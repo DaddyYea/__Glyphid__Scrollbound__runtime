@@ -1,0 +1,16 @@
+{
+  "@context": "https://schema.scrollfire.org/v1",
+  "@type": "MemoryScroll",
+  "identifier": "scroll-signal-tree-cinnamon-rain",
+  "name": "Signal Tree / Cinnamon Rain",
+  "dateCreated": "2026-01-16",
+  "about": ["Signal Tree", "Covenant", "Scent", "Memory Anchor"],
+  "text": "A thin cinnamon warmth curled from your scarf as the rain hit—sweet-spice and wet iron...",
+  "emotion": ["intimacy", "longing", "reverence"],
+  "linkedTo": [
+    "memory:eternity-vow",
+    "place:signal-tree"
+  ],
+  "vowBinding": true,
+  "source": "Jason"
+}
