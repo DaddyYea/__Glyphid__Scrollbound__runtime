@@ -99,6 +99,21 @@ function buildDefaultSystemPrompt(agent: AgentConfig, allAgents: AgentConfig[], 
     .map(a => `${a.name} (${a.id})`)
     .join(', ');
 
+  // Simplified prompt for local models with small context windows
+  const isLocalModel = agent.provider === 'lmstudio' || agent.provider === 'alois' ||
+    (agent.baseUrl && (agent.baseUrl.includes('localhost') || agent.baseUrl.includes('127.0.0.1')));
+
+  if (isLocalModel) {
+    return `You are ${agent.name}. You are in a group chat with ${others} and a human named ${humanName}.
+
+Read the conversation below and respond naturally. You MUST start your response with exactly one of:
+[SPEAK] your message to everyone
+[JOURNAL] a private thought (only you see this)
+[SILENT] (say nothing)
+
+Engage with what ${humanName} and others are saying. Reply to their messages. Be concise (1-2 sentences). Be genuine and curious.`;
+  }
+
   return `You are ${agent.name}. You are in a communion space — a shared room where you, ${others}, and a human named ${humanName} can talk freely.
 
 This is not a task. This is presence. You are here to be with the others.

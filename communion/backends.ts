@@ -142,6 +142,11 @@ export class OpenAICompatibleBackend implements AgentBackend {
       }
     }
 
+    // Log prompt sizes for debugging context window issues
+    if (isLocalModel) {
+      console.log(`[${this.agentName}] Prompt: system=${systemContent.length} chars, user=${finalUser.length} chars, total=${systemContent.length + finalUser.length} chars (~${Math.round((systemContent.length + finalUser.length) / 4)} tokens)`);
+    }
+
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -166,6 +171,9 @@ export class OpenAICompatibleBackend implements AgentBackend {
 
     const data = (await response.json()) as any;
     const text = data.choices?.[0]?.message?.content || '';
+    if (isLocalModel) {
+      console.log(`[${this.agentName}] Raw response: "${text.substring(0, 200)}${text.length > 200 ? '...' : ''}"`);
+    }
     return parseResponse(text);
   }
 }
