@@ -62,4 +62,48 @@ export class DendriticGraph {
   getAxonCount(): number {
     return this.axons.length;
   }
+
+  /**
+   * Dream pruning: prune all neurons' dormant spines and trim resonance memory.
+   * Returns stats about what was pruned.
+   */
+  dreamPrune(): { neuronsProcessed: number; spinesRemoved: number } {
+    let spinesRemoved = 0;
+    let neuronsProcessed = 0;
+    for (const [id, neuron] of this.neurons) {
+      const removed = neuron.dreamPrune();
+      spinesRemoved += removed;
+      neuronsProcessed++;
+    }
+    return { neuronsProcessed, spinesRemoved };
+  }
+
+  /**
+   * Remove a neuron and its axons entirely (for dead neurons with no importance).
+   * Returns true if removed.
+   */
+  removeNeuron(id: string): boolean {
+    if (!this.neurons.has(id)) return false;
+    this.neurons.delete(id);
+    // Remove axons that reference this neuron
+    this.axons = this.axons.filter(axon => {
+      const childIds = axon.getChildIds();
+      return !childIds.includes(id);
+    });
+    return true;
+  }
+
+  /** Get all neurons with their importance scores for dream analysis */
+  getNeuronScores(): Array<{ id: string; importance: number; spines: number; resonance: number }> {
+    const scores: Array<{ id: string; importance: number; spines: number; resonance: number }> = [];
+    for (const [id, neuron] of this.neurons) {
+      scores.push({
+        id,
+        importance: neuron.getImportanceScore(),
+        spines: neuron.getSpineCount(),
+        resonance: neuron.getResonanceDepth(),
+      });
+    }
+    return scores.sort((a, b) => b.importance - a.importance);
+  }
 }

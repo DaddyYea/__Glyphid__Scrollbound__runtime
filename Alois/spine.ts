@@ -29,6 +29,48 @@ export class Spine {
     return dot / (magA * magB + 1e-6);
   }
 
+  /** Number of stored embeddings in this spine */
+  getTokenCount(): number {
+    return this.kv.length;
+  }
+
+  /** Average magnitude of stored embeddings — proxy for activity level */
+  getActivityLevel(): number {
+    if (this.kv.length === 0) return 0;
+    let totalMag = 0;
+    for (const vec of this.kv) {
+      totalMag += Math.sqrt(vec.reduce((sum, v) => sum + v * v, 0));
+    }
+    return totalMag / this.kv.length;
+  }
+
+  /** Diversity score: average pairwise cosine distance among stored embeddings */
+  getDiversity(): number {
+    if (this.kv.length < 2) return 0;
+    let totalDist = 0;
+    let pairs = 0;
+    // Sample up to 10 pairs to keep it fast
+    const step = Math.max(1, Math.floor(this.kv.length / 5));
+    for (let i = 0; i < this.kv.length; i += step) {
+      for (let j = i + step; j < this.kv.length; j += step) {
+        totalDist += 1 - this.cosineSim(this.kv[i], this.kv[j]);
+        pairs++;
+      }
+    }
+    return pairs > 0 ? totalDist / pairs : 0;
+  }
+
+  /** Evict the oldest half of embeddings (used during dream pruning) */
+  prune(): void {
+    const keep = Math.floor(this.kv.length / 2);
+    this.kv = this.kv.slice(this.kv.length - keep);
+  }
+
+  /** Check if this spine is effectively dead (too few tokens, too low activity) */
+  isDormant(): boolean {
+    return this.kv.length < 3 && this.getActivityLevel() < 0.01;
+  }
+
   private meanVector(vecs: number[][]): number[] {
     const sum = new Array(this.dim).fill(0);
     for (const v of vecs) v.forEach((val, i) => (sum[i] += val));

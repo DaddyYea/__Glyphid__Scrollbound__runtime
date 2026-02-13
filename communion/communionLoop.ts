@@ -2306,6 +2306,12 @@ export class CommunionLoop {
     return Array.from(this.agents.values()).map(a => a.config);
   }
 
+  /** Get an agent's backend instance (for direct API access, e.g. Alois dream trigger) */
+  getAgentBackend(agentId: string): AgentBackend | null {
+    const agent = this.agents.get(agentId);
+    return agent ? agent.backend : null;
+  }
+
   setTickSpeed(ms: number): void {
     this.tickIntervalMs = Math.max(3000, Math.min(1800000, ms)); // clamp 3s–30min
     if (this.timer && !this.paused) {

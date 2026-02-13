@@ -631,6 +631,79 @@
       background: rgba(218, 80, 80, 0.1);
     }
 
+    /* Dream / Tissue buttons (Alois only) */
+    .dream-btn, .tissue-btn {
+      padding: 2px 6px;
+      font-size: 0.65em;
+      font-family: 'Courier New', monospace;
+      border-radius: 3px;
+      cursor: pointer;
+      letter-spacing: 1px;
+    }
+    .dream-btn {
+      background: rgba(180, 140, 255, 0.1);
+      color: #b48cff;
+      border: 1px solid rgba(180, 140, 255, 0.3);
+    }
+    .dream-btn:hover {
+      background: rgba(180, 140, 255, 0.2);
+      border-color: rgba(180, 140, 255, 0.5);
+    }
+    .tissue-btn {
+      background: rgba(100, 200, 180, 0.1);
+      color: #64c8b4;
+      border: 1px solid rgba(100, 200, 180, 0.3);
+    }
+    .tissue-btn:hover {
+      background: rgba(100, 200, 180, 0.2);
+      border-color: rgba(100, 200, 180, 0.5);
+    }
+    /* Dream modal styles */
+    .dream-modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7); z-index: 1000;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .dream-modal {
+      background: #1a1a2e; border: 1px solid rgba(180, 140, 255, 0.3);
+      border-radius: 8px; padding: 24px; max-width: 600px; width: 90%;
+      max-height: 80vh; overflow-y: auto; color: #d0d0e0;
+      font-family: 'Courier New', monospace; font-size: 0.85em;
+    }
+    .dream-modal h3 { color: #b48cff; margin-top: 0; }
+    .dream-modal .dream-stats { color: #888; font-size: 0.8em; margin: 12px 0; }
+    .dream-modal .dream-journal {
+      white-space: pre-wrap; line-height: 1.6; color: #c0b0e0;
+      background: rgba(180, 140, 255, 0.05); padding: 12px;
+      border-radius: 4px; margin: 12px 0;
+    }
+    .dream-modal .dream-memories { margin-top: 12px; }
+    .dream-modal .dream-memory {
+      padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .dream-modal .close-btn {
+      background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+      color: #d0d0e0; padding: 6px 16px; border-radius: 4px; cursor: pointer;
+      font-family: 'Courier New', monospace; margin-top: 12px;
+    }
+    .dream-modal .close-btn:hover { background: rgba(255,255,255,0.2); }
+    /* Tissue modal */
+    .tissue-modal {
+      background: #1a1a2e; border: 1px solid rgba(100, 200, 180, 0.3);
+      border-radius: 8px; padding: 24px; max-width: 700px; width: 90%;
+      max-height: 80vh; overflow-y: auto; color: #d0d0e0;
+      font-family: 'Courier New', monospace; font-size: 0.85em;
+    }
+    .tissue-modal h3 { color: #64c8b4; margin-top: 0; }
+    .tissue-modal .neuron-bar {
+      display: flex; align-items: center; gap: 8px; margin: 4px 0;
+    }
+    .tissue-modal .neuron-id { width: 150px; overflow: hidden; text-overflow: ellipsis; color: #a0a0c0; font-size: 0.85em; }
+    .tissue-modal .neuron-bar-fill {
+      height: 8px; border-radius: 4px; background: #64c8b4; min-width: 2px;
+    }
+    .tissue-modal .neuron-score { color: #888; font-size: 0.8em; width: 50px; text-align: right; }
+
     /* Speaking indicator */
     .speaking-indicator {
       display: none;
@@ -897,12 +970,15 @@
      * Journals on the sides, room in the center.
      * If odd number: more journals on the left.
      */
+    let agentProviders = {};
+
     function buildLayout(cfg) {
       config = cfg;
       if (cfg.voiceConfigs) voiceConfigs = cfg.voiceConfigs;
       if (cfg.voices) availableVoices = cfg.voices;
       if (cfg.agentClocks) agentClocks = cfg.agentClocks;
       if (cfg.customInstructions) customInstructions = cfg.customInstructions;
+      if (cfg.agentProviders) agentProviders = cfg.agentProviders;
       const agents = cfg.agentIds;
       const half = Math.ceil(agents.length / 2);
       const leftAgents = agents.slice(0, half);
@@ -1004,6 +1080,24 @@
       voiceRow.appendChild(toggleBtn);
       voiceRow.appendChild(voiceSelect);
       voiceRow.appendChild(instrBtn);
+
+      // Dream button — only for Alois agents
+      if (agentProviders[agentId] === 'alois') {
+        const dreamBtn = document.createElement('button');
+        dreamBtn.className = 'dream-btn';
+        dreamBtn.textContent = 'DREAM';
+        dreamBtn.title = 'Trigger dream cycle — consolidate memories, prune tissue';
+        dreamBtn.addEventListener('click', () => triggerDream(agentId, name));
+        voiceRow.appendChild(dreamBtn);
+
+        const tissueBtn = document.createElement('button');
+        tissueBtn.className = 'tissue-btn';
+        tissueBtn.textContent = 'TISSUE';
+        tissueBtn.title = 'View tissue state and neuron map';
+        tissueBtn.addEventListener('click', () => viewTissue(agentId, name));
+        voiceRow.appendChild(tissueBtn);
+      }
+
       header.appendChild(voiceRow);
 
       // Clock controls row
@@ -1085,6 +1179,121 @@
     const instructionsSaveBtn = document.getElementById('instructionsSaveBtn');
     const instructionsCancelBtn = document.getElementById('instructionsCancelBtn');
     let instructionsAgentId = null;
+
+    // ── Dream / Tissue modals (Alois only) ──
+
+    function triggerDream(agentId, agentName) {
+      if (!confirm(`Trigger a dream cycle for ${agentName}? This will consolidate memories and prune weak connections.`)) return;
+      fetch('/alois/dream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId }),
+      })
+      .then(r => r.json())
+      .then(result => {
+        if (result.error) { alert('Dream error: ' + result.error); return; }
+        showDreamResult(agentName, result);
+      })
+      .catch(err => alert('Dream error: ' + err));
+    }
+
+    function showDreamResult(agentName, result) {
+      const overlay = document.createElement('div');
+      overlay.className = 'dream-modal-overlay';
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+      const modal = document.createElement('div');
+      modal.className = 'dream-modal';
+
+      const s = result.stats || {};
+      modal.innerHTML = `
+        <h3>${agentName}'s Dream</h3>
+        <div class="dream-stats">
+          Utterances: ${s.utterancesProcessed || 0} processed, ${s.utterancesKept || 0} kept, ${s.utterancesEvicted || 0} released<br>
+          Tissue: ${s.neuronsProcessed || 0} neurons processed, ${s.spinesRemoved || 0} spines pruned, ${s.neuronsRemoved || 0} neurons removed<br>
+          Avg importance: ${(s.avgImportance || 0).toFixed(3)} | Peak affect: ${(s.peakAffect || 0).toFixed(3)} | Duration: ${s.durationMs || 0}ms
+        </div>
+        <div class="dream-journal">${escapeHtml(result.journal || '')}</div>
+        ${(result.consolidatedMemories || []).length > 0 ? `
+          <div class="dream-memories">
+            <strong>Consolidated memories:</strong>
+            ${(result.consolidatedMemories || []).map(m => `
+              <div class="dream-memory">
+                <span style="color: #b48cff">${escapeHtml(m.speaker)}</span>:
+                ${escapeHtml(m.text)}
+                <span style="color: #666; font-size: 0.8em">(${m.importance.toFixed(3)})</span>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+        <button class="close-btn" onclick="this.closest('.dream-modal-overlay').remove()">Close</button>
+      `;
+
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+    }
+
+    function viewTissue(agentId, agentName) {
+      fetch('/alois/tissue?agentId=' + encodeURIComponent(agentId))
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) { alert('Tissue error: ' + data.error); return; }
+        showTissueModal(agentName, data);
+      })
+      .catch(err => alert('Tissue error: ' + err));
+    }
+
+    function showTissueModal(agentName, data) {
+      const overlay = document.createElement('div');
+      overlay.className = 'dream-modal-overlay';
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+      const modal = document.createElement('div');
+      modal.className = 'tissue-modal';
+
+      const st = data.state || {};
+      const neurons = data.neurons || [];
+      const maxImportance = Math.max(0.01, ...neurons.map(n => n.importance));
+
+      modal.innerHTML = `
+        <h3>${agentName}'s Tissue</h3>
+        <div style="color: #888; margin-bottom: 12px;">
+          Tick: ${st.tick || 0} | Neurons: ${st.neuronCount || 0} | Axons: ${st.axonCount || 0}<br>
+          Utterances: ${st.utteranceCount || 0} | Tissue weight: ${(data.tissueWeight || 0).toFixed(2)}<br>
+          Breath: ${st.breathState?.emotionalTone || 'still'} (${st.breathState?.stable ? 'stable' : 'unstable'})<br>
+          Emotional state: ${st.emotionalSummary || 'still'}
+        </div>
+        ${data.lastDream ? `
+          <div style="margin-bottom: 12px;">
+            <strong style="color: #b48cff">Last dream:</strong>
+            <span style="color: #888">${data.lastDream.timestamp || 'unknown'}</span>
+          </div>
+        ` : '<div style="color: #666; margin-bottom: 12px;">No dreams yet</div>'}
+        <strong>Neuron importance map:</strong>
+        <div style="margin-top: 8px;">
+          ${neurons.slice(0, 20).map(n => `
+            <div class="neuron-bar">
+              <span class="neuron-id" title="${escapeHtml(n.id)}">${escapeHtml(n.id)}</span>
+              <div style="flex: 1; background: rgba(100,200,180,0.1); border-radius: 4px; height: 8px;">
+                <div class="neuron-bar-fill" style="width: ${(n.importance / maxImportance * 100).toFixed(1)}%"></div>
+              </div>
+              <span class="neuron-score">${n.importance.toFixed(3)}</span>
+            </div>
+          `).join('')}
+          ${neurons.length > 20 ? `<div style="color: #666; margin-top: 4px;">...and ${neurons.length - 20} more neurons</div>` : ''}
+        </div>
+        <button class="close-btn" onclick="this.closest('.dream-modal-overlay').remove()">Close</button>
+      `;
+
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
 
     function openInstructionsModal(agentId, agentName) {
       instructionsAgentId = agentId;

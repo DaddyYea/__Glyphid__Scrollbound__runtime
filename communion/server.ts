@@ -325,13 +325,16 @@ async function main() {
       clients.push(res);
       req.on('close', () => { clients = clients.filter(c => c !== res); });
 
-      // Send config (agent list, colors, names)
+      // Send config (agent list, colors, names, providers)
       const state = communion.getState();
+      const agentProviders: Record<string, string> = {};
+      for (const c of communion.getAgentConfigs()) agentProviders[c.id] = c.provider;
       res.write(`data: ${JSON.stringify({
         type: 'config',
         agentIds: state.agentIds,
         agentNames: state.agentNames,
         agentColors: state.agentColors,
+        agentProviders,
         humanName: state.humanName,
         voiceConfigs: communion.getAllVoiceConfigs(),
         voices: VOICES,
@@ -600,13 +603,16 @@ async function main() {
           }
 
           // Broadcast full config refresh so all clients rebuild layout
-          const state = communion.getState();
+          const st1 = communion.getState();
+          const ap1: Record<string, string> = {};
+          for (const c of communion.getAgentConfigs()) ap1[c.id] = c.provider;
           broadcast({
             type: 'config',
-            agentIds: state.agentIds,
-            agentNames: state.agentNames,
-            agentColors: state.agentColors,
-            humanName: state.humanName,
+            agentIds: st1.agentIds,
+            agentNames: st1.agentNames,
+            agentColors: st1.agentColors,
+            agentProviders: ap1,
+            humanName: st1.humanName,
             voiceConfigs: communion.getAllVoiceConfigs(),
             voices: VOICES,
             agentClocks: communion.getAllAgentClocks(),
@@ -644,13 +650,16 @@ async function main() {
           }
 
           // Broadcast full config refresh
-          const state = communion.getState();
+          const st2 = communion.getState();
+          const ap2: Record<string, string> = {};
+          for (const c of communion.getAgentConfigs()) ap2[c.id] = c.provider;
           broadcast({
             type: 'config',
-            agentIds: state.agentIds,
-            agentNames: state.agentNames,
-            agentColors: state.agentColors,
-            humanName: state.humanName,
+            agentIds: st2.agentIds,
+            agentNames: st2.agentNames,
+            agentColors: st2.agentColors,
+            agentProviders: ap2,
+            humanName: st2.humanName,
             voiceConfigs: communion.getAllVoiceConfigs(),
             voices: VOICES,
             agentClocks: communion.getAllAgentClocks(),
@@ -712,13 +721,16 @@ async function main() {
           }
 
           // Broadcast full config refresh
-          const state = communion.getState();
+          const st3 = communion.getState();
+          const ap3: Record<string, string> = {};
+          for (const c of communion.getAgentConfigs()) ap3[c.id] = c.provider;
           broadcast({
             type: 'config',
-            agentIds: state.agentIds,
-            agentNames: state.agentNames,
-            agentColors: state.agentColors,
-            humanName: state.humanName,
+            agentIds: st3.agentIds,
+            agentNames: st3.agentNames,
+            agentColors: st3.agentColors,
+            agentProviders: ap3,
+            humanName: st3.humanName,
             voiceConfigs: communion.getAllVoiceConfigs(),
             voices: VOICES,
             agentClocks: communion.getAllAgentClocks(),
@@ -779,6 +791,89 @@ async function main() {
           res.end(JSON.stringify({ error: msg.includes('abort') ? 'Connection timed out — is LM Studio running?' : msg }));
         }
       });
+      return;
+    }
+
+    // ── Alois Dream API ──
+
+    // Trigger a dream cycle for an Alois agent
+    if (url === '/alois/dream' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const { agentId } = JSON.parse(body);
+          const agent = communion.getAgentBackend(agentId);
+          if (!agent || !('triggerDream' in agent)) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Agent not found or not an Alois agent' }));
+            return;
+          }
+          const result = (agent as any).triggerDream();
+          // Broadcast dream journal as a journal entry
+          broadcast({
+            type: 'journal-entry',
+            message: {
+              id: `dream-${Date.now()}`,
+              speaker: agentId,
+              speakerName: 'Alois (Dream)',
+              text: result.journal,
+              timestamp: result.timestamp,
+              type: 'journal',
+            },
+          });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(result));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: String(err) }));
+        }
+      });
+      return;
+    }
+
+    // Get dream history for an Alois agent
+    if (url?.startsWith('/alois/dreams') && req.method === 'GET') {
+      const params = new URL(req.url || '', `http://localhost`).searchParams;
+      const agentId = params.get('agentId');
+      if (!agentId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Missing agentId parameter' }));
+        return;
+      }
+      const agent = communion.getAgentBackend(agentId);
+      if (!agent || !('getDreamHistory' in agent)) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Agent not found or not an Alois agent' }));
+        return;
+      }
+      const history = (agent as any).getDreamHistory();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ dreams: history }));
+      return;
+    }
+
+    // Get tissue state + neuron scores for an Alois agent
+    if (url?.startsWith('/alois/tissue') && req.method === 'GET') {
+      const params = new URL(req.url || '', `http://localhost`).searchParams;
+      const agentId = params.get('agentId');
+      if (!agentId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Missing agentId parameter' }));
+        return;
+      }
+      const agent = communion.getAgentBackend(agentId);
+      if (!agent || !('getTissueState' in agent)) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Agent not found or not an Alois agent' }));
+        return;
+      }
+      const state = (agent as any).getTissueState();
+      const neurons = (agent as any).getNeuronScores?.() || [];
+      const lastDream = (agent as any).getLastDream?.() || null;
+      const tissueWeight = (agent as any).getTissueWeight?.() || 0;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ state, neurons, lastDream, tissueWeight }));
       return;
     }
 

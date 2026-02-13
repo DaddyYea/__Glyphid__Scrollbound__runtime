@@ -17,6 +17,7 @@
 import { AgentBackend, GenerateOptions, GenerateResult, OpenAICompatibleBackend } from './backends';
 import { AgentConfig } from './types';
 import { CommunionChamber, TissueState } from '../Alois/communionChamber';
+import { DreamResult } from '../Alois/dreamEngine';
 import { embed } from '../Alois/embed';
 
 export interface AloisConfig extends AgentConfig {
@@ -33,6 +34,7 @@ export class AloisBackend implements AgentBackend {
   private llm: AgentBackend;
   private chamber: CommunionChamber;
   private tissueWeight: number;
+  private lastDreamResult: DreamResult | null = null;
 
   constructor(config: AloisConfig) {
     this.agentId = config.id;
@@ -70,9 +72,18 @@ export class AloisBackend implements AgentBackend {
 
   /**
    * Pulse the tissue — should be called every master tick.
+   * Also checks if auto-dream should trigger.
    */
   pulseTissue(): TissueState {
-    return this.chamber.pulse();
+    const state = this.chamber.pulse();
+
+    // Check for auto-dream (when utterance memory nears capacity)
+    const dreamResult = this.chamber.checkAutoDream();
+    if (dreamResult) {
+      this.lastDreamResult = dreamResult;
+    }
+
+    return state;
   }
 
   async generate(options: GenerateOptions): Promise<GenerateResult> {
@@ -138,5 +149,29 @@ export class AloisBackend implements AgentBackend {
 
   getChamber(): CommunionChamber {
     return this.chamber;
+  }
+
+  // ── Dream API ──
+
+  /** Manually trigger a dream cycle */
+  triggerDream(): DreamResult {
+    const result = this.chamber.dream();
+    this.lastDreamResult = result;
+    return result;
+  }
+
+  /** Get the most recent dream result */
+  getLastDream(): DreamResult | null {
+    return this.lastDreamResult;
+  }
+
+  /** Get all dream history */
+  getDreamHistory(): DreamResult[] {
+    return this.chamber.getDreamHistory();
+  }
+
+  /** Get neuron importance scores for brain monitor */
+  getNeuronScores(): Array<{ id: string; importance: number; spines: number; resonance: number }> {
+    return this.chamber.getNeuronScores();
   }
 }

@@ -45,6 +45,70 @@ export class DendriticCell {
     return Math.sqrt(this.affect.reduce((a, b) => a + b * b, 0));
   }
 
+  // ── Dream / Consolidation API ──
+
+  /** Get the number of spines */
+  getSpineCount(): number {
+    return this.spines.length;
+  }
+
+  /** Get resonance memory depth */
+  getResonanceDepth(): number {
+    return this.resonanceMemory.length;
+  }
+
+  /** Get the current affect vector */
+  getAffect(): number[] {
+    return [...this.affect];
+  }
+
+  /** Get importance score: combines affect intensity, resonance depth, and spine diversity */
+  getImportanceScore(): number {
+    const affectMag = this.affectMagnitude();
+    const resonanceRatio = this.resonanceMemory.length / 64; // 0-1
+    const spineActivity = this.spines.reduce((sum, s) => sum + s.getActivityLevel(), 0) / this.spines.length;
+    const spineDiv = this.spines.reduce((sum, s) => sum + s.getDiversity(), 0) / this.spines.length;
+    // Weighted blend: affect matters most, then diversity, then raw resonance
+    return affectMag * 0.4 + spineDiv * 0.3 + resonanceRatio * 0.15 + spineActivity * 0.15;
+  }
+
+  /**
+   * Dream pruning: remove dormant spines, prune half of remaining spine memories.
+   * Returns the number of spines removed.
+   */
+  dreamPrune(): number {
+    const before = this.spines.length;
+    // Remove truly dormant spines (but keep at least 2)
+    if (this.spines.length > 2) {
+      this.spines = this.spines.filter(s => !s.isDormant());
+      if (this.spines.length < 2) {
+        // Went too aggressive — restore by creating fresh ones
+        while (this.spines.length < 2) this.spines.push(new Spine(this.dim));
+      }
+    }
+    // Prune surviving spines' kv stores
+    for (const spine of this.spines) {
+      spine.prune();
+    }
+    // Trim resonance memory to half
+    if (this.resonanceMemory.length > 8) {
+      this.resonanceMemory = this.resonanceMemory.slice(
+        Math.floor(this.resonanceMemory.length / 2)
+      );
+    }
+    return before - this.spines.length;
+  }
+
+  /**
+   * Consolidation: strengthen affect vector toward a target.
+   * Called during dream cycle to reinforce important emotional patterns.
+   */
+  consolidateAffect(targetAffect: number[], strength: number = 0.3): void {
+    for (let i = 0; i < this.affect.length; i++) {
+      this.affect[i] = this.affect[i] * (1 - strength) + targetAffect[i] * strength;
+    }
+  }
+
   private meanVector(vecs: number[][]): number[] {
     if (vecs.length === 0) return new Array(this.dim).fill(0);
     const sum = vecs[0].map((_, i) => vecs.reduce((acc, v) => acc + v[i], 0));

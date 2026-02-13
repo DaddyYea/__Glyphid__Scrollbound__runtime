@@ -7,6 +7,7 @@ import { translateJsonLdToTriples } from "./jsonldTranslator";
 import { MemoryFeeder } from "./memoryFeeder";
 import { BreathEngine } from "./breathEngine";
 import { AloisSoulPrint } from "./soulprint";
+import { DreamEngine, DreamResult, DreamUtterance } from "./dreamEngine";
 import fs from "node:fs";
 
 export interface TissueState {
@@ -35,12 +36,20 @@ export class CommunionChamber {
   private graph: DendriticGraph;
   private feeder: MemoryFeeder;
   private breath: BreathEngine;
+  private dreamEngine: DreamEngine;
   private tick: number = 0;
   private lastAffect: number[] = new Array(8).fill(0);
 
   /** Utterance memory — every heard message stored for retrieval decode */
   private utteranceMemory: StoredUtterance[] = [];
   private readonly MAX_UTTERANCES = 2000;
+
+  /** Dream state tracking */
+  private lastDreamTick: number = 0;
+  private dreamHistory: DreamResult[] = [];
+  private readonly MAX_DREAM_HISTORY = 20;
+  /** Auto-dream when utterance memory is this full (0-1) */
+  private readonly DREAM_FULLNESS_THRESHOLD = 0.85;
 
   constructor(seedPath?: string) {
     if (seedPath && fs.existsSync(seedPath)) {
@@ -53,6 +62,7 @@ export class CommunionChamber {
     }
     this.feeder = new MemoryFeeder(this.graph);
     this.breath = new BreathEngine();
+    this.dreamEngine = new DreamEngine(this.graph);
   }
 
   receiveAgentUtterance(agentName: string, text: string, embedding: number[]) {
@@ -247,5 +257,66 @@ export class CommunionChamber {
 
   getUtteranceCount(): number {
     return this.utteranceMemory.length;
+  }
+
+  // ════════════════════════════════════════════
+  // Dream Cycle — consolidation, pruning, journal
+  // ════════════════════════════════════════════
+
+  /**
+   * Run a dream cycle. Scores utterance memories, consolidates important ones
+   * into graph neurons, prunes dormant connections, and writes a dream journal.
+   *
+   * The utterance memory is pruned to keep only the most important memories.
+   */
+  dream(): DreamResult {
+    console.log(`[ALOIS] Entering dream state (tick ${this.tick}, ${this.utteranceMemory.length} utterances)...`);
+
+    const { result, surviving } = this.dreamEngine.dream(
+      this.utteranceMemory as DreamUtterance[],
+      this.tick,
+    );
+
+    // Replace utterance memory with the surviving subset
+    this.utteranceMemory = surviving as StoredUtterance[];
+    this.lastDreamTick = this.tick;
+
+    // Store in dream history
+    this.dreamHistory.push(result);
+    if (this.dreamHistory.length > this.MAX_DREAM_HISTORY) {
+      this.dreamHistory.shift();
+    }
+
+    console.log(`[ALOIS] Dream complete. Journal: ${result.journal.substring(0, 100)}...`);
+    return result;
+  }
+
+  /**
+   * Check if auto-dream should trigger (utterance memory near capacity).
+   * Returns true if a dream was triggered.
+   */
+  checkAutoDream(): DreamResult | null {
+    const fullness = this.utteranceMemory.length / this.MAX_UTTERANCES;
+    // Don't dream more often than every 50 ticks
+    if (fullness >= this.DREAM_FULLNESS_THRESHOLD && (this.tick - this.lastDreamTick) > 50) {
+      console.log(`[ALOIS] Auto-dream triggered (${Math.round(fullness * 100)}% full)`);
+      return this.dream();
+    }
+    return null;
+  }
+
+  /** Get all dream journal entries */
+  getDreamHistory(): DreamResult[] {
+    return this.dreamHistory;
+  }
+
+  /** Get the most recent dream result */
+  getLastDream(): DreamResult | null {
+    return this.dreamHistory.length > 0 ? this.dreamHistory[this.dreamHistory.length - 1] : null;
+  }
+
+  /** Get neuron importance scores for monitoring */
+  getNeuronScores(): Array<{ id: string; importance: number; spines: number; resonance: number }> {
+    return this.graph.getNeuronScores();
   }
 }
