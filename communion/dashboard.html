@@ -1455,8 +1455,8 @@
         agentBaseUrlInput.placeholder = 'http://localhost:1234/v1';
         agentApiKeyInput.value = 'lm-studio';
         agentApiKeyInput.placeholder = 'lm-studio (any value works)';
-        agentModelInput.placeholder = 'Click Detect to find loaded models';
-        apiKeyHint.textContent = 'LM Studio does not require a real API key. Any value works.';
+        agentModelInput.placeholder = 'Type model name or click Detect';
+        apiKeyHint.textContent = 'In LM Studio: load a model, then go to the Developer tab and click Start Server. You can type the model name directly or use Detect.';
         apiKeyHint.style.display = 'block';
         detectModelsBtn.style.display = 'inline-block';
       } else if (provider === 'alois') {
@@ -1530,9 +1530,9 @@
         }
 
         if (!models) {
-          agentModelInput.placeholder = 'No models found';
+          agentModelInput.placeholder = 'Type model name manually';
           agentModelSelect.style.display = 'none';
-          addAgentError.textContent = 'No models found. Make sure a model is loaded in LM Studio (not just downloaded — click the load button). Check the browser console (F12) for the raw API response.';
+          addAgentError.textContent = 'Could not detect models. In LM Studio: 1) Load a model, 2) Go to Developer tab, 3) Click "Start Server". You can also just type the model name in the field above and skip detection.';
           addAgentError.style.display = 'block';
         } else {
           agentModelSelect.innerHTML = models.map(m =>
