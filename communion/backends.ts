@@ -192,22 +192,36 @@ const MAX_SYSTEM_CHARS: Record<string, number> = {
 };
 
 function buildUserPrompt(options: GenerateOptions): string {
-  const parts = [options.conversationContext, options.journalContext];
-  if (options.documentsContext) {
-    parts.push(options.documentsContext);
-  }
-  if (options.memoryContext) {
-    parts.push(options.memoryContext);
-  }
-  parts.push('Based on the conversation, your private reflections, any shared documents, and the memory state, decide what to do this tick. Respond with EXACTLY one of these formats:\n\n[SPEAK] your message to the room\n[JOURNAL] your private reflection\n[SILENT] (say nothing this tick)');
+  // Priority order: conversation first (most important), then journal, then instruction footer
+  // Documents and memory go LAST so they get truncated first when space is tight
+  const instruction = 'Based on the conversation, your private reflections, any shared documents, and the memory state, decide what to do this tick. Respond with EXACTLY one of these formats:\n\n[SPEAK] your message to the room\n[JOURNAL] your private reflection\n[SILENT] (say nothing this tick)';
 
-  let prompt = parts.join('\n\n');
-
-  // Hard cap — truncate from the middle (keep start + end) if too long
   const maxChars = MAX_PROMPT_CHARS[options.provider || 'default'] || MAX_PROMPT_CHARS.default;
+
+  // Start with highest priority content
+  let prompt = [options.conversationContext, options.journalContext].filter(Boolean).join('\n\n');
+  let remaining = maxChars - prompt.length - instruction.length - 20; // 20 for separators
+
+  // Add documents only if there's room
+  if (options.documentsContext && remaining > 200) {
+    const docBudget = Math.min(options.documentsContext.length, Math.floor(remaining * 0.5));
+    prompt += '\n\n' + options.documentsContext.substring(0, docBudget);
+    remaining -= docBudget;
+  }
+
+  // Add memory only if there's room
+  if (options.memoryContext && remaining > 200) {
+    const memBudget = Math.min(options.memoryContext.length, remaining);
+    prompt += '\n\n' + options.memoryContext.substring(0, memBudget);
+  }
+
+  prompt += '\n\n' + instruction;
+
+  // Final safety cap (shouldn't be needed but just in case)
   if (prompt.length > maxChars) {
-    const keepStart = Math.floor(maxChars * 0.3);
-    const keepEnd = Math.floor(maxChars * 0.6);
+    // Keep start (conversation) and end (instruction footer)
+    const keepStart = Math.floor(maxChars * 0.7);
+    const keepEnd = Math.floor(maxChars * 0.2);
     const truncated = prompt.length - maxChars;
     prompt = prompt.substring(0, keepStart) +
       `\n\n[... ${truncated} characters truncated to fit context window ...]\n\n` +

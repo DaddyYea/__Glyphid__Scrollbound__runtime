@@ -1279,7 +1279,11 @@ export class CommunionLoop {
       systemPrompt,
       conversationContext: assembledContext + (ramManifest ? '\n\n' + ramManifest : ''),
       journalContext: '', // Already in RAM
-      documentsContext: this.documentsContext || undefined, // Summary + browse index (not full content)
+      // For local/small-context models, skip the full document tree — it overwhelms the prompt.
+      // Agents can still discover files via [RAM:BROWSE keyword].
+      documentsContext: (agent.config.provider === 'lmstudio' || agent.config.provider === 'alois')
+        ? (this.documentsContext ? 'SHARED DOCUMENTS: Use [RAM:BROWSE keyword] to search and load content from shared files.' : undefined)
+        : (this.documentsContext || undefined),
       memoryContext: undefined, // Already in RAM
       provider: agent.config.provider,
     };
