@@ -779,11 +779,31 @@ async function main() {
           }
 
           const data = (await resp.json()) as any;
-          const models = (data.data || []).map((m: any) => ({ id: m.id }));
+          console.log(`[LM STUDIO] Raw response keys: ${Object.keys(data).join(', ')}`, JSON.stringify(data).substring(0, 500));
+
+          // Handle multiple response formats:
+          // Standard OpenAI: { data: [{ id: "..." }] }
+          // Some LM Studio versions: { models: [{ id: "..." }] }
+          // Array directly: [{ id: "..." }]
+          // Single model: { id: "..." }
+          let modelList: any[] = [];
+          if (Array.isArray(data.data)) {
+            modelList = data.data;
+          } else if (Array.isArray(data.models)) {
+            modelList = data.models;
+          } else if (Array.isArray(data)) {
+            modelList = data;
+          } else if (data.id) {
+            modelList = [data];
+          }
+
+          const models = modelList
+            .map((m: any) => ({ id: m.id || m.name || m.model || String(m) }))
+            .filter((m: any) => m.id && m.id !== 'undefined');
           console.log(`[LM STUDIO] Found ${models.length} model(s): ${models.map((m: any) => m.id).join(', ')}`);
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ models }));
+          res.end(JSON.stringify({ models, rawKeys: Object.keys(data) }));
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error('[LM STUDIO] Model detection error:', msg);

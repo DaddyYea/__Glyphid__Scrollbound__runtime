@@ -1498,8 +1498,8 @@
           const result = await resp.json();
           if (resp.ok && result.models && result.models.length > 0) {
             models = result.models;
-          } else if (result.error) {
-            console.log('[DETECT] Server proxy failed:', result.error);
+          } else {
+            console.log('[DETECT] Server proxy result:', result.error || 'empty models', result.rawKeys || '');
           }
         } catch (proxyErr) {
           console.log('[DETECT] Server proxy error:', proxyErr);
@@ -1514,7 +1514,14 @@
             });
             if (directResp.ok) {
               const data = await directResp.json();
-              models = (data.data || []).map(m => ({ id: m.id }));
+              console.log('[DETECT] Direct response:', JSON.stringify(data).substring(0, 300));
+              // Handle multiple formats
+              let list = [];
+              if (Array.isArray(data.data)) list = data.data;
+              else if (Array.isArray(data.models)) list = data.models;
+              else if (Array.isArray(data)) list = data;
+              else if (data.id) list = [data];
+              models = list.map(m => ({ id: m.id || m.name || m.model || String(m) })).filter(m => m.id && m.id !== 'undefined');
               if (models.length === 0) models = null;
             }
           } catch (directErr) {
@@ -1525,7 +1532,7 @@
         if (!models) {
           agentModelInput.placeholder = 'No models found';
           agentModelSelect.style.display = 'none';
-          addAgentError.textContent = 'Could not reach LM Studio. Make sure it\'s running and a model is loaded. If LM Studio is on a different machine, use that machine\'s IP instead of localhost.';
+          addAgentError.textContent = 'No models found. Make sure a model is loaded in LM Studio (not just downloaded — click the load button). Check the browser console (F12) for the raw API response.';
           addAgentError.style.display = 'block';
         } else {
           agentModelSelect.innerHTML = models.map(m =>
