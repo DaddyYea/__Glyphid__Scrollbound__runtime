@@ -144,6 +144,7 @@ const MAX_PROMPT_CHARS: Record<string, number> = {
   openai: 80000,        // ~20k tokens (GPT-4o 128k but TPM limits)
   grok: 400000,         // ~100k tokens (131k max - headroom)
   lmstudio: 24000,      // ~6k tokens — local models often have 4-8k context
+  alois: 24000,         // ~6k tokens — uses underlying LLM (often local)
   default: 80000,
 };
 
@@ -185,6 +186,11 @@ export function createBackend(config: AgentConfig): AgentBackend {
       return new AnthropicBackend(config);
     case 'openai-compatible':
       return new OpenAICompatibleBackend(config);
+    case 'alois': {
+      // Lazy import to avoid loading Alois modules when not needed
+      const { AloisBackend } = require('./aloisBackend');
+      return new AloisBackend(config);
+    }
     default:
       throw new Error(`Unknown provider: ${(config as any).provider}`);
   }

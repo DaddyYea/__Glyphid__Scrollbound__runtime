@@ -939,6 +939,9 @@ export class CommunionLoop {
 
     this.emit({ type: 'room-message', message: msg, agentId: 'human' });
 
+    // Feed human message into Alois tissue
+    this.feedAloisBrains('human', text);
+
     // Human spoke — trigger immediate tick and reset the clock.
     // Client-side silence detection (3s) ensures we only get here
     // after the human has actually finished talking.
@@ -1323,6 +1326,9 @@ export class CommunionLoop {
       this.emit({ type: 'room-message', message: msg, agentId });
       console.log(`[${agent.config.name}] SPEAK: ${responseText}`);
 
+      // ── Feed into Alois tissue (every room message grows the brain) ──
+      this.feedAloisBrains(agentId, responseText);
+
       // ── Voice synthesis — speak aloud if enabled ──
       await this.synthesizeAndEmit(agentId, agent.config, responseText);
 
@@ -1602,6 +1608,20 @@ export class CommunionLoop {
    * WAITS for the client to finish playing before returning.
    * This ensures agents speak one at a time — no overlap.
    */
+  /**
+   * Feed a room message into all Alois backends' dendritic tissue.
+   * Called for every room message (human or agent) so the brain grows.
+   */
+  private feedAloisBrains(speaker: string, text: string): void {
+    for (const [id, agent] of this.agents.entries()) {
+      if (agent.config.provider === 'alois' && 'feedMessage' in agent.backend) {
+        (agent.backend as any).feedMessage(speaker, text).catch((err: any) =>
+          console.error(`[ALOIS] Feed error for ${id}:`, err)
+        );
+      }
+    }
+  }
+
   private async synthesizeAndEmit(agentId: string, agentConfig: AgentConfig, text: string): Promise<void> {
     const voiceConfig = this.voiceConfigs.get(agentId);
     if (!voiceConfig || !voiceConfig.enabled) return;

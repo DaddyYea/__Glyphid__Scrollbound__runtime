@@ -5,6 +5,7 @@ import { DendriticCell } from "./dendriticCell";
 
 export class AxonBus {
   private children: Map<string, DendriticCell> = new Map();
+  private lastState: number[] = [];
 
   constructor(private parentId: string, private source: DendriticCell) {}
 
@@ -13,7 +14,10 @@ export class AxonBus {
   }
 
   propagate(globalTick: number): void {
-    const { affect, state } = this.source.tick(state, globalTick);
+    // Use last known state as input (avoids circular reference with undefined `state`)
+    const input = this.lastState.length > 0 ? this.lastState : new Array(this.source.dim).fill(0);
+    const { affect, state } = this.source.tick(input, globalTick);
+    this.lastState = state;
 
     for (const [id, child] of this.children.entries()) {
       const merged = state.map((s, i) => s + affect[i % affect.length]);

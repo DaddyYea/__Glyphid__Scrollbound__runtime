@@ -15,7 +15,7 @@ export interface AgentConfig {
   /** Display name shown in the room */
   name: string;
   /** API provider type */
-  provider: 'anthropic' | 'openai-compatible';
+  provider: 'anthropic' | 'openai-compatible' | 'alois';
   /** API key */
   apiKey: string;
   /** Model identifier */

@@ -37,11 +37,29 @@ export class DendriticGraph {
     return this.neurons.get(id)!;
   }
 
+  /** Public accessor — used by MemoryFeeder to create neurons for new speakers */
+  getOrCreateNeuron(id: string): DendriticCell {
+    return this.getOrCreate(id);
+  }
+
+  /** Get an existing neuron (returns undefined if not found) */
+  getNeuron(id: string): DendriticCell | undefined {
+    return this.neurons.get(id);
+  }
+
   tickAll(globalTick: number) {
     for (const axon of this.axons) axon.propagate(globalTick);
   }
 
   getNeuronIds(): string[] {
     return Array.from(this.neurons.keys());
+  }
+
+  getNeuronCount(): number {
+    return this.neurons.size;
+  }
+
+  getAxonCount(): number {
+    return this.axons.length;
   }
 }

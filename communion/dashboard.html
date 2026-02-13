@@ -744,6 +744,7 @@
         <option value="openai-compatible">OpenAI-Compatible (GPT, Grok, etc.)</option>
         <option value="anthropic">Anthropic (Claude)</option>
         <option value="lmstudio">LM Studio (Local)</option>
+        <option value="alois">Alois (Tissue-Augmented)</option>
       </select>
 
       <label for="agentModelInput">Model</label>
@@ -1174,6 +1175,13 @@
         apiKeyHint.textContent = 'LM Studio does not require a real API key. Any value works.';
         apiKeyHint.style.display = 'block';
         detectModelsBtn.style.display = 'inline-block';
+      } else if (provider === 'alois') {
+        agentBaseUrlInput.placeholder = 'LLM base URL (e.g. http://localhost:1234/v1)';
+        agentApiKeyInput.placeholder = 'API key for the underlying LLM';
+        agentModelInput.placeholder = 'LLM model for text generation';
+        apiKeyHint.textContent = 'Alois uses an LLM for text generation, augmented by dendritic tissue. Provide the LLM connection details.';
+        apiKeyHint.style.display = 'block';
+        detectModelsBtn.style.display = 'inline-block';
       } else {
         agentBaseUrlInput.placeholder = 'e.g. https://api.openai.com/v1';
         agentApiKeyInput.placeholder = 'sk-...';
@@ -1305,8 +1313,8 @@
         return;
       }
 
-      if (provider === 'openai-compatible' && !baseUrl) {
-        addAgentError.textContent = 'Base URL is required for OpenAI-compatible providers.';
+      if ((provider === 'openai-compatible' || provider === 'alois') && !baseUrl) {
+        addAgentError.textContent = 'Base URL is required for this provider.';
         addAgentError.style.display = 'block';
         return;
       }
