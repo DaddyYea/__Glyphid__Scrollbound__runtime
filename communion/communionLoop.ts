@@ -1517,7 +1517,9 @@ export class CommunionLoop {
     lines.push(`${this.state.humanName} is ${this.state.humanPresence === 'here' ? 'HERE — present and engaged' : 'AWAY — the room is between agents'}.`);
 
     // Agent clock
-    if (rhythm.tickEveryN > 1) {
+    if (rhythm.tickEveryN < 0) {
+      lines.push(`Your clock: ${Math.abs(rhythm.tickEveryN)}x speed — you get ${Math.abs(rhythm.tickEveryN)} turns per tick.`);
+    } else if (rhythm.tickEveryN > 1) {
       lines.push(`Your clock: every ${rhythm.tickEveryN} master ticks (slower pace — you speak less frequently).`);
     }
 
@@ -1878,11 +1880,15 @@ export class CommunionLoop {
    * tickEveryN=1 means every tick, 2 means every other tick, etc.
    */
   setAgentClock(agentId: string, tickEveryN: number): void {
-    const clamped = Math.max(1, Math.min(20, Math.round(tickEveryN)));
+    // Clamp: -5 (5x fast) to 20 (every 20th tick). Skip 0 → treat as 1.
+    let clamped = Math.round(tickEveryN);
+    if (clamped === 0) clamped = 1;
+    clamped = Math.max(-5, Math.min(20, clamped));
     const rhythm = this.rhythm.get(agentId);
     if (rhythm) {
       rhythm.tickEveryN = clamped;
-      console.log(`[CLOCK] ${this.state.agentNames[agentId] || agentId} tick every ${clamped} master ticks`);
+      const desc = clamped < 0 ? `${Math.abs(clamped)}x per tick` : clamped === 1 ? 'every tick' : `every ${clamped} ticks`;
+      console.log(`[CLOCK] ${this.state.agentNames[agentId] || agentId}: ${desc}`);
       this.saveAgentClocks();
     }
   }
@@ -1970,7 +1976,8 @@ export class CommunionLoop {
       for (const [agentId, tickEveryN] of Object.entries(saved)) {
         const rhythm = this.rhythm.get(agentId);
         if (rhythm && typeof tickEveryN === 'number') {
-          rhythm.tickEveryN = Math.max(1, Math.min(20, Math.round(tickEveryN)));
+          const v = Math.round(tickEveryN as number);
+          rhythm.tickEveryN = Math.max(-5, Math.min(20, v === 0 ? 1 : v));
         }
       }
       const summary = [...this.rhythm.entries()]

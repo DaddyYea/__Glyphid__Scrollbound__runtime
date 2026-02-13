@@ -600,7 +600,7 @@
       letter-spacing: 0.5px;
     }
     .clock-slider {
-      width: 60px;
+      width: 80px;
       accent-color: #7eb8da;
       cursor: pointer;
     }
@@ -928,26 +928,33 @@
       const clockSlider = document.createElement('input');
       clockSlider.type = 'range';
       clockSlider.className = 'clock-slider';
-      clockSlider.min = '1';
+      clockSlider.min = '-5';
       clockSlider.max = '10';
       clockSlider.value = String(agentClocks[agentId] || 1);
-      clockSlider.title = 'Tick every N master ticks (1 = every tick)';
+      clockSlider.title = 'Left = fast (multi-turn), Center = normal, Right = slow (skip ticks)';
+
+      function formatClock(n) {
+        if (n < 0) return Math.abs(n) + 'x';
+        if (n === 1) return '1x';
+        return '1/' + n;
+      }
 
       const clockVal = document.createElement('span');
       clockVal.className = 'clock-value';
-      const clockN = agentClocks[agentId] || 1;
-      clockVal.textContent = clockN === 1 ? '1x' : `1/${clockN}`;
+      clockVal.textContent = formatClock(agentClocks[agentId] || 1);
 
       clockSlider.addEventListener('input', () => {
-        const n = Number(clockSlider.value);
-        clockVal.textContent = n === 1 ? '1x' : `1/${n}`;
+        let n = Number(clockSlider.value);
+        if (n === 0) n = 1; // skip 0
+        clockVal.textContent = formatClock(n);
       });
 
       let clockDebounce = null;
       clockSlider.addEventListener('change', () => {
         clearTimeout(clockDebounce);
         clockDebounce = setTimeout(() => {
-          const n = Number(clockSlider.value);
+          let n = Number(clockSlider.value);
+          if (n === 0) n = 1;
           fetch('/agent-clock', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1129,7 +1136,8 @@
           const panel = journalPanels[data.agentId];
           if (panel && panel.clockSlider) {
             panel.clockSlider.value = String(data.tickEveryN);
-            panel.clockVal.textContent = data.tickEveryN === 1 ? '1x' : `1/${data.tickEveryN}`;
+            const n = data.tickEveryN;
+            panel.clockVal.textContent = n < 0 ? Math.abs(n) + 'x' : n === 1 ? '1x' : '1/' + n;
           }
         }
       } else if (data.type === 'control') {
