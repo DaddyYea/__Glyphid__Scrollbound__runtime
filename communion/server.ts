@@ -570,6 +570,120 @@ async function main() {
       return;
     }
 
+    // ── Dynamic Agent Management ──
+
+    // Add agent
+    if (url === '/agents/add' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const agentConfig = JSON.parse(body) as AgentConfig;
+          if (!agentConfig.id || !agentConfig.name || !agentConfig.provider || !agentConfig.apiKey || !agentConfig.model) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing required fields: id, name, provider, apiKey, model' }));
+            return;
+          }
+          // Sanitize id: lowercase, no spaces
+          agentConfig.id = agentConfig.id.toLowerCase().replace(/[^a-z0-9-_]/g, '');
+          if (!agentConfig.id) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid agent ID' }));
+            return;
+          }
+
+          const success = communion.addAgent(agentConfig);
+          if (!success) {
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Agent "${agentConfig.id}" already exists` }));
+            return;
+          }
+
+          // Broadcast full config refresh so all clients rebuild layout
+          const state = communion.getState();
+          broadcast({
+            type: 'config',
+            agentIds: state.agentIds,
+            agentNames: state.agentNames,
+            agentColors: state.agentColors,
+            humanName: state.humanName,
+            voiceConfigs: communion.getAllVoiceConfigs(),
+            voices: VOICES,
+            agentClocks: communion.getAllAgentClocks(),
+            customInstructions: communion.getAllCustomInstructions(),
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'added', agentId: agentConfig.id }));
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        }
+      });
+      return;
+    }
+
+    // Remove agent
+    if (url?.startsWith('/agents/remove') && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const { agentId } = JSON.parse(body);
+          if (!agentId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing agentId' }));
+            return;
+          }
+
+          const success = communion.removeAgent(agentId);
+          if (!success) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Agent "${agentId}" not found` }));
+            return;
+          }
+
+          // Broadcast full config refresh
+          const state = communion.getState();
+          broadcast({
+            type: 'config',
+            agentIds: state.agentIds,
+            agentNames: state.agentNames,
+            agentColors: state.agentColors,
+            humanName: state.humanName,
+            voiceConfigs: communion.getAllVoiceConfigs(),
+            voices: VOICES,
+            agentClocks: communion.getAllAgentClocks(),
+            customInstructions: communion.getAllCustomInstructions(),
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'removed', agentId }));
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        }
+      });
+      return;
+    }
+
+    // List agents
+    if (url === '/agents' && req.method === 'GET') {
+      const configs = communion.getAgentConfigs();
+      // Strip API keys from response
+      const safe = configs.map(c => ({
+        id: c.id,
+        name: c.name,
+        provider: c.provider,
+        model: c.model,
+        baseUrl: c.baseUrl,
+        color: c.color,
+      }));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(safe));
+      return;
+    }
+
     // Mic state — client signals human is speaking into mic
     if (url === '/mic' && req.method === 'POST') {
       let body = '';

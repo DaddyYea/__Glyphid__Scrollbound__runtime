@@ -611,6 +611,26 @@
       min-width: 20px;
     }
 
+    /* Remove agent button */
+    .remove-agent-btn {
+      float: right;
+      padding: 1px 6px;
+      font-size: 0.7em;
+      font-family: 'Courier New', monospace;
+      border-radius: 3px;
+      cursor: pointer;
+      border: 1px solid rgba(218, 80, 80, 0.2);
+      background: transparent;
+      color: #405060;
+      transition: all 0.2s ease;
+      line-height: 1;
+    }
+    .remove-agent-btn:hover {
+      border-color: rgba(218, 80, 80, 0.5);
+      color: #da8080;
+      background: rgba(218, 80, 80, 0.1);
+    }
+
     /* Speaking indicator */
     .speaking-indicator {
       display: none;
@@ -649,6 +669,7 @@
       <input type="range" id="speedSlider" min="3" max="1800" value="1800" class="speed-slider" title="Tick interval (seconds)" />
       <span class="speed-value" id="speedValue">30m</span>
       <button class="import-btn" id="importBtn">IMPORT</button>
+      <button class="import-btn" id="addAgentBtn" style="color:#8eda7e;border-color:rgba(142,218,126,0.3);">+ AGENT</button>
       <span class="speaking-indicator" id="speakingIndicator"><span class="speaking-dot"></span><span id="speakingName">Speaking...</span></span>
     </div>
   </div>
@@ -697,6 +718,44 @@
       <div class="modal-actions">
         <button class="btn-cancel" id="instructionsCancelBtn">Cancel</button>
         <button class="btn-import" id="instructionsSaveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Agent Modal -->
+  <div class="modal-overlay" id="addAgentModal">
+    <div class="modal">
+      <h2>Add Agent</h2>
+
+      <label for="agentNameInput">Display Name</label>
+      <input type="text" id="agentNameInput" placeholder="e.g. Gemini" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+
+      <label for="agentIdInput">Agent ID (lowercase, no spaces)</label>
+      <input type="text" id="agentIdInput" placeholder="e.g. gemini" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+
+      <label for="agentProviderInput">Provider</label>
+      <select id="agentProviderInput" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;">
+        <option value="openai-compatible">OpenAI-Compatible (GPT, Grok, LM Studio, etc.)</option>
+        <option value="anthropic">Anthropic (Claude)</option>
+      </select>
+
+      <label for="agentModelInput">Model</label>
+      <input type="text" id="agentModelInput" placeholder="e.g. gpt-4o, grok-3, gemini-pro" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+
+      <label for="agentApiKeyInput">API Key</label>
+      <input type="password" id="agentApiKeyInput" placeholder="sk-..." style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+
+      <label for="agentBaseUrlInput">Base URL (required for OpenAI-compatible)</label>
+      <input type="text" id="agentBaseUrlInput" placeholder="e.g. https://api.openai.com/v1" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+
+      <label for="agentColorInput">Color</label>
+      <input type="color" id="agentColorInput" value="#7edab8" style="width:50px;height:28px;border:1px solid rgba(126,184,218,0.25);border-radius:4px;background:transparent;cursor:pointer;" />
+
+      <div id="addAgentError" style="display:none;margin-top:10px;padding:6px 10px;background:rgba(200,80,80,0.1);border-left:2px solid rgba(200,80,80,0.4);color:#da8080;font-size:0.75em;border-radius:2px;"></div>
+
+      <div class="modal-actions">
+        <button class="btn-cancel" id="addAgentCancelBtn">Cancel</button>
+        <button class="btn-import" id="addAgentSubmitBtn" style="color:#8eda7e;border-color:rgba(142,218,126,0.3);background:rgba(142,218,126,0.1);">Add</button>
       </div>
     </div>
   </div>
@@ -873,9 +932,25 @@
       header.style.color = color;
       header.style.background = hexToRgba(color, 0.05);
 
-      // Agent name
+      // Agent name + remove button
       const nameSpan = document.createElement('div');
       nameSpan.textContent = `${name}'s Journal`;
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'remove-agent-btn';
+      removeBtn.textContent = '\u2715';
+      removeBtn.title = `Remove ${name} from communion`;
+      removeBtn.addEventListener('click', () => {
+        if (confirm(`Remove ${name} from the communion? Their journal history will be preserved on disk.`)) {
+          fetch('/agents/remove', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agentId }),
+          }).catch(err => console.error('Remove agent error:', err));
+        }
+      });
+      nameSpan.appendChild(removeBtn);
+
       header.appendChild(nameSpan);
 
       // Voice controls row
@@ -1040,6 +1115,100 @@
 
       instructionsModal.classList.remove('active');
       instructionsAgentId = null;
+    });
+
+    // ── Add Agent Modal ──
+    const addAgentBtn = document.getElementById('addAgentBtn');
+    const addAgentModal = document.getElementById('addAgentModal');
+    const addAgentCancelBtn = document.getElementById('addAgentCancelBtn');
+    const addAgentSubmitBtn = document.getElementById('addAgentSubmitBtn');
+    const addAgentError = document.getElementById('addAgentError');
+    const agentNameInput = document.getElementById('agentNameInput');
+    const agentIdInput = document.getElementById('agentIdInput');
+    const agentProviderInput = document.getElementById('agentProviderInput');
+    const agentModelInput = document.getElementById('agentModelInput');
+    const agentApiKeyInput = document.getElementById('agentApiKeyInput');
+    const agentBaseUrlInput = document.getElementById('agentBaseUrlInput');
+    const agentColorInput = document.getElementById('agentColorInput');
+
+    // Auto-generate ID from name
+    agentNameInput.addEventListener('input', () => {
+      agentIdInput.value = agentNameInput.value.toLowerCase().replace(/[^a-z0-9-_]/g, '').substring(0, 20);
+    });
+
+    // Auto-fill base URL when provider changes
+    agentProviderInput.addEventListener('change', () => {
+      if (agentProviderInput.value === 'anthropic') {
+        agentBaseUrlInput.value = '';
+        agentBaseUrlInput.placeholder = '(not needed for Anthropic)';
+      } else {
+        agentBaseUrlInput.placeholder = 'e.g. https://api.openai.com/v1';
+      }
+    });
+
+    addAgentBtn.addEventListener('click', () => {
+      addAgentModal.classList.add('active');
+      addAgentError.style.display = 'none';
+      agentNameInput.value = '';
+      agentIdInput.value = '';
+      agentModelInput.value = '';
+      agentApiKeyInput.value = '';
+      agentBaseUrlInput.value = '';
+      agentColorInput.value = '#7edab8';
+      agentNameInput.focus();
+    });
+
+    addAgentCancelBtn.addEventListener('click', () => {
+      addAgentModal.classList.remove('active');
+    });
+
+    addAgentModal.addEventListener('click', (e) => {
+      if (e.target === addAgentModal) addAgentModal.classList.remove('active');
+    });
+
+    addAgentSubmitBtn.addEventListener('click', async () => {
+      const name = agentNameInput.value.trim();
+      const id = agentIdInput.value.trim();
+      const provider = agentProviderInput.value;
+      const model = agentModelInput.value.trim();
+      const apiKey = agentApiKeyInput.value.trim();
+      const baseUrl = agentBaseUrlInput.value.trim();
+      const color = agentColorInput.value;
+
+      if (!name || !id || !model || !apiKey) {
+        addAgentError.textContent = 'Name, ID, model, and API key are required.';
+        addAgentError.style.display = 'block';
+        return;
+      }
+
+      if (provider === 'openai-compatible' && !baseUrl) {
+        addAgentError.textContent = 'Base URL is required for OpenAI-compatible providers.';
+        addAgentError.style.display = 'block';
+        return;
+      }
+
+      addAgentSubmitBtn.disabled = true;
+      addAgentError.style.display = 'none';
+
+      try {
+        const resp = await fetch('/agents/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, name, provider, model, apiKey, baseUrl: baseUrl || undefined, color }),
+        });
+        const result = await resp.json();
+        if (!resp.ok) {
+          addAgentError.textContent = result.error || 'Failed to add agent';
+          addAgentError.style.display = 'block';
+        } else {
+          addAgentModal.classList.remove('active');
+        }
+      } catch (err) {
+        addAgentError.textContent = 'Network error: ' + err.message;
+        addAgentError.style.display = 'block';
+      } finally {
+        addAgentSubmitBtn.disabled = false;
+      }
     });
 
     function addRoomMessage(speaker, speakerName, text, timestamp, isBackchannel) {

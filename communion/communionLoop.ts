@@ -1989,6 +1989,110 @@ export class CommunionLoop {
     }
   }
 
+  // ════════════════════════════════════════════
+  // Dynamic Agent Management — add/remove at runtime
+  // ════════════════════════════════════════════
+
+  /**
+   * Add a new agent to the communion at runtime.
+   * Creates backend, system prompt, rhythm, RAM, voice, journal, and graph node.
+   */
+  addAgent(agentConfig: AgentConfig): boolean {
+    if (this.agents.has(agentConfig.id)) {
+      console.error(`[AGENT] Cannot add — agent "${agentConfig.id}" already exists`);
+      return false;
+    }
+
+    // Build system prompt using all current agents + the new one
+    const allConfigs = [
+      ...Array.from(this.agents.values()).map(a => a.config),
+      agentConfig,
+    ];
+    const backend = createBackend(agentConfig);
+    const systemPrompt = agentConfig.systemPrompt || buildDefaultSystemPrompt(agentConfig, allConfigs, this.state.humanName);
+
+    this.agents.set(agentConfig.id, { backend, config: agentConfig, systemPrompt });
+
+    // State
+    this.state.agentIds.push(agentConfig.id);
+    this.state.agentNames[agentConfig.id] = agentConfig.name;
+    const colorIndex = this.state.agentIds.length - 1;
+    this.state.agentColors[agentConfig.id] = agentConfig.color || DEFAULT_COLORS[colorIndex % DEFAULT_COLORS.length];
+    this.state.journals[agentConfig.id] = [];
+
+    // Journal on disk
+    const journalPath = `${this.dataDir}/journal-${agentConfig.id}.jsonld`;
+    const journal = new Journal(journalPath);
+    this.journals.set(agentConfig.id, journal);
+    journal.initialize().catch(err => console.error(`[AGENT] Journal init error for ${agentConfig.id}:`, err));
+
+    // Rhythm
+    this.rhythm.set(agentConfig.id, {
+      intentToSpeak: 0.3,
+      ticksSinceSpoke: 0,
+      ticksSinceActive: 0,
+      lastInterruptAt: 0,
+      microTickOffset: MICRO_TICK_MIN_MS + Math.random() * (MICRO_TICK_MAX_MS - MICRO_TICK_MIN_MS),
+      tickEveryN: agentConfig.tickEveryN || 1,
+    });
+
+    // Context RAM
+    const ram = new ContextRAM(agentConfig.id, agentConfig.name, agentConfig.provider, agentConfig.baseUrl);
+    ram.setBrowseCallback((keyword, r) => this.browseFiles(keyword, r));
+    ram.setGraphCallback((nodeUri) => this.traverseGraphNode(nodeUri));
+    this.ram.set(agentConfig.id, ram);
+
+    // Voice
+    this.voiceConfigs.set(agentConfig.id, getDefaultVoiceConfig(agentConfig.id, agentConfig.provider, agentConfig.baseUrl));
+    if (agentConfig.voice) {
+      Object.assign(this.voiceConfigs.get(agentConfig.id)!, agentConfig.voice);
+    }
+
+    // Graph
+    this.graph.addNode(`agent:${agentConfig.id}`, 'Agent', {
+      name: agentConfig.name,
+      provider: agentConfig.provider,
+      model: agentConfig.model,
+      color: agentConfig.color,
+    });
+
+    console.log(`[AGENT] Added: ${agentConfig.name} (${agentConfig.id}) — ${agentConfig.provider}/${agentConfig.model}`);
+    return true;
+  }
+
+  /**
+   * Remove an agent from the communion at runtime.
+   * Cleans up all internal state. Journal history on disk is preserved.
+   */
+  removeAgent(agentId: string): boolean {
+    if (!this.agents.has(agentId)) {
+      console.error(`[AGENT] Cannot remove — agent "${agentId}" not found`);
+      return false;
+    }
+
+    const name = this.state.agentNames[agentId] || agentId;
+
+    this.agents.delete(agentId);
+    this.state.agentIds = this.state.agentIds.filter(id => id !== agentId);
+    delete this.state.agentNames[agentId];
+    delete this.state.agentColors[agentId];
+
+    this.rhythm.delete(agentId);
+    this.ram.delete(agentId);
+    this.voiceConfigs.delete(agentId);
+    this.customInstructions.delete(agentId);
+
+    console.log(`[AGENT] Removed: ${name} (${agentId})`);
+    return true;
+  }
+
+  /**
+   * Get all current agent configs (for config save / serialization).
+   */
+  getAgentConfigs(): AgentConfig[] {
+    return Array.from(this.agents.values()).map(a => a.config);
+  }
+
   setTickSpeed(ms: number): void {
     this.tickIntervalMs = Math.max(3000, Math.min(1800000, ms)); // clamp 3s–30min
     if (this.timer && !this.paused) {
