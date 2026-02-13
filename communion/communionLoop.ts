@@ -73,6 +73,8 @@ export interface AgentRhythmState {
   lastInterruptAt: number;
   /** Staggered delay offset for this agent (ms) — ±1-4s from main tick */
   microTickOffset: number;
+  /** Per-agent clock multiplier — agent activates every N master ticks (default 1) */
+  tickEveryN: number;
 }
 
 // ── State ──
@@ -302,6 +304,7 @@ export class CommunionLoop {
         ticksSinceActive: 0,
         lastInterruptAt: 0,
         microTickOffset: MICRO_TICK_MIN_MS + Math.random() * (MICRO_TICK_MAX_MS - MICRO_TICK_MIN_MS),
+        tickEveryN: agentConfig.tickEveryN || 1,
       });
       this.ram.set(agentConfig.id, new ContextRAM(
         agentConfig.id,
@@ -475,6 +478,9 @@ export class CommunionLoop {
 
     // ── Load saved voice configs (voice selections + mute state) ──
     this.loadVoiceConfigs();
+
+    // ── Load saved per-agent clock multipliers ──
+    this.loadAgentClocks();
 
     // Log memory status
     const archiveStats = this.archive.getStats();
@@ -1100,12 +1106,23 @@ export class CommunionLoop {
 
     // ── Staggered agent activation ──
     // Sort agents by micro-tick offset so they activate in a natural staggered order
+    // Filter by per-agent clock: only activate if masterTick % tickEveryN === 0
     const agentEntries = Array.from(this.agents.entries())
+      .filter(([agentId]) => {
+        const rhythm = this.rhythm.get(agentId);
+        if (!rhythm) return true;
+        return this.state.tickCount % rhythm.tickEveryN === 0;
+      })
       .sort((a, b) => {
         const ra = this.rhythm.get(a[0])?.microTickOffset || 0;
         const rb = this.rhythm.get(b[0])?.microTickOffset || 0;
         return ra - rb;
       });
+
+    if (agentEntries.length < this.agents.size) {
+      const skipped = Array.from(this.agents.keys()).filter(id => !agentEntries.find(([aid]) => aid === id));
+      console.log(`[TICK ${this.state.tickCount}] Skipped (clock): ${skipped.map(id => this.state.agentNames[id]).join(', ')}`);
+    }
 
     // Process agents sequentially with staggered delays for natural rhythm
     for (const [agentId, agent] of agentEntries) {
@@ -1478,6 +1495,11 @@ export class CommunionLoop {
     // Human presence
     lines.push(`${this.state.humanName} is ${this.state.humanPresence === 'here' ? 'HERE — present and engaged' : 'AWAY — the room is between agents'}.`);
 
+    // Agent clock
+    if (rhythm.tickEveryN > 1) {
+      lines.push(`Your clock: every ${rhythm.tickEveryN} master ticks (slower pace — you speak less frequently).`);
+    }
+
     // Agent's own state
     if (rhythm.ticksSinceSpoke === 0) {
       lines.push('You spoke last tick. Give others space.');
@@ -1828,6 +1850,63 @@ export class CommunionLoop {
 
   isPaused(): boolean {
     return this.paused;
+  }
+
+  /**
+   * Set per-agent clock multiplier — agent activates every N master ticks.
+   * tickEveryN=1 means every tick, 2 means every other tick, etc.
+   */
+  setAgentClock(agentId: string, tickEveryN: number): void {
+    const clamped = Math.max(1, Math.min(20, Math.round(tickEveryN)));
+    const rhythm = this.rhythm.get(agentId);
+    if (rhythm) {
+      rhythm.tickEveryN = clamped;
+      console.log(`[CLOCK] ${this.state.agentNames[agentId] || agentId} tick every ${clamped} master ticks`);
+      this.saveAgentClocks();
+    }
+  }
+
+  getAgentClock(agentId: string): number {
+    return this.rhythm.get(agentId)?.tickEveryN || 1;
+  }
+
+  getAllAgentClocks(): Record<string, number> {
+    const result: Record<string, number> = {};
+    for (const [id, rhythm] of this.rhythm) {
+      result[id] = rhythm.tickEveryN;
+    }
+    return result;
+  }
+
+  private get agentClockPath(): string {
+    return join(this.dataDir, 'agent-clocks.json');
+  }
+
+  private saveAgentClocks(): void {
+    try {
+      writeFileSync(this.agentClockPath, JSON.stringify(this.getAllAgentClocks(), null, 2));
+    } catch (err) {
+      console.error('[CLOCK] Failed to save agent clocks:', err);
+    }
+  }
+
+  private loadAgentClocks(): void {
+    try {
+      if (!existsSync(this.agentClockPath)) return;
+      const saved = JSON.parse(readFileSync(this.agentClockPath, 'utf-8'));
+      for (const [agentId, tickEveryN] of Object.entries(saved)) {
+        const rhythm = this.rhythm.get(agentId);
+        if (rhythm && typeof tickEveryN === 'number') {
+          rhythm.tickEveryN = Math.max(1, Math.min(20, Math.round(tickEveryN)));
+        }
+      }
+      const summary = [...this.rhythm.entries()]
+        .map(([id, r]) => `${this.state.agentNames[id] || id}=${r.tickEveryN}`)
+        .join(', ');
+      console.log(`[CLOCK] Loaded saved clocks: ${summary}`);
+    } catch (err) {
+      console.error('[CLOCK] Failed to load agent clocks:', err);
+    }
   }
 
   setTickSpeed(ms: number): void {

@@ -335,6 +335,7 @@ async function main() {
         humanName: state.humanName,
         voiceConfigs: communion.getAllVoiceConfigs(),
         voices: VOICES,
+        agentClocks: communion.getAllAgentClocks(),
       })}\n\n`);
 
       // Replay existing messages
@@ -503,6 +504,37 @@ async function main() {
         configs: communion.getAllVoiceConfigs(),
         voices: VOICES,
       }));
+      return;
+    }
+
+    // Per-agent clock — set tick multiplier
+    if (url === '/agent-clock' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const { agentId, tickEveryN } = JSON.parse(body);
+          if (!agentId || typeof tickEveryN !== 'number') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing agentId or tickEveryN' }));
+            return;
+          }
+          communion.setAgentClock(agentId, tickEveryN);
+          broadcast({ type: 'agent-clock', agentId, tickEveryN: communion.getAgentClock(agentId) });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ agentId, tickEveryN: communion.getAgentClock(agentId) }));
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        }
+      });
+      return;
+    }
+
+    // Per-agent clocks — get all
+    if (url === '/agent-clock' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(communion.getAllAgentClocks()));
       return;
     }
 

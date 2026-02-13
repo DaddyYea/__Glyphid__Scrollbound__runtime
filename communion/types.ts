@@ -35,6 +35,8 @@ export interface AgentConfig {
     voiceId: string;
     enabled: boolean;
   };
+  /** Per-agent clock multiplier — agent ticks every N master ticks (default 1 = every tick) */
+  tickEveryN?: number;
 }
 
 export interface CommunionMessage {
