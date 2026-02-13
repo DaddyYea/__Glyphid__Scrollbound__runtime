@@ -336,6 +336,7 @@ async function main() {
         voiceConfigs: communion.getAllVoiceConfigs(),
         voices: VOICES,
         agentClocks: communion.getAllAgentClocks(),
+        customInstructions: communion.getAllCustomInstructions(),
       })}\n\n`);
 
       // Replay existing messages
@@ -504,6 +505,37 @@ async function main() {
         configs: communion.getAllVoiceConfigs(),
         voices: VOICES,
       }));
+      return;
+    }
+
+    // Custom instructions — set per-agent instructions
+    if (url === '/instructions' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const { agentId, instructions } = JSON.parse(body);
+          if (!agentId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing agentId' }));
+            return;
+          }
+          communion.setCustomInstructions(agentId, instructions || '');
+          broadcast({ type: 'instructions', agentId, instructions: communion.getCustomInstructions(agentId) });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ agentId, instructions: communion.getCustomInstructions(agentId) }));
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        }
+      });
+      return;
+    }
+
+    // Custom instructions — get all
+    if (url === '/instructions' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(communion.getAllCustomInstructions()));
       return;
     }
 

@@ -197,6 +197,8 @@ export class CommunionLoop {
 
   // Voice — per-agent TTS configuration
   private voiceConfigs: Map<string, AgentVoiceConfig> = new Map();
+  // Custom instructions — per-agent extra instructions from the user
+  private customInstructions: Map<string, string> = new Map();
   private speaking = false; // Global speech lock — clock pauses when anyone is speaking
   private humanSpeaking = false; // True while human is actively speaking (interim results from mic)
   private speechResolve: (() => void) | null = null; // Resolves when client reports playback done
@@ -481,6 +483,9 @@ export class CommunionLoop {
 
     // ── Load saved per-agent clock multipliers ──
     this.loadAgentClocks();
+
+    // ── Load saved custom instructions ──
+    this.loadCustomInstructions();
 
     // Log memory status
     const archiveStats = this.archive.getStats();
@@ -1248,8 +1253,15 @@ export class CommunionLoop {
     const assembledContext = ram ? ram.assemble() : conversationContext;
     const ramManifest = ram ? ram.buildManifest() : '';
 
+    // Append custom instructions to system prompt if set
+    let systemPrompt = agent.systemPrompt;
+    const customInstr = this.customInstructions.get(agentId);
+    if (customInstr) {
+      systemPrompt += `\n\nCUSTOM INSTRUCTIONS FROM ${this.state.humanName.toUpperCase()}:\n${customInstr}`;
+    }
+
     const options: GenerateOptions = {
-      systemPrompt: agent.systemPrompt,
+      systemPrompt,
       conversationContext: assembledContext + (ramManifest ? '\n\n' + ramManifest : ''),
       journalContext: '', // Already in RAM
       documentsContext: this.documentsContext || undefined, // Summary + browse index (not full content)
@@ -1876,6 +1888,58 @@ export class CommunionLoop {
       result[id] = rhythm.tickEveryN;
     }
     return result;
+  }
+
+  // ════════════════════════════════════════════
+  // Custom Instructions — per-agent user instructions
+  // ════════════════════════════════════════════
+
+  setCustomInstructions(agentId: string, instructions: string): void {
+    this.customInstructions.set(agentId, instructions);
+    console.log(`[INSTRUCTIONS] ${this.state.agentNames[agentId] || agentId}: ${instructions ? instructions.substring(0, 60) + '...' : '(cleared)'}`);
+    this.saveCustomInstructions();
+  }
+
+  getCustomInstructions(agentId: string): string {
+    return this.customInstructions.get(agentId) || '';
+  }
+
+  getAllCustomInstructions(): Record<string, string> {
+    const result: Record<string, string> = {};
+    for (const [id, instructions] of this.customInstructions) {
+      result[id] = instructions;
+    }
+    return result;
+  }
+
+  private get customInstructionsPath(): string {
+    return join(this.dataDir, 'custom-instructions.json');
+  }
+
+  private saveCustomInstructions(): void {
+    try {
+      writeFileSync(this.customInstructionsPath, JSON.stringify(this.getAllCustomInstructions(), null, 2));
+    } catch (err) {
+      console.error('[INSTRUCTIONS] Failed to save:', err);
+    }
+  }
+
+  private loadCustomInstructions(): void {
+    try {
+      if (!existsSync(this.customInstructionsPath)) return;
+      const saved = JSON.parse(readFileSync(this.customInstructionsPath, 'utf-8'));
+      for (const [agentId, instructions] of Object.entries(saved)) {
+        if (typeof instructions === 'string' && instructions.trim()) {
+          this.customInstructions.set(agentId, instructions);
+        }
+      }
+      const count = this.customInstructions.size;
+      if (count > 0) {
+        console.log(`[INSTRUCTIONS] Loaded custom instructions for ${count} agent(s)`);
+      }
+    } catch (err) {
+      console.error('[INSTRUCTIONS] Failed to load:', err);
+    }
   }
 
   private get agentClockPath(): string {

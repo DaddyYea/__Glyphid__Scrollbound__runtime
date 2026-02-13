@@ -538,6 +538,54 @@
     }
     .voice-select option { background: #0f1420; }
 
+    /* Instructions button */
+    .instructions-btn {
+      padding: 2px 6px;
+      font-size: 0.65em;
+      font-family: 'Courier New', monospace;
+      border-radius: 3px;
+      cursor: pointer;
+      border: 1px solid rgba(126, 184, 218, 0.25);
+      background: rgba(126, 184, 218, 0.06);
+      color: #506070;
+      transition: all 0.2s ease;
+      letter-spacing: 0.5px;
+    }
+    .instructions-btn:hover {
+      background: rgba(126, 184, 218, 0.12);
+      color: #7eb8da;
+    }
+    .instructions-btn.has-instructions {
+      color: #7eb8da;
+      border-color: rgba(126, 184, 218, 0.4);
+    }
+
+    /* Instructions modal textarea */
+    .instructions-textarea {
+      width: 100%;
+      min-height: 200px;
+      padding: 10px 12px;
+      background: rgba(15, 20, 30, 0.8);
+      border: 1px solid #1a2030;
+      border-radius: 4px;
+      color: #c0c8d4;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85em;
+      line-height: 1.5;
+      resize: vertical;
+    }
+    .instructions-textarea:focus {
+      outline: none;
+      border-color: #304050;
+    }
+    .instructions-textarea::placeholder { color: #354050; }
+    .instructions-hint {
+      font-size: 0.7em;
+      color: #506070;
+      margin-top: 6px;
+      line-height: 1.4;
+    }
+
     /* Agent clock controls */
     .clock-row {
       display: flex;
@@ -634,6 +682,21 @@
       <div class="modal-actions">
         <button class="btn-cancel" id="importCancelBtn">Cancel</button>
         <button class="btn-import" id="importStartBtn" disabled>Import</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Instructions Modal -->
+  <div class="modal-overlay" id="instructionsModal">
+    <div class="modal">
+      <h2 id="instructionsModalTitle">Custom Instructions</h2>
+      <textarea class="instructions-textarea" id="instructionsTextarea" placeholder="Type custom instructions for this agent...&#10;&#10;Example: You have a deep love of poetry. Reference Rilke and Mary Oliver often. When Jason seems sad, be gentle and present."></textarea>
+      <div class="instructions-hint">
+        These instructions are appended to the agent's system prompt. They persist across restarts. Leave empty to clear.
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="instructionsCancelBtn">Cancel</button>
+        <button class="btn-import" id="instructionsSaveBtn">Save</button>
       </div>
     </div>
   </div>
@@ -737,6 +800,7 @@
     let voiceConfigs = {}; // agentId → { voiceId, enabled }
     let availableVoices = []; // flat array of VoiceOption
     let agentClocks = {}; // agentId → tickEveryN
+    let customInstructions = {}; // agentId → string
 
     function hexToRgba(hex, alpha) {
       const r = parseInt(hex.slice(1, 3), 16);
@@ -765,6 +829,7 @@
       if (cfg.voiceConfigs) voiceConfigs = cfg.voiceConfigs;
       if (cfg.voices) availableVoices = cfg.voices;
       if (cfg.agentClocks) agentClocks = cfg.agentClocks;
+      if (cfg.customInstructions) customInstructions = cfg.customInstructions;
       const agents = cfg.agentIds;
       const half = Math.ceil(agents.length / 2);
       const leftAgents = agents.slice(0, half);
@@ -841,8 +906,15 @@
         updateVoice(agentId, { enabled: newEnabled });
       });
 
+      const instrBtn = document.createElement('button');
+      instrBtn.className = 'instructions-btn' + (customInstructions[agentId] ? ' has-instructions' : '');
+      instrBtn.textContent = 'INSTR';
+      instrBtn.title = 'Custom instructions for ' + name;
+      instrBtn.addEventListener('click', () => openInstructionsModal(agentId, name));
+
       voiceRow.appendChild(toggleBtn);
       voiceRow.appendChild(voiceSelect);
+      voiceRow.appendChild(instrBtn);
       header.appendChild(voiceRow);
 
       // Clock controls row
@@ -896,7 +968,7 @@
       entries.innerHTML = '<div class="empty-state">Waiting for first reflection...</div>';
       panel.appendChild(entries);
 
-      journalPanels[agentId] = { container: panel, entries, hasEntries: false, color, toggleBtn, voiceSelect, clockSlider, clockVal };
+      journalPanels[agentId] = { container: panel, entries, hasEntries: false, color, toggleBtn, voiceSelect, clockSlider, clockVal, instrBtn };
       return panel;
     }
 
@@ -909,6 +981,59 @@
         body: JSON.stringify({ agentId, ...changes }),
       }).catch(err => console.error('Voice update error:', err));
     }
+
+    // ── Instructions Modal ──
+    const instructionsModal = document.getElementById('instructionsModal');
+    const instructionsModalTitle = document.getElementById('instructionsModalTitle');
+    const instructionsTextarea = document.getElementById('instructionsTextarea');
+    const instructionsSaveBtn = document.getElementById('instructionsSaveBtn');
+    const instructionsCancelBtn = document.getElementById('instructionsCancelBtn');
+    let instructionsAgentId = null;
+
+    function openInstructionsModal(agentId, agentName) {
+      instructionsAgentId = agentId;
+      instructionsModalTitle.textContent = `${agentName} — Custom Instructions`;
+      instructionsTextarea.value = customInstructions[agentId] || '';
+      instructionsModal.classList.add('active');
+      instructionsTextarea.focus();
+    }
+
+    instructionsCancelBtn.addEventListener('click', () => {
+      instructionsModal.classList.remove('active');
+      instructionsAgentId = null;
+    });
+
+    instructionsModal.addEventListener('click', (e) => {
+      if (e.target === instructionsModal) {
+        instructionsModal.classList.remove('active');
+        instructionsAgentId = null;
+      }
+    });
+
+    instructionsSaveBtn.addEventListener('click', async () => {
+      if (!instructionsAgentId) return;
+      const instructions = instructionsTextarea.value.trim();
+      customInstructions[instructionsAgentId] = instructions;
+
+      // Update button style
+      const panel = journalPanels[instructionsAgentId];
+      if (panel && panel.instrBtn) {
+        panel.instrBtn.classList.toggle('has-instructions', !!instructions);
+      }
+
+      try {
+        await fetch('/instructions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId: instructionsAgentId, instructions }),
+        });
+      } catch (err) {
+        console.error('Instructions save error:', err);
+      }
+
+      instructionsModal.classList.remove('active');
+      instructionsAgentId = null;
+    });
 
     function addRoomMessage(speaker, speakerName, text, timestamp, isBackchannel) {
       if (!roomHasMessages) {
@@ -987,6 +1112,14 @@
         // Update local voice config state
         if (data.agentId && voiceConfigs[data.agentId]) {
           Object.assign(voiceConfigs[data.agentId], data);
+        }
+      } else if (data.type === 'instructions') {
+        if (data.agentId) {
+          customInstructions[data.agentId] = data.instructions || '';
+          const panel = journalPanels[data.agentId];
+          if (panel && panel.instrBtn) {
+            panel.instrBtn.classList.toggle('has-instructions', !!data.instructions);
+          }
         }
       } else if (data.type === 'agent-clock') {
         // Update local clock state
