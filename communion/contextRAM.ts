@@ -26,6 +26,8 @@
 const PROVIDER_BUDGETS: Record<string, number> = {
   anthropic: 400000,         // ~100k tokens (out of 200k)
   'openai-compatible': 60000, // ~15k tokens (safe for most models)
+  lmstudio: 8000,            // ~2k tokens — local models have 4-8k ctx, need room for system prompt + response
+  alois: 8000,               // ~2k tokens — uses underlying LLM (often local)
   default: 60000,
 };
 
@@ -156,8 +158,13 @@ export class ContextRAM {
     // Detect budget based on provider + model hints
     if (baseUrl?.includes('x.ai')) {
       this.totalBudget = GROK_BUDGET;
+    } else if (PROVIDER_BUDGETS[provider]) {
+      this.totalBudget = PROVIDER_BUDGETS[provider];
+    } else if (baseUrl && (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1'))) {
+      // Local models — use tight budget regardless of provider label
+      this.totalBudget = PROVIDER_BUDGETS.lmstudio;
     } else {
-      this.totalBudget = PROVIDER_BUDGETS[provider] || PROVIDER_BUDGETS.default;
+      this.totalBudget = PROVIDER_BUDGETS.default;
     }
 
     // Initialize default slots with priorities
