@@ -1111,11 +1111,12 @@ export class CommunionLoop {
 
     // ── Staggered agent activation ──
     // Sort agents by micro-tick offset so they activate in a natural staggered order
-    // Filter by per-agent clock: only activate if masterTick % tickEveryN === 0
+    // Per-agent clock: positive = every Nth tick (slow), negative = N turns per tick (fast), 1 = normal
     const agentEntries = Array.from(this.agents.entries())
       .filter(([agentId]) => {
         const rhythm = this.rhythm.get(agentId);
         if (!rhythm) return true;
+        if (rhythm.tickEveryN <= 0) return true; // negative/zero = fast, always eligible
         return this.state.tickCount % rhythm.tickEveryN === 0;
       })
       .sort((a, b) => {
@@ -1131,19 +1132,27 @@ export class CommunionLoop {
 
     // Process agents sequentially with staggered delays for natural rhythm
     for (const [agentId, agent] of agentEntries) {
-      const rhythmState = this.rhythm.get(agentId);
-      if (rhythmState) {
+      const rhythm = this.rhythm.get(agentId);
+      // Negative clock = multiple turns per tick
+      const turnsThisTick = rhythm && rhythm.tickEveryN < 0 ? Math.abs(rhythm.tickEveryN) : 1;
+      if (turnsThisTick > 1) {
+        console.log(`[${agent.config.name}] Fast clock: ${turnsThisTick} turns this tick`);
+      }
+      if (rhythm) {
         // Wait the micro-tick offset before this agent activates
-        await this.delay(rhythmState.microTickOffset);
+        await this.delay(rhythm.microTickOffset);
         // Regenerate offset for next tick (so order shifts naturally)
-        rhythmState.microTickOffset = MICRO_TICK_MIN_MS + Math.random() * (MICRO_TICK_MAX_MS - MICRO_TICK_MIN_MS);
+        rhythm.microTickOffset = MICRO_TICK_MIN_MS + Math.random() * (MICRO_TICK_MAX_MS - MICRO_TICK_MIN_MS);
       }
 
-      try {
-        await this.processAgent(agentId, agent, conversationContext);
-      } catch (err) {
-        console.error(`[TICK] ${agentId} error:`, err);
-        this.emit({ type: 'error', error: String(err), agentId });
+      for (let turn = 0; turn < turnsThisTick; turn++) {
+        try {
+          await this.processAgent(agentId, agent, conversationContext);
+        } catch (err) {
+          console.error(`[TICK] ${agentId} error:`, err);
+          this.emit({ type: 'error', error: String(err), agentId });
+          break; // Stop additional turns on error
+        }
       }
     }
 
