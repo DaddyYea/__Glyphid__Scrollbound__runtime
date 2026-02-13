@@ -109,13 +109,37 @@ export class OpenAICompatibleBackend implements AgentBackend {
   }
 
   async generate(options: GenerateOptions): Promise<GenerateResult> {
+    // Detect if this is a local/small model (LM Studio, Ollama, etc.)
+    const isLocalModel = this.baseUrl.includes('localhost') || this.baseUrl.includes('127.0.0.1');
+    const providerKey = options.provider || (isLocalModel ? 'lmstudio' : 'default');
+
     // Truncate system prompt if it exceeds provider limit
     let systemContent = options.systemPrompt.replace(/[\uD800-\uDFFF]/g, '');
-    const maxSysChars = MAX_SYSTEM_CHARS[options.provider || 'default'] || MAX_SYSTEM_CHARS.default;
+    const maxSysChars = MAX_SYSTEM_CHARS[providerKey] || MAX_SYSTEM_CHARS.default;
     if (systemContent.length > maxSysChars) {
       const truncated = systemContent.length - maxSysChars;
       systemContent = systemContent.substring(0, maxSysChars) +
-        `\n[... ${truncated} chars truncated from system prompt ...]`;
+        `\n[... ${truncated} chars truncated ...]`;
+    }
+
+    // Build user prompt with provider-aware truncation
+    const userContent = buildUserPrompt({ ...options, provider: providerKey });
+
+    // Hard total cap: system + user must fit in ~3000 tokens (~12000 chars) for local models
+    let finalUser = userContent;
+    if (isLocalModel) {
+      const hardCap = 12000; // ~3000 tokens, leaves ~1000 tokens for response in 4096 ctx
+      const totalChars = systemContent.length + userContent.length;
+      if (totalChars > hardCap) {
+        const availableForUser = Math.max(2000, hardCap - systemContent.length);
+        if (userContent.length > availableForUser) {
+          const keepStart = Math.floor(availableForUser * 0.3);
+          const keepEnd = Math.floor(availableForUser * 0.6);
+          finalUser = userContent.substring(0, keepStart) +
+            `\n[... truncated to fit ${this.model} context window ...]\n` +
+            userContent.substring(userContent.length - keepEnd);
+        }
+      }
     }
 
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
@@ -128,7 +152,7 @@ export class OpenAICompatibleBackend implements AgentBackend {
         model: this.model,
         messages: [
           { role: 'system', content: systemContent },
-          { role: 'user', content: buildUserPrompt(options) },
+          { role: 'user', content: finalUser },
         ],
         max_tokens: this.maxTokens,
         temperature: this.temperature,
