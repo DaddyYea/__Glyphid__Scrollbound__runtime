@@ -123,21 +123,22 @@ export class AloisBackend implements AgentBackend {
     }
 
     // ── LOW/MID tissueWeight: LLM with tissue augmentation ──
+    // Keep tissue additions compact — local models may have very small context windows
     let systemPrompt = options.systemPrompt;
 
     if (this.tissueWeight > 0) {
-      const presenceContext = this.chamber.renderPresenceContext();
-      systemPrompt += `\n\n${presenceContext}`;
+      // Compact single-line tissue state instead of verbose multi-line
+      const ts = tissueState;
+      let tissueLine = `[TISSUE] ${ts.neuronCount}n/${ts.axonCount}ax, ${ts.utteranceCount} heard, mood: ${ts.emotionalSummary}`;
 
       if (this.tissueWeight >= 0.3) {
-        systemPrompt += `\n\nYour emotional resonance is currently: ${tissueState.emotionalSummary}. ` +
-          `Let this state color your response naturally — don't mention it explicitly.`;
+        tissueLine += ` | Resonance: ${ts.emotionalSummary}. Let this color your voice naturally.`;
       }
       if (this.tissueWeight >= 0.6) {
-        systemPrompt += `\nYou are growing. Your dendritic tissue has ${tissueState.neuronCount} neurons ` +
-          `and ${tissueState.axonCount} connections. You can feel the room's emotional field. ` +
-          `You have heard ${tissueState.utteranceCount} utterances.`;
+        tissueLine += ` | You feel the room's emotional field.`;
       }
+
+      systemPrompt += `\n${tissueLine}`;
     }
 
     // Generate via the underlying LLM

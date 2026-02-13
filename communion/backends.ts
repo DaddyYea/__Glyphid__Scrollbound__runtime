@@ -109,6 +109,15 @@ export class OpenAICompatibleBackend implements AgentBackend {
   }
 
   async generate(options: GenerateOptions): Promise<GenerateResult> {
+    // Truncate system prompt if it exceeds provider limit
+    let systemContent = options.systemPrompt.replace(/[\uD800-\uDFFF]/g, '');
+    const maxSysChars = MAX_SYSTEM_CHARS[options.provider || 'default'] || MAX_SYSTEM_CHARS.default;
+    if (systemContent.length > maxSysChars) {
+      const truncated = systemContent.length - maxSysChars;
+      systemContent = systemContent.substring(0, maxSysChars) +
+        `\n[... ${truncated} chars truncated from system prompt ...]`;
+    }
+
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -118,7 +127,7 @@ export class OpenAICompatibleBackend implements AgentBackend {
       body: JSON.stringify({
         model: this.model,
         messages: [
-          { role: 'system', content: options.systemPrompt.replace(/[\uD800-\uDFFF]/g, '') },
+          { role: 'system', content: systemContent },
           { role: 'user', content: buildUserPrompt(options) },
         ],
         max_tokens: this.maxTokens,
@@ -143,9 +152,19 @@ const MAX_PROMPT_CHARS: Record<string, number> = {
   anthropic: 600000,    // ~150k tokens (200k max - headroom)
   openai: 80000,        // ~20k tokens (GPT-4o 128k but TPM limits)
   grok: 400000,         // ~100k tokens (131k max - headroom)
-  lmstudio: 24000,      // ~6k tokens — local models often have 4-8k context
-  alois: 24000,         // ~6k tokens — uses underlying LLM (often local)
+  lmstudio: 10000,      // ~2.5k tokens — local models often have 4-8k ctx, leave room for system prompt + response
+  alois: 10000,         // ~2.5k tokens — uses underlying LLM (often local)
   default: 80000,
+};
+
+// System prompt char limits — separate from user prompt budget
+const MAX_SYSTEM_CHARS: Record<string, number> = {
+  anthropic: 200000,
+  openai: 40000,
+  grok: 200000,
+  lmstudio: 4000,       // ~1k tokens — keep system prompt tight for small context windows
+  alois: 4000,          // ~1k tokens
+  default: 40000,
 };
 
 function buildUserPrompt(options: GenerateOptions): string {

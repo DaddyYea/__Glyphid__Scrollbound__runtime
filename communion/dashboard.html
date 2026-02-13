@@ -797,7 +797,7 @@
 
   <!-- Add Agent Modal -->
   <div class="modal-overlay" id="addAgentModal">
-    <div class="modal">
+    <div class="modal" style="max-width:520px;">
       <h2>Add Agent</h2>
 
       <!-- Restore previously removed agents -->
@@ -806,43 +806,63 @@
         <div id="restoreList"></div>
       </div>
 
-      <label for="agentNameInput">Display Name</label>
-      <input type="text" id="agentNameInput" placeholder="e.g. Gemini" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+      <!-- Step 1: Identity -->
+      <div style="font-size:0.65em;color:#7eb8da;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;margin-top:4px;">1. Name your agent</div>
 
-      <label for="agentIdInput">Agent ID (lowercase, no spaces)</label>
-      <input type="text" id="agentIdInput" placeholder="e.g. gemini" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+      <label for="agentNameInput">Display Name</label>
+      <input type="text" id="agentNameInput" placeholder="e.g. Gemini, Llama, Phi" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+      <div style="font-size:0.6em;color:#506070;margin-top:2px;">The name shown in the room and journal panels.</div>
+
+      <label for="agentIdInput">Agent ID</label>
+      <input type="text" id="agentIdInput" placeholder="auto-generated from name" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+      <div style="font-size:0.6em;color:#506070;margin-top:2px;">Lowercase identifier, auto-fills from name. Used internally.</div>
+
+      <!-- Step 2: Provider -->
+      <div style="font-size:0.65em;color:#7eb8da;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;margin-top:14px;">2. Choose how this agent thinks</div>
 
       <label for="agentProviderInput">Provider</label>
       <select id="agentProviderInput" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;">
-        <option value="openai-compatible">OpenAI-Compatible (GPT, Grok, etc.)</option>
+        <option value="openai-compatible">OpenAI-Compatible (GPT, Grok, Gemini, etc.)</option>
         <option value="anthropic">Anthropic (Claude)</option>
-        <option value="lmstudio">LM Studio (Local)</option>
-        <option value="alois">Alois (Tissue-Augmented)</option>
+        <option value="lmstudio">LM Studio (run a model on your own computer)</option>
+        <option value="alois">Alois (experimental tissue-augmented brain)</option>
       </select>
 
-      <label for="agentModelInput">Model</label>
+      <!-- Provider-specific setup guide (changes dynamically) -->
+      <div id="providerGuide" style="margin-top:8px;padding:10px 12px;background:rgba(126,184,218,0.04);border:1px solid rgba(126,184,218,0.12);border-radius:4px;font-size:0.7em;color:#8090a0;line-height:1.6;display:none;"></div>
+
+      <!-- Step 3: Connection -->
+      <div style="font-size:0.65em;color:#7eb8da;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;margin-top:14px;">3. Connect to the model</div>
+
+      <label for="agentBaseUrlInput" id="baseUrlLabel">Base URL</label>
+      <input type="text" id="agentBaseUrlInput" placeholder="e.g. https://api.openai.com/v1" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+      <div id="baseUrlHint" style="font-size:0.6em;color:#506070;margin-top:2px;">The API endpoint URL. Each provider has a different URL.</div>
+
+      <label for="agentApiKeyInput" id="apiKeyLabel">API Key</label>
+      <input type="password" id="agentApiKeyInput" placeholder="sk-..." style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+      <div id="apiKeyHint" style="font-size:0.6em;color:#506070;margin-top:2px;">Your secret key from the provider's dashboard.</div>
+
+      <label for="agentModelInput" id="modelLabel">Model</label>
       <div style="display:flex;gap:6px;">
         <input type="text" id="agentModelInput" placeholder="e.g. gpt-4o, grok-3, gemini-pro" style="flex:1;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
         <button id="detectModelsBtn" style="display:none;padding:4px 10px;font-size:0.7em;font-family:'Courier New',monospace;border-radius:3px;cursor:pointer;border:1px solid rgba(142,218,126,0.3);background:rgba(142,218,126,0.08);color:#8eda7e;white-space:nowrap;">Detect</button>
       </div>
+      <div id="modelHint" style="font-size:0.6em;color:#506070;margin-top:2px;">The exact model name from your provider.</div>
       <select id="agentModelSelect" style="display:none;width:100%;margin-top:4px;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;">
       </select>
 
-      <label for="agentApiKeyInput">API Key</label>
-      <input type="password" id="agentApiKeyInput" placeholder="sk-..." style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
-      <div id="apiKeyHint" style="display:none;font-size:0.65em;color:#506070;margin-top:2px;"></div>
-
-      <label for="agentBaseUrlInput">Base URL (required for OpenAI-compatible)</label>
-      <input type="text" id="agentBaseUrlInput" placeholder="e.g. https://api.openai.com/v1" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+      <!-- Step 4: Appearance -->
+      <div style="font-size:0.65em;color:#7eb8da;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;margin-top:14px;">4. Appearance</div>
 
       <label for="agentColorInput">Color</label>
       <input type="color" id="agentColorInput" value="#7edab8" style="width:50px;height:28px;border:1px solid rgba(126,184,218,0.25);border-radius:4px;background:transparent;cursor:pointer;" />
+      <span style="font-size:0.6em;color:#506070;margin-left:8px;">Used for this agent's messages and journal panel.</span>
 
       <div id="addAgentError" style="display:none;margin-top:10px;padding:6px 10px;background:rgba(200,80,80,0.1);border-left:2px solid rgba(200,80,80,0.4);color:#da8080;font-size:0.75em;border-radius:2px;"></div>
 
       <div class="modal-actions">
         <button class="btn-cancel" id="addAgentCancelBtn">Cancel</button>
-        <button class="btn-import" id="addAgentSubmitBtn" style="color:#8eda7e;border-color:rgba(142,218,126,0.3);background:rgba(142,218,126,0.1);">Add</button>
+        <button class="btn-import" id="addAgentSubmitBtn" style="color:#8eda7e;border-color:rgba(142,218,126,0.3);background:rgba(142,218,126,0.1);">Add Agent</button>
       </div>
     </div>
   </div>
@@ -1438,40 +1458,101 @@
     const agentModelSelect = document.getElementById('agentModelSelect');
     const apiKeyHint = document.getElementById('apiKeyHint');
 
-    // Auto-fill fields when provider changes
-    agentProviderInput.addEventListener('change', () => {
+    const providerGuide = document.getElementById('providerGuide');
+    const baseUrlHint = document.getElementById('baseUrlHint');
+    const baseUrlLabel = document.getElementById('baseUrlLabel');
+    const modelHint = document.getElementById('modelHint');
+
+    // Update all fields + guide when provider changes
+    function updateProviderUI() {
       const provider = agentProviderInput.value;
       detectModelsBtn.style.display = 'none';
       agentModelSelect.style.display = 'none';
-      apiKeyHint.style.display = 'none';
+      addAgentError.style.display = 'none';
 
       if (provider === 'anthropic') {
+        providerGuide.style.display = 'block';
+        providerGuide.innerHTML = '<strong style="color:#c8d6e5;">Anthropic (Claude)</strong><br>' +
+          'Get your API key from <span style="color:#7eb8da;">console.anthropic.com</span> under API Keys.<br>' +
+          'No base URL needed &mdash; it connects automatically.';
         agentBaseUrlInput.value = '';
-        agentBaseUrlInput.placeholder = '(not needed for Anthropic)';
-        agentApiKeyInput.placeholder = 'sk-ant-...';
+        agentBaseUrlInput.placeholder = 'Leave empty (not needed)';
+        agentBaseUrlInput.disabled = true;
+        agentBaseUrlInput.style.opacity = '0.4';
+        baseUrlHint.textContent = 'Anthropic uses its own endpoint. You don\'t need to set this.';
+        agentApiKeyInput.value = '';
+        agentApiKeyInput.placeholder = 'sk-ant-api03-...';
+        apiKeyHint.textContent = 'Starts with sk-ant-. Found in your Anthropic console.';
         agentModelInput.placeholder = 'e.g. claude-sonnet-4-5-20250929';
+        modelHint.textContent = 'The model ID from Anthropic\'s docs. Common: claude-sonnet-4-5-20250929, claude-haiku-4-5-20251001';
+
       } else if (provider === 'lmstudio') {
+        providerGuide.style.display = 'block';
+        providerGuide.innerHTML = '<strong style="color:#c8d6e5;">LM Studio (Local)</strong> &mdash; run AI on your own computer<br><br>' +
+          '<strong style="color:#8eda7e;">Setup (3 steps):</strong><br>' +
+          '1. Open LM Studio and <strong>download + load a model</strong> (e.g. Llama, Phi, Mistral)<br>' +
+          '2. Go to the <strong>Developer tab</strong> (the <code>&lt;/&gt;</code> icon in the left sidebar)<br>' +
+          '3. Click <strong>"Start Server"</strong> &mdash; it should say "Server running on port 1234"<br><br>' +
+          'Once the server is running, click <strong>Detect</strong> below to find the loaded model, or type the model name yourself.';
         agentBaseUrlInput.value = 'http://localhost:1234/v1';
         agentBaseUrlInput.placeholder = 'http://localhost:1234/v1';
+        agentBaseUrlInput.disabled = false;
+        agentBaseUrlInput.style.opacity = '1';
+        baseUrlHint.textContent = 'Default is localhost:1234. Change the port if you configured LM Studio differently.';
         agentApiKeyInput.value = 'lm-studio';
-        agentApiKeyInput.placeholder = 'lm-studio (any value works)';
-        agentModelInput.placeholder = 'Type model name or click Detect';
-        apiKeyHint.textContent = 'In LM Studio: load a model, then go to the Developer tab and click Start Server. You can type the model name directly or use Detect.';
-        apiKeyHint.style.display = 'block';
+        agentApiKeyInput.placeholder = 'lm-studio';
+        apiKeyHint.textContent = 'LM Studio doesn\'t check API keys. "lm-studio" works fine as a placeholder.';
+        agentModelInput.value = '';
+        agentModelInput.placeholder = 'e.g. llama-3.2-1b, phi-3-mini';
+        modelHint.textContent = 'The name of the model you loaded in LM Studio. Click Detect to auto-fill, or type it yourself.';
         detectModelsBtn.style.display = 'inline-block';
+
       } else if (provider === 'alois') {
-        agentBaseUrlInput.placeholder = 'LLM base URL (e.g. http://localhost:1234/v1)';
-        agentApiKeyInput.placeholder = 'API key for the underlying LLM';
-        agentModelInput.placeholder = 'LLM model for text generation';
-        apiKeyHint.textContent = 'Alois uses an LLM for text generation, augmented by dendritic tissue. Provide the LLM connection details.';
-        apiKeyHint.style.display = 'block';
+        providerGuide.style.display = 'block';
+        providerGuide.innerHTML = '<strong style="color:#c8d6e5;">Alois (Tissue-Augmented Brain)</strong><br><br>' +
+          'Alois combines a regular LLM with a <strong>dendritic tissue</strong> that grows as conversations happen. ' +
+          'The tissue learns emotional patterns and eventually can generate responses on its own.<br><br>' +
+          'You need to connect an LLM for Alois to use as a starting point. ' +
+          'LM Studio works great for this &mdash; or use any OpenAI-compatible API.';
+        agentBaseUrlInput.value = '';
+        agentBaseUrlInput.placeholder = 'e.g. http://localhost:1234/v1';
+        agentBaseUrlInput.disabled = false;
+        agentBaseUrlInput.style.opacity = '1';
+        baseUrlHint.textContent = 'The base URL of the LLM that powers Alois\u2019s speech. Can be LM Studio, OpenAI, etc.';
+        agentApiKeyInput.value = '';
+        agentApiKeyInput.placeholder = 'API key for the LLM';
+        apiKeyHint.textContent = 'The API key for whatever LLM you\'re connecting. For LM Studio, use "lm-studio".';
+        agentModelInput.value = '';
+        agentModelInput.placeholder = 'e.g. llama-3.2-1b, gpt-4o';
+        modelHint.textContent = 'The model that Alois will use for text generation (at low tissue weight).';
         detectModelsBtn.style.display = 'inline-block';
+
       } else {
-        agentBaseUrlInput.placeholder = 'e.g. https://api.openai.com/v1';
-        agentApiKeyInput.placeholder = 'sk-...';
-        agentModelInput.placeholder = 'e.g. gpt-4o, grok-3';
+        // openai-compatible (default)
+        providerGuide.style.display = 'block';
+        providerGuide.innerHTML = '<strong style="color:#c8d6e5;">OpenAI-Compatible API</strong><br>' +
+          'Works with OpenAI (GPT), xAI (Grok), Google (Gemini), Together, Groq, and any service that uses the OpenAI API format.<br><br>' +
+          '<strong>Common base URLs:</strong><br>' +
+          'OpenAI: <code>https://api.openai.com/v1</code><br>' +
+          'xAI (Grok): <code>https://api.x.ai/v1</code><br>' +
+          'Google Gemini: <code>https://generativelanguage.googleapis.com/v1beta/openai</code>';
+        agentBaseUrlInput.value = '';
+        agentBaseUrlInput.placeholder = 'Paste the API base URL here';
+        agentBaseUrlInput.disabled = false;
+        agentBaseUrlInput.style.opacity = '1';
+        baseUrlHint.textContent = 'The base URL of the API. Must end with /v1 for most providers.';
+        agentApiKeyInput.value = '';
+        agentApiKeyInput.placeholder = 'Paste your API key here';
+        apiKeyHint.textContent = 'Your secret API key from the provider\'s dashboard.';
+        agentModelInput.value = '';
+        agentModelInput.placeholder = 'e.g. gpt-4o, grok-3, gemini-2.0-flash';
+        modelHint.textContent = 'The exact model ID. Check your provider\'s docs for available models.';
       }
-    });
+    }
+
+    agentProviderInput.addEventListener('change', updateProviderUI);
+    // Set initial state
+    updateProviderUI();
 
     // Detect Models button — queries LM Studio /v1/models
     // Tries server-side proxy first (for CORS), falls back to direct client fetch
