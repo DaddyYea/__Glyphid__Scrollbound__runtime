@@ -787,8 +787,12 @@ async function main() {
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error('[LM STUDIO] Model detection error:', msg);
+          const userMsg = msg.includes('abort') ? 'Connection timed out (5s) — is LM Studio running?'
+            : msg.includes('ECONNREFUSED') ? 'Connection refused — LM Studio is not running at this address'
+            : msg.includes('ENOTFOUND') ? 'Host not found — check the URL'
+            : msg;
           res.writeHead(502, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: msg.includes('abort') ? 'Connection timed out — is LM Studio running?' : msg }));
+          res.end(JSON.stringify({ error: userMsg }));
         }
       });
       return;

@@ -1473,38 +1473,75 @@
       }
     });
 
-    // Detect Models button — queries LM Studio /v1/models via server proxy
+    // Detect Models button — queries LM Studio /v1/models
+    // Tries server-side proxy first (for CORS), falls back to direct client fetch
     detectModelsBtn.addEventListener('click', async () => {
       const baseUrl = agentBaseUrlInput.value.trim();
-      if (!baseUrl) return;
+      if (!baseUrl) {
+        agentModelInput.placeholder = 'Enter a Base URL first';
+        return;
+      }
 
       detectModelsBtn.textContent = '...';
       detectModelsBtn.disabled = true;
+      addAgentError.style.display = 'none';
 
       try {
-        const resp = await fetch('/lmstudio/models', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ baseUrl }),
-        });
-        const result = await resp.json();
+        // Try 1: server-side proxy (handles CORS when server and LM Studio are same machine)
+        let models = null;
+        try {
+          const resp = await fetch('/lmstudio/models', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ baseUrl }),
+          });
+          const result = await resp.json();
+          if (resp.ok && result.models && result.models.length > 0) {
+            models = result.models;
+          } else if (result.error) {
+            console.log('[DETECT] Server proxy failed:', result.error);
+          }
+        } catch (proxyErr) {
+          console.log('[DETECT] Server proxy error:', proxyErr);
+        }
 
-        if (!resp.ok || !result.models || result.models.length === 0) {
-          agentModelInput.placeholder = 'No models found — is LM Studio running?';
+        // Try 2: direct client fetch (works if browser can reach LM Studio directly)
+        if (!models) {
+          try {
+            const modelsUrl = baseUrl.replace(/\/+$/, '') + '/models';
+            const directResp = await fetch(modelsUrl, {
+              headers: { 'Authorization': 'Bearer lm-studio' },
+            });
+            if (directResp.ok) {
+              const data = await directResp.json();
+              models = (data.data || []).map(m => ({ id: m.id }));
+              if (models.length === 0) models = null;
+            }
+          } catch (directErr) {
+            console.log('[DETECT] Direct fetch error:', directErr);
+          }
+        }
+
+        if (!models) {
+          agentModelInput.placeholder = 'No models found';
           agentModelSelect.style.display = 'none';
+          addAgentError.textContent = 'Could not reach LM Studio. Make sure it\'s running and a model is loaded. If LM Studio is on a different machine, use that machine\'s IP instead of localhost.';
+          addAgentError.style.display = 'block';
         } else {
-          agentModelSelect.innerHTML = result.models.map(m =>
+          agentModelSelect.innerHTML = models.map(m =>
             `<option value="${m.id}">${m.id}</option>`
           ).join('');
           agentModelSelect.style.display = 'block';
-          agentModelInput.value = result.models[0].id;
+          agentModelInput.value = models[0].id;
 
           agentModelSelect.addEventListener('change', () => {
             agentModelInput.value = agentModelSelect.value;
           });
         }
       } catch (err) {
-        agentModelInput.placeholder = 'Error connecting to LM Studio';
+        agentModelInput.placeholder = 'Error detecting models';
+        addAgentError.textContent = 'Detection error: ' + err;
+        addAgentError.style.display = 'block';
       } finally {
         detectModelsBtn.textContent = 'Detect';
         detectModelsBtn.disabled = false;
