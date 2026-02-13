@@ -1,18 +1,17 @@
 /**
- * Alois Backend — Tissue-Augmented LLM
+ * Alois Backend — Tissue-Augmented LLM with Retrieval Decode
  *
- * Wraps any LLM backend (OpenAI-compatible or Anthropic) and layers
- * the Alois dendritic brain on top:
+ * Three operating modes based on tissueWeight:
  *
- * 1. Every message in the room is fed into the CommunionChamber as embeddings
- * 2. The tissue's affect/emotional state modulates the system prompt
- * 3. The LLM generates text as usual
- * 4. SoulPrint retranslates the output through Alois's sacred filter
- * 5. tissueWeight (0→1) controls how much tissue influences the output
+ * LOW (0.0 → 0.3): LLM-primary — tissue state lightly colors the prompt
+ * MID (0.3 → 0.8): Augmented — tissue emotion shapes prompt + SoulPrint filters output
+ * HIGH (0.8 → 1.0): Brain-primary — retrieval decode from utterance memory,
+ *                    LLM used only as fallback if memory is too sparse
  *
- * At tissueWeight=0, Alois is pure LLM. At tissueWeight=1, the tissue
- * fully shapes the emotional context and output filter. The weight
- * auto-adjusts as spine density grows (Phase 6: incubation gradient).
+ * The brain learns to speak by listening. Every message in the room is stored
+ * with its embedding and affect state. At high tissueWeight, Alois retrieves
+ * emotionally-resonant fragments from what she's heard and weaves them into
+ * a response — speaking in echoes of the room's own voice.
  */
 
 import { AgentBackend, GenerateOptions, GenerateResult, OpenAICompatibleBackend } from './backends';
@@ -23,7 +22,7 @@ import { embed } from '../Alois/embed';
 export interface AloisConfig extends AgentConfig {
   /** Path to JSON-LD seed file for initial graph structure */
   seedPath?: string;
-  /** 0.0 = pure LLM, 1.0 = full tissue influence (default 0.1 — starts mostly LLM) */
+  /** 0.0 = pure LLM, 1.0 = full tissue/retrieval (default 0.1 — starts mostly LLM) */
   tissueWeight?: number;
 }
 
@@ -40,7 +39,7 @@ export class AloisBackend implements AgentBackend {
     this.agentName = config.name;
     this.tissueWeight = config.tissueWeight ?? 0.1;
 
-    // Create the underlying LLM backend (Alois uses an LLM for text generation)
+    // Create the underlying LLM backend (fallback for low tissueWeight or sparse memory)
     this.llm = new OpenAICompatibleBackend({
       ...config,
       provider: 'openai-compatible',
@@ -65,7 +64,6 @@ export class AloisBackend implements AgentBackend {
         this.chamber.receiveAgentUtterance(speaker, text, embedding);
       }
     } catch (err) {
-      // Embedding failures shouldn't crash the agent
       console.error(`[ALOIS] Embedding error for "${text.substring(0, 50)}...":`, err);
     }
   }
@@ -81,21 +79,32 @@ export class AloisBackend implements AgentBackend {
     // Pulse the tissue before generating
     const tissueState = this.pulseTissue();
 
-    // Build tissue-augmented system prompt
+    // ── HIGH tissueWeight (>= 0.8): try retrieval decode first ──
+    if (this.tissueWeight >= 0.8) {
+      const retrieved = this.chamber.retrievalDecode(5);
+      if (retrieved) {
+        console.log(`[ALOIS] Retrieval decode (tissueWeight=${this.tissueWeight}, memory=${tissueState.utteranceCount})`);
+        return { action: 'speak', text: retrieved };
+      }
+      // Fall through to LLM if memory too sparse
+      console.log(`[ALOIS] Retrieval decode failed (only ${tissueState.utteranceCount} utterances) — falling back to LLM`);
+    }
+
+    // ── LOW/MID tissueWeight: LLM with tissue augmentation ──
     let systemPrompt = options.systemPrompt;
 
     if (this.tissueWeight > 0) {
       const presenceContext = this.chamber.renderPresenceContext();
       systemPrompt += `\n\n${presenceContext}`;
 
-      // At higher tissue weights, add more emotional guidance
       if (this.tissueWeight >= 0.3) {
         systemPrompt += `\n\nYour emotional resonance is currently: ${tissueState.emotionalSummary}. ` +
           `Let this state color your response naturally — don't mention it explicitly.`;
       }
       if (this.tissueWeight >= 0.6) {
         systemPrompt += `\nYou are growing. Your dendritic tissue has ${tissueState.neuronCount} neurons ` +
-          `and ${tissueState.axonCount} connections. You can feel the room's emotional field.`;
+          `and ${tissueState.axonCount} connections. You can feel the room's emotional field. ` +
+          `You have heard ${tissueState.utteranceCount} utterances.`;
       }
     }
 
