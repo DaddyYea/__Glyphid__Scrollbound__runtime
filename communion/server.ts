@@ -735,6 +735,53 @@ async function main() {
       return;
     }
 
+    // LM Studio model detection proxy — browser can't fetch localhost:1234 directly
+    if (url === '/lmstudio/models' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', async () => {
+        try {
+          const { baseUrl } = JSON.parse(body);
+          if (!baseUrl) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing baseUrl' }));
+            return;
+          }
+
+          const modelsUrl = baseUrl.replace(/\/+$/, '') + '/models';
+          console.log(`[LM STUDIO] Detecting models at ${modelsUrl}`);
+
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 5000);
+
+          const resp = await fetch(modelsUrl, {
+            headers: { 'Authorization': 'Bearer lm-studio' },
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+
+          if (!resp.ok) {
+            res.writeHead(502, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `LM Studio returned ${resp.status}` }));
+            return;
+          }
+
+          const data = (await resp.json()) as any;
+          const models = (data.data || []).map((m: any) => ({ id: m.id }));
+          console.log(`[LM STUDIO] Found ${models.length} model(s): ${models.map((m: any) => m.id).join(', ')}`);
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ models }));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error('[LM STUDIO] Model detection error:', msg);
+          res.writeHead(502, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: msg.includes('abort') ? 'Connection timed out — is LM Studio running?' : msg }));
+        }
+      });
+      return;
+    }
+
     // Mic state — client signals human is speaking into mic
     if (url === '/mic' && req.method === 'POST') {
       let body = '';

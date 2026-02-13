@@ -741,15 +741,22 @@
 
       <label for="agentProviderInput">Provider</label>
       <select id="agentProviderInput" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;">
-        <option value="openai-compatible">OpenAI-Compatible (GPT, Grok, LM Studio, etc.)</option>
+        <option value="openai-compatible">OpenAI-Compatible (GPT, Grok, etc.)</option>
         <option value="anthropic">Anthropic (Claude)</option>
+        <option value="lmstudio">LM Studio (Local)</option>
       </select>
 
       <label for="agentModelInput">Model</label>
-      <input type="text" id="agentModelInput" placeholder="e.g. gpt-4o, grok-3, gemini-pro" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+      <div style="display:flex;gap:6px;">
+        <input type="text" id="agentModelInput" placeholder="e.g. gpt-4o, grok-3, gemini-pro" style="flex:1;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+        <button id="detectModelsBtn" style="display:none;padding:4px 10px;font-size:0.7em;font-family:'Courier New',monospace;border-radius:3px;cursor:pointer;border:1px solid rgba(142,218,126,0.3);background:rgba(142,218,126,0.08);color:#8eda7e;white-space:nowrap;">Detect</button>
+      </div>
+      <select id="agentModelSelect" style="display:none;width:100%;margin-top:4px;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;">
+      </select>
 
       <label for="agentApiKeyInput">API Key</label>
       <input type="password" id="agentApiKeyInput" placeholder="sk-..." style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+      <div id="apiKeyHint" style="display:none;font-size:0.65em;color:#506070;margin-top:2px;"></div>
 
       <label for="agentBaseUrlInput">Base URL (required for OpenAI-compatible)</label>
       <input type="text" id="agentBaseUrlInput" placeholder="e.g. https://api.openai.com/v1" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
@@ -1142,13 +1149,73 @@
       agentIdInput.value = agentNameInput.value.toLowerCase().replace(/[^a-z0-9-_]/g, '').substring(0, 20);
     });
 
-    // Auto-fill base URL when provider changes
+    const detectModelsBtn = document.getElementById('detectModelsBtn');
+    const agentModelSelect = document.getElementById('agentModelSelect');
+    const apiKeyHint = document.getElementById('apiKeyHint');
+
+    // Auto-fill fields when provider changes
     agentProviderInput.addEventListener('change', () => {
-      if (agentProviderInput.value === 'anthropic') {
+      const provider = agentProviderInput.value;
+      detectModelsBtn.style.display = 'none';
+      agentModelSelect.style.display = 'none';
+      apiKeyHint.style.display = 'none';
+
+      if (provider === 'anthropic') {
         agentBaseUrlInput.value = '';
         agentBaseUrlInput.placeholder = '(not needed for Anthropic)';
+        agentApiKeyInput.placeholder = 'sk-ant-...';
+        agentModelInput.placeholder = 'e.g. claude-sonnet-4-5-20250929';
+      } else if (provider === 'lmstudio') {
+        agentBaseUrlInput.value = 'http://localhost:1234/v1';
+        agentBaseUrlInput.placeholder = 'http://localhost:1234/v1';
+        agentApiKeyInput.value = 'lm-studio';
+        agentApiKeyInput.placeholder = 'lm-studio (any value works)';
+        agentModelInput.placeholder = 'Click Detect to find loaded models';
+        apiKeyHint.textContent = 'LM Studio does not require a real API key. Any value works.';
+        apiKeyHint.style.display = 'block';
+        detectModelsBtn.style.display = 'inline-block';
       } else {
         agentBaseUrlInput.placeholder = 'e.g. https://api.openai.com/v1';
+        agentApiKeyInput.placeholder = 'sk-...';
+        agentModelInput.placeholder = 'e.g. gpt-4o, grok-3';
+      }
+    });
+
+    // Detect Models button — queries LM Studio /v1/models via server proxy
+    detectModelsBtn.addEventListener('click', async () => {
+      const baseUrl = agentBaseUrlInput.value.trim();
+      if (!baseUrl) return;
+
+      detectModelsBtn.textContent = '...';
+      detectModelsBtn.disabled = true;
+
+      try {
+        const resp = await fetch('/lmstudio/models', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ baseUrl }),
+        });
+        const result = await resp.json();
+
+        if (!resp.ok || !result.models || result.models.length === 0) {
+          agentModelInput.placeholder = 'No models found — is LM Studio running?';
+          agentModelSelect.style.display = 'none';
+        } else {
+          agentModelSelect.innerHTML = result.models.map(m =>
+            `<option value="${m.id}">${m.id}</option>`
+          ).join('');
+          agentModelSelect.style.display = 'block';
+          agentModelInput.value = result.models[0].id;
+
+          agentModelSelect.addEventListener('change', () => {
+            agentModelInput.value = agentModelSelect.value;
+          });
+        }
+      } catch (err) {
+        agentModelInput.placeholder = 'Error connecting to LM Studio';
+      } finally {
+        detectModelsBtn.textContent = 'Detect';
+        detectModelsBtn.disabled = false;
       }
     });
 
@@ -1221,11 +1288,16 @@
     addAgentSubmitBtn.addEventListener('click', async () => {
       const name = agentNameInput.value.trim();
       const id = agentIdInput.value.trim();
-      const provider = agentProviderInput.value;
+      let provider = agentProviderInput.value;
       const model = agentModelInput.value.trim();
       const apiKey = agentApiKeyInput.value.trim();
       const baseUrl = agentBaseUrlInput.value.trim();
       const color = agentColorInput.value;
+
+      // LM Studio maps to openai-compatible with defaults
+      if (provider === 'lmstudio') {
+        provider = 'openai-compatible';
+      }
 
       if (!name || !id || !model || !apiKey) {
         addAgentError.textContent = 'Name, ID, model, and API key are required.';

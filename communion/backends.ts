@@ -143,6 +143,7 @@ const MAX_PROMPT_CHARS: Record<string, number> = {
   anthropic: 600000,    // ~150k tokens (200k max - headroom)
   openai: 80000,        // ~20k tokens (GPT-4o 128k but TPM limits)
   grok: 400000,         // ~100k tokens (131k max - headroom)
+  lmstudio: 24000,      // ~6k tokens — local models often have 4-8k context
   default: 80000,
 };
 
