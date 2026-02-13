@@ -18,6 +18,7 @@ import { AgentBackend, GenerateOptions, GenerateResult, OpenAICompatibleBackend 
 import { AgentConfig } from './types';
 import { CommunionChamber, TissueState } from '../Alois/communionChamber';
 import { DreamResult } from '../Alois/dreamEngine';
+import { IncubationState } from '../Alois/incubationEngine';
 import { embed } from '../Alois/embed';
 
 export interface AloisConfig extends AgentConfig {
@@ -35,6 +36,10 @@ export class AloisBackend implements AgentBackend {
   private chamber: CommunionChamber;
   private tissueWeight: number;
   private lastDreamResult: DreamResult | null = null;
+  private lastIncubation: IncubationState | null = null;
+  /** Evaluate incubation every N pulses to avoid overhead */
+  private incubationInterval: number = 10;
+  private pulseCount: number = 0;
 
   constructor(config: AloisConfig) {
     this.agentId = config.id;
@@ -76,11 +81,27 @@ export class AloisBackend implements AgentBackend {
    */
   pulseTissue(): TissueState {
     const state = this.chamber.pulse();
+    this.pulseCount++;
 
     // Check for auto-dream (when utterance memory nears capacity)
     const dreamResult = this.chamber.checkAutoDream();
     if (dreamResult) {
       this.lastDreamResult = dreamResult;
+    }
+
+    // Evaluate incubation gradient periodically
+    if (this.pulseCount % this.incubationInterval === 0) {
+      const incubation = this.chamber.evaluateIncubation();
+      this.lastIncubation = incubation;
+
+      // Auto-adjust tissueWeight if enabled
+      if (incubation.autoGradient) {
+        const oldWeight = this.tissueWeight;
+        this.tissueWeight = incubation.tissueWeight;
+        if (Math.abs(oldWeight - this.tissueWeight) > 0.01) {
+          console.log(`[ALOIS] Incubation: ${incubation.stage} — tissueWeight ${oldWeight.toFixed(3)} → ${this.tissueWeight.toFixed(3)} (maturity ${incubation.maturity.toFixed(3)})`);
+        }
+      }
     }
 
     return state;
@@ -173,5 +194,33 @@ export class AloisBackend implements AgentBackend {
   /** Get neuron importance scores for brain monitor */
   getNeuronScores(): Array<{ id: string; importance: number; spines: number; resonance: number }> {
     return this.chamber.getNeuronScores();
+  }
+
+  // ── Incubation API ──
+
+  /** Get the latest incubation state */
+  getIncubation(): IncubationState | null {
+    return this.lastIncubation;
+  }
+
+  /** Force an incubation evaluation */
+  evaluateIncubation(): IncubationState {
+    const state = this.chamber.evaluateIncubation();
+    this.lastIncubation = state;
+    return state;
+  }
+
+  /** Enable/disable auto-gradient */
+  setAutoGradient(enabled: boolean): void {
+    this.chamber.setAutoGradient(enabled);
+  }
+
+  isAutoGradient(): boolean {
+    return this.chamber.isAutoGradient();
+  }
+
+  /** Get brain metrics for monitoring */
+  getBrainMetrics() {
+    return this.chamber.getBrainMetrics();
   }
 }

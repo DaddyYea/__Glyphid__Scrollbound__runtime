@@ -1238,12 +1238,12 @@
       .then(r => r.json())
       .then(data => {
         if (data.error) { alert('Tissue error: ' + data.error); return; }
-        showTissueModal(agentName, data);
+        showTissueModal(agentId, agentName, data);
       })
       .catch(err => alert('Tissue error: ' + err));
     }
 
-    function showTissueModal(agentName, data) {
+    function showTissueModal(agentId, agentName, data) {
       const overlay = document.createElement('div');
       overlay.className = 'dream-modal-overlay';
       overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
@@ -1253,22 +1253,68 @@
 
       const st = data.state || {};
       const neurons = data.neurons || [];
+      const inc = data.incubation || {};
+      const metrics = data.brainMetrics || {};
       const maxImportance = Math.max(0.01, ...neurons.map(n => n.importance));
+      const contrib = inc.contributions || {};
 
       modal.innerHTML = `
-        <h3>${agentName}'s Tissue</h3>
-        <div style="color: #888; margin-bottom: 12px;">
-          Tick: ${st.tick || 0} | Neurons: ${st.neuronCount || 0} | Axons: ${st.axonCount || 0}<br>
-          Utterances: ${st.utteranceCount || 0} | Tissue weight: ${(data.tissueWeight || 0).toFixed(2)}<br>
-          Breath: ${st.breathState?.emotionalTone || 'still'} (${st.breathState?.stable ? 'stable' : 'unstable'})<br>
+        <h3>${escapeHtml(agentName)}'s Tissue</h3>
+
+        <!-- Incubation Stage -->
+        <div style="background: rgba(180,140,255,0.08); border: 1px solid rgba(180,140,255,0.2); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <strong style="color: #b48cff; font-size: 1.1em;">${inc.stage || 'Unknown'}</strong>
+              <span style="color: #888; margin-left: 8px;">Maturity: ${((inc.maturity || 0) * 100).toFixed(1)}%</span>
+            </div>
+            <div style="color: #64c8b4; font-size: 1.1em;">
+              Weight: <strong>${(data.tissueWeight || 0).toFixed(3)}</strong>
+            </div>
+          </div>
+
+          <!-- Maturity bar -->
+          <div style="margin-top: 8px; background: rgba(180,140,255,0.1); height: 12px; border-radius: 6px; overflow: hidden;">
+            <div style="height: 100%; border-radius: 6px; background: linear-gradient(90deg, #64c8b4, #b48cff); width: ${((inc.maturity || 0) * 100).toFixed(1)}%;"></div>
+          </div>
+
+          <!-- Metric contributions -->
+          <div style="margin-top: 8px; font-size: 0.8em; color: #888; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px;">
+            <div>Spine density: <span style="color: #b48cff">${((contrib.spineDensity || 0) * 100).toFixed(0)}%</span> (${(metrics.spineDensity || 0).toFixed(1)} avg)</div>
+            <div>Resonance: <span style="color: #b48cff">${((contrib.resonanceDepth || 0) * 100).toFixed(0)}%</span> (${(metrics.resonanceDepth || 0).toFixed(1)} avg)</div>
+            <div>Utterances: <span style="color: #b48cff">${((contrib.utteranceRichness || 0) * 100).toFixed(0)}%</span> (${metrics.utteranceCount || 0})</div>
+            <div>Dreams: <span style="color: #b48cff">${((contrib.dreamMaturity || 0) * 100).toFixed(0)}%</span> (${metrics.dreamCount || 0})</div>
+            <div>Network: <span style="color: #b48cff">${((contrib.networkSize || 0) * 100).toFixed(0)}%</span> (${metrics.neuronCount || 0} neurons)</div>
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 12px;">
+          <label style="color: #888; font-size: 0.85em; display: flex; align-items: center; gap: 6px;">
+            <input type="checkbox" id="tissue-auto-gradient" ${data.autoGradient !== false ? 'checked' : ''}>
+            Auto-gradient
+          </label>
+          <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
+            <span style="color: #888; font-size: 0.8em;">Weight:</span>
+            <input type="range" id="tissue-weight-slider" min="0" max="1" step="0.01" value="${data.tissueWeight || 0}" style="flex: 1;">
+            <span id="tissue-weight-val" style="color: #64c8b4; font-size: 0.85em; min-width: 40px;">${(data.tissueWeight || 0).toFixed(2)}</span>
+          </div>
+        </div>
+
+        <!-- Basic stats -->
+        <div style="color: #888; margin-bottom: 12px; font-size: 0.85em;">
+          Tick: ${st.tick || 0} | Axons: ${st.axonCount || 0} |
+          Breath: ${st.breathState?.emotionalTone || 'still'} (${st.breathState?.stable ? 'stable' : 'unstable'}) |
           Emotional state: ${st.emotionalSummary || 'still'}
         </div>
+
         ${data.lastDream ? `
           <div style="margin-bottom: 12px;">
             <strong style="color: #b48cff">Last dream:</strong>
             <span style="color: #888">${data.lastDream.timestamp || 'unknown'}</span>
           </div>
         ` : '<div style="color: #666; margin-bottom: 12px;">No dreams yet</div>'}
+
         <strong>Neuron importance map:</strong>
         <div style="margin-top: 8px;">
           ${neurons.slice(0, 20).map(n => `
@@ -1284,6 +1330,35 @@
         </div>
         <button class="close-btn" onclick="this.closest('.dream-modal-overlay').remove()">Close</button>
       `;
+
+      // Wire up interactive controls
+      const weightSlider = modal.querySelector('#tissue-weight-slider');
+      const weightVal = modal.querySelector('#tissue-weight-val');
+      const autoCheck = modal.querySelector('#tissue-auto-gradient');
+
+      weightSlider.addEventListener('input', () => {
+        weightVal.textContent = Number(weightSlider.value).toFixed(2);
+      });
+
+      let weightDebounce = null;
+      weightSlider.addEventListener('change', () => {
+        clearTimeout(weightDebounce);
+        weightDebounce = setTimeout(() => {
+          fetch('/alois/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agentId, tissueWeight: Number(weightSlider.value) }),
+          }).catch(err => console.error('Tissue weight update error:', err));
+        }, 200);
+      });
+
+      autoCheck.addEventListener('change', () => {
+        fetch('/alois/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId, autoGradient: autoCheck.checked }),
+        }).catch(err => console.error('Auto-gradient update error:', err));
+      });
 
       overlay.appendChild(modal);
       document.body.appendChild(overlay);

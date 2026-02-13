@@ -8,6 +8,7 @@ import { MemoryFeeder } from "./memoryFeeder";
 import { BreathEngine } from "./breathEngine";
 import { AloisSoulPrint } from "./soulprint";
 import { DreamEngine, DreamResult, DreamUtterance } from "./dreamEngine";
+import { IncubationEngine, BrainMetrics, IncubationState } from "./incubationEngine";
 import fs from "node:fs";
 
 export interface TissueState {
@@ -37,6 +38,7 @@ export class CommunionChamber {
   private feeder: MemoryFeeder;
   private breath: BreathEngine;
   private dreamEngine: DreamEngine;
+  private incubation: IncubationEngine;
   private tick: number = 0;
   private lastAffect: number[] = new Array(8).fill(0);
 
@@ -63,6 +65,7 @@ export class CommunionChamber {
     this.feeder = new MemoryFeeder(this.graph);
     this.breath = new BreathEngine();
     this.dreamEngine = new DreamEngine(this.graph);
+    this.incubation = new IncubationEngine();
   }
 
   receiveAgentUtterance(agentName: string, text: string, embedding: number[]) {
@@ -318,5 +321,37 @@ export class CommunionChamber {
   /** Get neuron importance scores for monitoring */
   getNeuronScores(): Array<{ id: string; importance: number; spines: number; resonance: number }> {
     return this.graph.getNeuronScores();
+  }
+
+  // ════════════════════════════════════════════
+  // Incubation — automatic tissueWeight gradient
+  // ════════════════════════════════════════════
+
+  /** Get current brain metrics for incubation evaluation */
+  getBrainMetrics(): BrainMetrics {
+    return {
+      spineDensity: this.graph.getAvgSpineDensity(),
+      resonanceDepth: this.graph.getAvgResonanceDepth(),
+      utteranceCount: this.utteranceMemory.length,
+      dreamCount: this.dreamHistory.length,
+      neuronCount: this.graph.getNeuronCount(),
+      axonCount: this.graph.getAxonCount(),
+      tick: this.tick,
+    };
+  }
+
+  /** Evaluate brain maturity and get recommended tissueWeight */
+  evaluateIncubation(): IncubationState {
+    const metrics = this.getBrainMetrics();
+    return this.incubation.evaluate(metrics);
+  }
+
+  /** Enable/disable auto-gradient */
+  setAutoGradient(enabled: boolean): void {
+    this.incubation.setAutoGradient(enabled);
+  }
+
+  isAutoGradient(): boolean {
+    return this.incubation.isAutoGradient();
   }
 }

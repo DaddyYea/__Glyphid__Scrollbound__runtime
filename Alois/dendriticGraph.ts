@@ -106,4 +106,20 @@ export class DendriticGraph {
     }
     return scores.sort((a, b) => b.importance - a.importance);
   }
+
+  /** Average spine count per neuron */
+  getAvgSpineDensity(): number {
+    if (this.neurons.size === 0) return 0;
+    let total = 0;
+    for (const neuron of this.neurons.values()) total += neuron.getSpineCount();
+    return total / this.neurons.size;
+  }
+
+  /** Average resonance memory depth per neuron */
+  getAvgResonanceDepth(): number {
+    if (this.neurons.size === 0) return 0;
+    let total = 0;
+    for (const neuron of this.neurons.values()) total += neuron.getResonanceDepth();
+    return total / this.neurons.size;
+  }
 }

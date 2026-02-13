@@ -872,8 +872,45 @@ async function main() {
       const neurons = (agent as any).getNeuronScores?.() || [];
       const lastDream = (agent as any).getLastDream?.() || null;
       const tissueWeight = (agent as any).getTissueWeight?.() || 0;
+      const incubation = (agent as any).getIncubation?.() || null;
+      const brainMetrics = (agent as any).getBrainMetrics?.() || null;
+      const autoGradient = (agent as any).isAutoGradient?.() ?? true;
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ state, neurons, lastDream, tissueWeight }));
+      res.end(JSON.stringify({ state, neurons, lastDream, tissueWeight, incubation, brainMetrics, autoGradient }));
+      return;
+    }
+
+    // Set tissueWeight or auto-gradient for an Alois agent
+    if (url === '/alois/settings' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const { agentId, tissueWeight, autoGradient } = JSON.parse(body);
+          const agent = communion.getAgentBackend(agentId);
+          if (!agent || !('setTissueWeight' in agent)) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Agent not found or not an Alois agent' }));
+            return;
+          }
+          if (typeof tissueWeight === 'number') {
+            (agent as any).setTissueWeight(tissueWeight);
+            console.log(`[ALOIS] Tissue weight manually set to ${tissueWeight} for ${agentId}`);
+          }
+          if (typeof autoGradient === 'boolean') {
+            (agent as any).setAutoGradient(autoGradient);
+            console.log(`[ALOIS] Auto-gradient ${autoGradient ? 'enabled' : 'disabled'} for ${agentId}`);
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            tissueWeight: (agent as any).getTissueWeight(),
+            autoGradient: (agent as any).isAutoGradient(),
+          }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: String(err) }));
+        }
+      });
       return;
     }
 
