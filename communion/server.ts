@@ -684,6 +684,57 @@ async function main() {
       return;
     }
 
+    // List inactive (removed) agents available for restoration
+    if (url === '/agents/inactive' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(communion.getInactiveAgents()));
+      return;
+    }
+
+    // Restore a previously removed agent
+    if (url === '/agents/restore' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const { agentId } = JSON.parse(body);
+          if (!agentId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing agentId' }));
+            return;
+          }
+
+          const success = communion.restoreAgent(agentId);
+          if (!success) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Could not restore agent "${agentId}"` }));
+            return;
+          }
+
+          // Broadcast full config refresh
+          const state = communion.getState();
+          broadcast({
+            type: 'config',
+            agentIds: state.agentIds,
+            agentNames: state.agentNames,
+            agentColors: state.agentColors,
+            humanName: state.humanName,
+            voiceConfigs: communion.getAllVoiceConfigs(),
+            voices: VOICES,
+            agentClocks: communion.getAllAgentClocks(),
+            customInstructions: communion.getAllCustomInstructions(),
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'restored', agentId }));
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        }
+      });
+      return;
+    }
+
     // Mic state — client signals human is speaking into mic
     if (url === '/mic' && req.method === 'POST') {
       let body = '';

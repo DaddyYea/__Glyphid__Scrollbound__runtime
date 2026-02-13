@@ -478,6 +478,9 @@ export class CommunionLoop {
     // ── Load imported chat history archives ──
     await this.loadImportedArchives();
 
+    // ── Restore dynamically-added agents from previous sessions ──
+    this.loadDynamicAgents();
+
     // ── Load saved voice configs (voice selections + mute state) ──
     this.loadVoiceConfigs();
 
@@ -1687,6 +1690,178 @@ export class CommunionLoop {
     return result;
   }
 
+  // ── Dynamic Agent Persistence ──
+  // Stores all dynamically-added agents so they survive restarts and can be restored after removal.
+  // Format: { [agentId]: { config: AgentConfig, active: boolean, voiceConfig?, clockValue?, instructions? } }
+
+  private get dynamicAgentsPath(): string {
+    return join(this.dataDir, 'dynamic-agents.json');
+  }
+
+  private saveDynamicAgents(): void {
+    try {
+      // Load existing file to preserve inactive entries
+      let existing: Record<string, any> = {};
+      if (existsSync(this.dynamicAgentsPath)) {
+        existing = JSON.parse(readFileSync(this.dynamicAgentsPath, 'utf-8'));
+      }
+
+      // Update active agents
+      for (const [id, entry] of Object.entries(existing)) {
+        if (entry.active && !this.agents.has(id)) {
+          // Was active but no longer — mark inactive, snapshot state
+          entry.active = false;
+        }
+      }
+
+      // Ensure all current dynamic agents are saved
+      // (config agents from communion.config.json are NOT saved here)
+      writeFileSync(this.dynamicAgentsPath, JSON.stringify(existing, null, 2));
+    } catch (err) {
+      console.error('[AGENTS] Failed to save dynamic agents:', err);
+    }
+  }
+
+  private saveDynamicAgent(agentConfig: AgentConfig, active: boolean, snapshot?: {
+    voiceConfig?: AgentVoiceConfig;
+    clockValue?: number;
+    instructions?: string;
+  }): void {
+    try {
+      let existing: Record<string, any> = {};
+      if (existsSync(this.dynamicAgentsPath)) {
+        existing = JSON.parse(readFileSync(this.dynamicAgentsPath, 'utf-8'));
+      }
+
+      existing[agentConfig.id] = {
+        config: agentConfig,
+        active,
+        ...(snapshot?.voiceConfig && { voiceConfig: snapshot.voiceConfig }),
+        ...(snapshot?.clockValue !== undefined && { clockValue: snapshot.clockValue }),
+        ...(snapshot?.instructions && { instructions: snapshot.instructions }),
+        updatedAt: new Date().toISOString(),
+      };
+
+      writeFileSync(this.dynamicAgentsPath, JSON.stringify(existing, null, 2));
+    } catch (err) {
+      console.error('[AGENTS] Failed to save dynamic agent:', err);
+    }
+  }
+
+  private loadDynamicAgents(): void {
+    try {
+      if (!existsSync(this.dynamicAgentsPath)) return;
+      const saved = JSON.parse(readFileSync(this.dynamicAgentsPath, 'utf-8'));
+      let restored = 0;
+
+      for (const [agentId, entry] of Object.entries(saved) as [string, any][]) {
+        if (!entry.active || !entry.config) continue;
+        if (this.agents.has(agentId)) continue; // already loaded from config file
+
+        const success = this.addAgent(entry.config);
+        if (success) {
+          // Restore saved voice config
+          if (entry.voiceConfig && this.voiceConfigs.has(agentId)) {
+            Object.assign(this.voiceConfigs.get(agentId)!, entry.voiceConfig);
+          }
+          // Restore saved clock
+          if (entry.clockValue !== undefined) {
+            const rhythm = this.rhythm.get(agentId);
+            if (rhythm) rhythm.tickEveryN = entry.clockValue;
+          }
+          // Restore saved instructions
+          if (entry.instructions) {
+            this.customInstructions.set(agentId, entry.instructions);
+          }
+          restored++;
+        }
+      }
+
+      if (restored > 0) {
+        console.log(`[AGENTS] Restored ${restored} dynamic agent(s) from saved config`);
+      }
+    } catch (err) {
+      console.error('[AGENTS] Failed to load dynamic agents:', err);
+    }
+  }
+
+  /**
+   * Get all inactive (removed) agents that can be restored.
+   */
+  getInactiveAgents(): Array<{ id: string; name: string; provider: string; model: string; color?: string }> {
+    try {
+      if (!existsSync(this.dynamicAgentsPath)) return [];
+      const saved = JSON.parse(readFileSync(this.dynamicAgentsPath, 'utf-8'));
+      const result: Array<{ id: string; name: string; provider: string; model: string; color?: string }> = [];
+
+      for (const [agentId, entry] of Object.entries(saved) as [string, any][]) {
+        if (entry.active || !entry.config) continue;
+        result.push({
+          id: agentId,
+          name: entry.config.name,
+          provider: entry.config.provider,
+          model: entry.config.model,
+          color: entry.config.color,
+        });
+      }
+
+      return result;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Restore a previously removed agent from saved config.
+   */
+  restoreAgent(agentId: string): boolean {
+    try {
+      if (!existsSync(this.dynamicAgentsPath)) return false;
+      const saved = JSON.parse(readFileSync(this.dynamicAgentsPath, 'utf-8'));
+      const entry = saved[agentId];
+
+      if (!entry || !entry.config) {
+        console.error(`[AGENT] No saved config for "${agentId}"`);
+        return false;
+      }
+
+      if (this.agents.has(agentId)) {
+        console.error(`[AGENT] Cannot restore — "${agentId}" is already active`);
+        return false;
+      }
+
+      const success = this.addAgent(entry.config);
+      if (!success) return false;
+
+      // Restore voice config
+      if (entry.voiceConfig && this.voiceConfigs.has(agentId)) {
+        Object.assign(this.voiceConfigs.get(agentId)!, entry.voiceConfig);
+      }
+      // Restore clock
+      if (entry.clockValue !== undefined) {
+        const rhythm = this.rhythm.get(agentId);
+        if (rhythm) rhythm.tickEveryN = entry.clockValue;
+      }
+      // Restore instructions
+      if (entry.instructions) {
+        this.customInstructions.set(agentId, entry.instructions);
+      }
+
+      // Mark active again
+      this.saveDynamicAgent(entry.config, true, {
+        voiceConfig: entry.voiceConfig,
+        clockValue: entry.clockValue,
+        instructions: entry.instructions,
+      });
+
+      console.log(`[AGENT] Restored: ${entry.config.name} (${agentId})`);
+      return true;
+    } catch (err) {
+      console.error('[AGENT] Restore failed:', err);
+      return false;
+    }
+  }
+
   private get voiceConfigPath(): string {
     return join(this.dataDir, 'voice-configs.json');
   }
@@ -2056,13 +2231,17 @@ export class CommunionLoop {
       color: agentConfig.color,
     });
 
+    // Save to dynamic agents file for persistence across restarts
+    this.saveDynamicAgent(agentConfig, true);
+
     console.log(`[AGENT] Added: ${agentConfig.name} (${agentConfig.id}) — ${agentConfig.provider}/${agentConfig.model}`);
     return true;
   }
 
   /**
    * Remove an agent from the communion at runtime.
-   * Cleans up all internal state. Journal history on disk is preserved.
+   * Snapshots all state (voice, clock, instructions) before removing so the agent
+   * can be fully restored later. Journal history on disk is always preserved.
    */
   removeAgent(agentId: string): boolean {
     if (!this.agents.has(agentId)) {
@@ -2071,7 +2250,21 @@ export class CommunionLoop {
     }
 
     const name = this.state.agentNames[agentId] || agentId;
+    const agentEntry = this.agents.get(agentId)!;
 
+    // Snapshot current state before removal
+    const voiceConfig = this.voiceConfigs.get(agentId);
+    const rhythm = this.rhythm.get(agentId);
+    const instructions = this.customInstructions.get(agentId);
+
+    // Save snapshot to dynamic-agents.json (marked inactive)
+    this.saveDynamicAgent(agentEntry.config, false, {
+      voiceConfig: voiceConfig ? { ...voiceConfig } : undefined,
+      clockValue: rhythm?.tickEveryN,
+      instructions: instructions || undefined,
+    });
+
+    // Clean up runtime state
     this.agents.delete(agentId);
     this.state.agentIds = this.state.agentIds.filter(id => id !== agentId);
     delete this.state.agentNames[agentId];
@@ -2082,7 +2275,7 @@ export class CommunionLoop {
     this.voiceConfigs.delete(agentId);
     this.customInstructions.delete(agentId);
 
-    console.log(`[AGENT] Removed: ${name} (${agentId})`);
+    console.log(`[AGENT] Removed: ${name} (${agentId}) — state saved for restoration`);
     return true;
   }
 

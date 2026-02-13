@@ -727,6 +727,12 @@
     <div class="modal">
       <h2>Add Agent</h2>
 
+      <!-- Restore previously removed agents -->
+      <div id="restoreSection" style="display:none;margin-bottom:14px;padding:10px 12px;background:rgba(142,218,126,0.05);border:1px solid rgba(142,218,126,0.15);border-radius:4px;">
+        <div style="font-size:0.7em;color:#8eda7e;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Restore Previous Agent</div>
+        <div id="restoreList"></div>
+      </div>
+
       <label for="agentNameInput">Display Name</label>
       <input type="text" id="agentNameInput" placeholder="e.g. Gemini" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
 
@@ -1146,7 +1152,31 @@
       }
     });
 
-    addAgentBtn.addEventListener('click', () => {
+    const restoreSection = document.getElementById('restoreSection');
+    const restoreList = document.getElementById('restoreList');
+
+    // Global restore function (called from onclick in restore buttons)
+    window.restoreAgent = async function(agentId) {
+      try {
+        const resp = await fetch('/agents/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId }),
+        });
+        const result = await resp.json();
+        if (resp.ok) {
+          addAgentModal.classList.remove('active');
+        } else {
+          addAgentError.textContent = result.error || 'Failed to restore agent';
+          addAgentError.style.display = 'block';
+        }
+      } catch (err) {
+        addAgentError.textContent = 'Network error: ' + err.message;
+        addAgentError.style.display = 'block';
+      }
+    };
+
+    addAgentBtn.addEventListener('click', async () => {
       addAgentModal.classList.add('active');
       addAgentError.style.display = 'none';
       agentNameInput.value = '';
@@ -1156,6 +1186,28 @@
       agentBaseUrlInput.value = '';
       agentColorInput.value = '#7edab8';
       agentNameInput.focus();
+
+      // Fetch inactive agents for restore section
+      try {
+        const resp = await fetch('/agents/inactive');
+        const inactive = await resp.json();
+        if (inactive.length > 0) {
+          restoreSection.style.display = 'block';
+          restoreList.innerHTML = inactive.map(a =>
+            `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;">
+              <span style="font-size:0.8em;color:#c0c8d4;">
+                <span style="color:${a.color || '#7eb8da'}">${escapeHtml(a.name)}</span>
+                <span style="color:#506070;font-size:0.85em;margin-left:6px;">${a.provider}/${a.model}</span>
+              </span>
+              <button onclick="restoreAgent('${a.id}')" style="padding:2px 10px;font-size:0.7em;font-family:'Courier New',monospace;border-radius:3px;cursor:pointer;border:1px solid rgba(142,218,126,0.3);background:rgba(142,218,126,0.08);color:#8eda7e;transition:all 0.2s;">Restore</button>
+            </div>`
+          ).join('');
+        } else {
+          restoreSection.style.display = 'none';
+        }
+      } catch {
+        restoreSection.style.display = 'none';
+      }
     });
 
     addAgentCancelBtn.addEventListener('click', () => {
