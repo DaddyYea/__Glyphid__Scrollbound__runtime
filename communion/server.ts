@@ -98,7 +98,7 @@ function loadConfig(): CommunionConfig {
         name: 'Grok',
         provider: 'openai-compatible',
         apiKey: process.env.XAI_API_KEY,
-        model: process.env.GROK_MODEL || 'grok-3',
+        model: process.env.GROK_MODEL || 'grok-4-1-fast',
         baseUrl: 'https://api.x.ai/v1',
         color: '#da9a7e',
       });
