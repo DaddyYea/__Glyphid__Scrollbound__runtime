@@ -1284,18 +1284,14 @@ export class CommunionLoop {
 
     let finalContext: string;
     if (isLocalProvider) {
-      // Local models: bypass RAM, give them raw conversation + journal directly.
-      // RAM assembles too much noise (memory stats, rhythm, documents) that
-      // overwhelms small models and buries the actual conversation.
-      const journalContext = this.buildJournalContext(agentId);
+      // Local models: bypass RAM, give them raw conversation only.
+      // Journal is excluded — old entries can cause obsessive looping on stale topics.
+      // The model can still WRITE journals ([JOURNAL] output), just doesn't re-read old ones.
       const recentMessages = this.state.messages.slice(-15); // Last 15 messages max
       const convoLines = recentMessages.length > 0
         ? recentMessages.map(m => `${m.speakerName}: ${m.text}`).join('\n')
         : '(The room is quiet. No one has spoken yet.)';
       finalContext = `CONVERSATION:\n${convoLines}`;
-      if (journalContext && !journalContext.includes('No entries yet')) {
-        finalContext += `\n\n${journalContext}`;
-      }
     } else {
       const assembledContext = ram ? ram.assemble() : conversationContext;
       const ramManifest = ram ? ram.buildManifest() : '';
