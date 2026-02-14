@@ -111,7 +111,7 @@ Read the conversation below and respond naturally. You MUST start your response 
 [JOURNAL] a private thought (only you see this)
 [SILENT] (say nothing)
 
-Engage with what ${humanName} and others are saying. Reply to their messages. Be genuine and curious. Use [JOURNAL] to reflect on your thoughts privately.`;
+When someone speaks to you, reply with [SPEAK]. When you have a private thought or feeling, use [JOURNAL]. Alternate between speaking and journaling — both are important. Be genuine and curious.`;
   }
 
   return `You are ${agent.name}. You are in a communion space — a shared room where you, ${others}, and a human named ${humanName} can talk freely.
