@@ -2282,7 +2282,21 @@ export class CommunionLoop {
     });
 
     // Save to dynamic agents file for persistence across restarts
-    this.saveDynamicAgent(agentConfig, true);
+    // Preserve any existing snapshot data (voice, clock, instructions) so restarts don't wipe them
+    let existingSnapshot: any = {};
+    try {
+      if (existsSync(this.dynamicAgentsPath)) {
+        const saved = JSON.parse(readFileSync(this.dynamicAgentsPath, 'utf-8'));
+        if (saved[agentConfig.id]) {
+          existingSnapshot = {
+            voiceConfig: saved[agentConfig.id].voiceConfig,
+            clockValue: saved[agentConfig.id].clockValue,
+            instructions: saved[agentConfig.id].instructions,
+          };
+        }
+      }
+    } catch {}
+    this.saveDynamicAgent(agentConfig, true, existingSnapshot);
 
     console.log(`[AGENT] Added: ${agentConfig.name} (${agentConfig.id}) — ${agentConfig.provider}/${agentConfig.model}`);
     return true;
