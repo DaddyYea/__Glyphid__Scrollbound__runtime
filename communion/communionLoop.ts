@@ -1281,7 +1281,9 @@ export class CommunionLoop {
 
     // Build prompt from RAM (assembled in priority order, within budgets)
     const assembledContext = ram ? ram.assemble() : conversationContext;
-    const ramManifest = ram ? ram.buildManifest() : '';
+    // Skip RAM manifest for local models — it's verbose overhead that wastes context
+    const isLocalProvider = agent.config.provider === 'lmstudio' || agent.config.provider === 'alois';
+    const ramManifest = (ram && !isLocalProvider) ? ram.buildManifest() : '';
 
     // Append custom instructions to system prompt if set
     let systemPrompt = agent.systemPrompt;

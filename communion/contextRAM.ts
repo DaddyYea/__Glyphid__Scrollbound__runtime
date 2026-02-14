@@ -206,8 +206,14 @@ export class ContextRAM {
     if (!slot.loaded) return; // Slot was dropped
 
     if (content.length > slot.maxChars && slot.maxChars > 0) {
-      content = content.substring(0, slot.maxChars) +
-        `\n[... truncated to fit ${name} RAM budget (${slot.maxChars} chars) ...]`;
+      if (name === 'conversation' || name === 'journal') {
+        // For conversation and journal, keep the END (most recent messages/entries)
+        content = `[... older ${name} truncated ...]\n` +
+          content.substring(content.length - slot.maxChars);
+      } else {
+        content = content.substring(0, slot.maxChars) +
+          `\n[... truncated to fit ${name} RAM budget (${slot.maxChars} chars) ...]`;
+      }
     }
 
     // Track staleness: if content is substantially similar, increment counter
