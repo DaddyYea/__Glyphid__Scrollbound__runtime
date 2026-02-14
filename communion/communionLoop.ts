@@ -1280,10 +1280,27 @@ export class CommunionLoop {
     }
 
     // Build prompt from RAM (assembled in priority order, within budgets)
-    const assembledContext = ram ? ram.assemble() : conversationContext;
-    // Skip RAM manifest for local models — it's verbose overhead that wastes context
     const isLocalProvider = agent.config.provider === 'lmstudio' || agent.config.provider === 'alois';
-    const ramManifest = (ram && !isLocalProvider) ? ram.buildManifest() : '';
+
+    let finalContext: string;
+    if (isLocalProvider) {
+      // Local models: bypass RAM, give them raw conversation + journal directly.
+      // RAM assembles too much noise (memory stats, rhythm, documents) that
+      // overwhelms small models and buries the actual conversation.
+      const journalContext = this.buildJournalContext(agentId);
+      const recentMessages = this.state.messages.slice(-15); // Last 15 messages max
+      const convoLines = recentMessages.length > 0
+        ? recentMessages.map(m => `${m.speakerName}: ${m.text}`).join('\n')
+        : '(The room is quiet. No one has spoken yet.)';
+      finalContext = `CONVERSATION:\n${convoLines}`;
+      if (journalContext && !journalContext.includes('No entries yet')) {
+        finalContext += `\n\n${journalContext}`;
+      }
+    } else {
+      const assembledContext = ram ? ram.assemble() : conversationContext;
+      const ramManifest = ram ? ram.buildManifest() : '';
+      finalContext = assembledContext + (ramManifest ? '\n\n' + ramManifest : '');
+    }
 
     // Append custom instructions to system prompt if set
     let systemPrompt = agent.systemPrompt;
@@ -1294,14 +1311,10 @@ export class CommunionLoop {
 
     const options: GenerateOptions = {
       systemPrompt,
-      conversationContext: assembledContext + (ramManifest ? '\n\n' + ramManifest : ''),
-      journalContext: '', // Already in RAM
-      // For local/small-context models, skip the full document tree — it overwhelms the prompt.
-      // Agents can still discover files via [RAM:BROWSE keyword].
-      documentsContext: (agent.config.provider === 'lmstudio' || agent.config.provider === 'alois')
-        ? (this.documentsContext ? 'SHARED DOCUMENTS: Use [RAM:BROWSE keyword] to search and load content from shared files.' : undefined)
-        : (this.documentsContext || undefined),
-      memoryContext: undefined, // Already in RAM
+      conversationContext: finalContext,
+      journalContext: '',
+      documentsContext: isLocalProvider ? undefined : (this.documentsContext || undefined),
+      memoryContext: undefined,
       provider: agent.config.provider,
     };
 
