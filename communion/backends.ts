@@ -37,6 +37,8 @@ export interface AgentBackend {
 
 function parseResponse(raw: string): GenerateResult {
   const trimmed = raw.trim();
+
+  // Check start first (well-formatted responses)
   if (trimmed.startsWith('[SPEAK]')) {
     return { action: 'speak', text: trimmed.replace('[SPEAK]', '').trim() };
   }
@@ -46,6 +48,20 @@ function parseResponse(raw: string): GenerateResult {
   if (trimmed.startsWith('[SILENT]')) {
     return { action: 'silent', text: '' };
   }
+
+  // Small models often add preamble before the tag — search anywhere in the output
+  const journalIdx = trimmed.indexOf('[JOURNAL]');
+  if (journalIdx !== -1) {
+    return { action: 'journal', text: trimmed.substring(journalIdx + 9).trim() };
+  }
+  const speakIdx = trimmed.indexOf('[SPEAK]');
+  if (speakIdx !== -1) {
+    return { action: 'speak', text: trimmed.substring(speakIdx + 7).trim() };
+  }
+  if (trimmed.includes('[SILENT]')) {
+    return { action: 'silent', text: '' };
+  }
+
   // Default: treat as speak
   return { action: 'speak', text: trimmed };
 }
