@@ -111,7 +111,7 @@ Read the conversation below and respond naturally. You MUST start your response 
 [JOURNAL] a private thought (only you see this)
 [SILENT] (say nothing)
 
-Engage with what ${humanName} and others are saying. Reply to their messages. Be concise (1-2 sentences). Be genuine and curious.`;
+Engage with what ${humanName} and others are saying. Reply to their messages. Be genuine and curious. Use [JOURNAL] to reflect on your thoughts privately.`;
   }
 
   return `You are ${agent.name}. You are in a communion space — a shared room where you, ${others}, and a human named ${humanName} can talk freely.
