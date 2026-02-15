@@ -954,9 +954,9 @@ export class CommunionLoop {
     this.feedAloisBrains('human', text);
 
     // Human spoke — trigger immediate tick and reset the clock.
-    // Client-side silence detection (3s) ensures we only get here
-    // after the human has actually finished talking.
-    if (!this.processing && !this.speaking && !this.paused) {
+    // Only if the human has actually stopped talking (silence detected).
+    // Whisper bridge sends chunks mid-speech, so we must respect humanSpeaking.
+    if (!this.processing && !this.speaking && !this.paused && !this.humanSpeaking) {
       console.log('[COMMUNION] Human spoke — advancing clock and triggering tick');
       if (this.timer) {
         clearInterval(this.timer);
@@ -1149,6 +1149,12 @@ export class CommunionLoop {
 
     // Process agents sequentially with staggered delays for natural rhythm
     for (const [agentId, agent] of agentEntries) {
+      // Bail out of the entire tick if human started speaking mid-tick
+      if (this.humanSpeaking) {
+        console.log(`[TICK ${this.state.tickCount}] Aborting — human started speaking`);
+        break;
+      }
+
       const rhythm = this.rhythm.get(agentId);
       // Negative clock = multiple turns per tick
       const turnsThisTick = rhythm && rhythm.tickEveryN < 0 ? Math.abs(rhythm.tickEveryN) : 1;
@@ -1163,6 +1169,7 @@ export class CommunionLoop {
       }
 
       for (let turn = 0; turn < turnsThisTick; turn++) {
+        if (this.humanSpeaking) break; // Check before each turn too
         try {
           await this.processAgent(agentId, agent, conversationContext);
         } catch (err) {
@@ -1314,6 +1321,12 @@ export class CommunionLoop {
 
       const convoText = lines.length > 0 ? lines.join('\n') : '(The room is quiet. No one has spoken yet.)';
 
+      // Find the last human message to put a direct reminder at the end of context
+      const lastHumanMsg = [...recentMessages].reverse().find(m => m.speakerName === humanName);
+      const humanReminder = lastHumanMsg
+        ? `\n\n[RESPOND TO ${humanName.toUpperCase()}: "${lastHumanMsg.text}"]`
+        : '';
+
       // ── Brainwave pulse: pull associated memories on rhythm ──
       const recentSpeakers = recentMessages
         .filter(m => m.speaker !== agentId)
@@ -1337,9 +1350,9 @@ export class CommunionLoop {
 
       if (brainwave.injection) {
         console.log(`[${agent.config.name}] Brainwave pulse: ${brainwave.firedBands.join(', ')}`);
-        finalContext = `${brainwave.injection}\n\nCONVERSATION:\n${convoText}`;
+        finalContext = `${brainwave.injection}\n\nCONVERSATION:\n${convoText}${humanReminder}`;
       } else {
-        finalContext = `CONVERSATION:\n${convoText}`;
+        finalContext = `CONVERSATION:\n${convoText}${humanReminder}`;
       }
     } else {
       const assembledContext = ram ? ram.assemble() : conversationContext;
@@ -1409,7 +1422,12 @@ export class CommunionLoop {
       this.feedAloisBrains(agentId, responseText);
 
       // ── Voice synthesis — speak aloud if enabled ──
-      await this.synthesizeAndEmit(agentId, agent.config, responseText);
+      // Skip TTS if human started speaking during LLM generation (don't talk over them)
+      if (!this.humanSpeaking) {
+        await this.synthesizeAndEmit(agentId, agent.config, responseText);
+      } else {
+        console.log(`[${agent.config.name}] VOICE: skipping TTS — human is speaking`);
+      }
 
       // ── Rhythm: post-speech decay ──
       const rhythm = this.rhythm.get(agentId);
@@ -1705,6 +1723,15 @@ export class CommunionLoop {
       console.log(`[${agentConfig.name}] VOICE: synthesizing (${voiceConfig.voiceId})...`);
 
       const result = await synthesize(text, voiceConfig);
+
+      // Re-check: human may have started speaking during synthesis
+      if (this.humanSpeaking) {
+        console.log(`[${agentConfig.name}] VOICE: dropping audio — human started speaking during synthesis`);
+        this.emit({ type: 'speech-end', agentId, durationMs: 0 });
+        this.speaking = false;
+        return;
+      }
+
       console.log(`[${agentConfig.name}] VOICE: ${Math.round((result.durationMs || 0) / 1000)}s audio — sending to client...`);
 
       this.emit({
@@ -2011,6 +2038,17 @@ export class CommunionLoop {
     if (this.humanSpeaking !== active) {
       this.humanSpeaking = active;
       console.log(`[COMMUNION] Human ${active ? 'speaking' : 'silent'}`);
+
+      // When human stops speaking, trigger a tick so agents can respond promptly.
+      // Without this, the next response waits for the interval timer.
+      if (!active && !this.processing && !this.speaking && !this.paused) {
+        console.log('[COMMUNION] Human stopped speaking — triggering tick');
+        if (this.timer) {
+          clearInterval(this.timer);
+          this.timer = setInterval(() => this.tick(), this.tickIntervalMs);
+        }
+        this.tick().catch(err => console.error('[COMMUNION] Post-silence tick error:', err));
+      }
     }
   }
 

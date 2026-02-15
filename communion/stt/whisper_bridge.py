@@ -28,6 +28,7 @@ SAMPLE_RATE = 16000
 CHUNK_DURATION = 5  # seconds of audio to buffer before transcribing
 RUNTIME_ENDPOINT = "http://localhost:3000/transcript"
 SPEAKING_ENDPOINT = "http://localhost:3000/speaking"
+MIC_ENDPOINT = "http://localhost:3000/mic"
 
 # Audio buffer — collects chunks until we have CHUNK_DURATION seconds
 audio_buffer = []
@@ -37,6 +38,12 @@ SAMPLES_PER_CHUNK = SAMPLE_RATE * CHUNK_DURATION
 # Cooldown after TTS finishes — mic still picks up reverb/tail for a bit
 TTS_COOLDOWN_SECONDS = 0.5
 last_tts_end_time = 0.0
+
+# Voice activity tracking — signal server when human is speaking
+RMS_SPEECH_THRESHOLD = 0.01  # same as silence threshold
+SILENCE_TIMEOUT = 2.0  # seconds of silence before signaling "not speaking"
+human_speaking_signaled = False
+last_voice_time = 0.0
 
 
 def is_agent_speaking():
@@ -59,11 +66,33 @@ def in_cooldown():
     return (time.time() - last_tts_end_time) < TTS_COOLDOWN_SECONDS
 
 
+def signal_human_speaking(active):
+    """Tell the server whether the human is actively speaking."""
+    global human_speaking_signaled
+    if human_speaking_signaled == active:
+        return  # no change
+    try:
+        requests.post(MIC_ENDPOINT, json={"active": active}, timeout=1)
+        human_speaking_signaled = active
+        if active:
+            print("[STT] → Human speaking (holding ticks)")
+        else:
+            print("[STT] → Human silent (releasing ticks)")
+    except Exception:
+        pass
+
+
 def audio_callback(indata, frames, time_info, status):
+    global last_voice_time
     if status:
         print(f"[STT] Audio status: {status}")
     with buffer_lock:
         audio_buffer.append(indata.copy())
+    # Voice activity detection: check RMS of this chunk
+    rms = np.sqrt(np.mean(indata ** 2))
+    if rms >= RMS_SPEECH_THRESHOLD:
+        last_voice_time = time.time()
+        signal_human_speaking(True)
 
 
 def audio_stream():
@@ -76,6 +105,14 @@ def audio_stream():
     ):
         while True:
             time.sleep(0.1)
+
+
+def silence_monitor():
+    """Background thread: clear humanSpeaking after SILENCE_TIMEOUT of quiet."""
+    while True:
+        time.sleep(0.3)
+        if human_speaking_signaled and (time.time() - last_voice_time) >= SILENCE_TIMEOUT:
+            signal_human_speaking(False)
 
 
 def transcribe_loop():
@@ -138,4 +175,5 @@ if __name__ == "__main__":
     print(f"[STT] Speaking check: {SPEAKING_ENDPOINT}")
     print("[STT] Speak into your microphone...")
     threading.Thread(target=audio_stream, daemon=True).start()
+    threading.Thread(target=silence_monitor, daemon=True).start()
     transcribe_loop()

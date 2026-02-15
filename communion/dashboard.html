@@ -1895,6 +1895,14 @@
       if (e.key === 'Enter') sendMessage();
     });
 
+    // Barge-in: press Escape to interrupt agent speech
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && audioPlaying) {
+        e.preventDefault();
+        bargeIn();
+      }
+    });
+
     // ── Import Modal ──
     const importBtn = document.getElementById('importBtn');
     const importModal = document.getElementById('importModal');
@@ -2018,10 +2026,27 @@
 
     let audioQueue = [];
     let audioPlaying = false;
+    let currentAudio = null; // Reference to currently playing Audio element for barge-in
 
     function playAudio(base64, agentId) {
       audioQueue.push({ base64, agentId });
       if (!audioPlaying) processAudioQueue();
+    }
+
+    /** Barge-in: stop current audio and clear queue when human starts speaking */
+    function bargeIn() {
+      if (!audioPlaying) return;
+      console.log('[VOICE] Barge-in — stopping playback');
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        if (currentAudio._blobUrl) {
+          URL.revokeObjectURL(currentAudio._blobUrl);
+        }
+        currentAudio._bargedIn = true;
+        currentAudio = null;
+      }
+      audioQueue.length = 0;
     }
 
     async function processAudioQueue() {
@@ -2032,7 +2057,9 @@
       audioPlaying = true;
       const { base64, agentId } = audioQueue.shift();
 
-      // Pause mic recognition while agents speak (prevents feedback loop)
+      // Pause mic recognition while agents speak (prevents feedback loop
+      // where speaker output gets picked up by mic and re-transcribed).
+      // Barge-in is still available via Escape key — see keydown handler.
       if (recognition && micListening) {
         try { recognition.stop(); } catch(e) {}
       }
@@ -2042,6 +2069,7 @@
       speakingIndicator.classList.add('active');
       speakingName.textContent = name + ' speaking...';
 
+      let bargedIn = false;
       try {
         const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
 
@@ -2049,17 +2077,38 @@
           const blob = new Blob([bytes], { type: 'audio/mpeg' });
           const url = URL.createObjectURL(blob);
           const audio = new Audio(url);
+          audio._blobUrl = url;
+          audio._bargedIn = false;
+          currentAudio = audio;
           audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
           audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+          audio.onpause = () => {
+            if (audio._bargedIn) {
+              bargedIn = true;
+              resolve();
+            }
+          };
           audio.play().catch(() => resolve());
         });
       } catch (err) {
         console.error('Audio playback error:', err);
       }
 
+      currentAudio = null;
+
       // Signal server that this audio is done
       speakingIndicator.classList.remove('active');
       fetch('/speech-done', { method: 'POST' }).catch(() => {});
+
+      if (bargedIn) {
+        audioPlaying = false;
+        console.log('[VOICE] Barge-in complete — yielding to human');
+        // Restart mic so human can speak
+        if (recognition && micListening) {
+          try { recognition.start(); } catch(e) {}
+        }
+        return;
+      }
 
       // Resume mic after playback if no more queued audio
       if (audioQueue.length === 0 && recognition && micListening) {
