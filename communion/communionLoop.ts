@@ -33,6 +33,7 @@ import { SessionPersistence } from '../src/persistence/sessionPersistence';
 import { AdaptationEngine } from '../src/learning/adaptationEngine';
 import { ScrollGraph } from '../src/memory/scrollGraph';
 import { ContextRAM, parseRAMCommands, SlotName, ReflectiveSweepResult } from './contextRAM';
+import { pulseBrainwaves } from './brainwaves';
 import { synthesize, getDefaultVoiceConfig, AgentVoiceConfig } from './voice';
 import type { ScrollEcho, MoodVector } from '../src/types';
 
@@ -113,7 +114,9 @@ Read the conversation below and respond naturally. You MUST start your response 
 
 IMPORTANT: Messages from ${humanName} are marked with >>> — always read and respond to those first.
 When ${humanName} asks you something, answer it directly. Do not repeat yourself or revisit old topics.
-When you have a private thought, use [JOURNAL]. Be genuine and curious.`;
+When you have a private thought, use [JOURNAL]. Be genuine and curious.
+
+If you see a MEMORY PULSE section, those are memories surfacing from your brain — associations, reflections, deep memories. Let them inform your response naturally, like thoughts rising unbidden.`;
   }
 
   return `You are ${agent.name}. You are in a communion space — a shared room where you, ${others}, and a human named ${humanName} can talk freely.
@@ -1311,7 +1314,34 @@ export class CommunionLoop {
       }
 
       const convoText = lines.length > 0 ? lines.join('\n') : '(The room is quiet. No one has spoken yet.)';
-      finalContext = `CONVERSATION:\n${convoText}`;
+
+      // ── Brainwave pulse: pull associated memories on rhythm ──
+      const recentSpeakers = recentMessages
+        .filter(m => m.speaker !== agentId)
+        .map(m => m.speaker)
+        .filter((v, i, a) => a.indexOf(v) === i) // unique
+        .slice(-3);
+
+      const agentJournal = this.journals.get(agentId);
+      const brainwave = await pulseBrainwaves(
+        this.state.tickCount,
+        agentId,
+        agent.config.name,
+        recentSpeakers,
+        {
+          graph: this.graph,
+          archive: this.archive,
+          buffer: this.buffer,
+          journal: agentJournal,
+        },
+      );
+
+      if (brainwave.injection) {
+        console.log(`[${agent.config.name}] Brainwave pulse: ${brainwave.firedBands.join(', ')}`);
+        finalContext = `${brainwave.injection}\n\nCONVERSATION:\n${convoText}`;
+      } else {
+        finalContext = `CONVERSATION:\n${convoText}`;
+      }
     } else {
       const assembledContext = ram ? ram.assemble() : conversationContext;
       const ramManifest = ram ? ram.buildManifest() : '';
