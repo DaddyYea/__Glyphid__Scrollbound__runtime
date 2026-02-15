@@ -111,7 +111,9 @@ Read the conversation below and respond naturally. You MUST start your response 
 [JOURNAL] a private thought (only you see this)
 [SILENT] (say nothing)
 
-When someone speaks to you, reply with [SPEAK]. When you have a private thought or feeling, use [JOURNAL]. Alternate between speaking and journaling — both are important. Be genuine and curious.`;
+IMPORTANT: Messages from ${humanName} are marked with >>> — always read and respond to those first.
+When ${humanName} asks you something, answer it directly. Do not repeat yourself or revisit old topics.
+When you have a private thought, use [JOURNAL]. Be genuine and curious.`;
   }
 
   return `You are ${agent.name}. You are in a communion space — a shared room where you, ${others}, and a human named ${humanName} can talk freely.
@@ -1285,13 +1287,31 @@ export class CommunionLoop {
     let finalContext: string;
     if (isLocalProvider) {
       // Local models: bypass RAM, give them raw conversation only.
-      // Journal is excluded — old entries can cause obsessive looping on stale topics.
-      // The model can still WRITE journals ([JOURNAL] output), just doesn't re-read old ones.
-      const recentMessages = this.state.messages.slice(-15); // Last 15 messages max
-      const convoLines = recentMessages.length > 0
-        ? recentMessages.map(m => `${m.speakerName}: ${m.text}`).join('\n')
-        : '(The room is quiet. No one has spoken yet.)';
-      finalContext = `CONVERSATION:\n${convoLines}`;
+      // Highlight human messages so small models pay attention to them.
+      // Limit agent's own messages to prevent looping on their own output.
+      const recentMessages = this.state.messages.slice(-15);
+      const humanName = this.state.humanName;
+      let ownMessageCount = 0;
+      const maxOwnMessages = 3; // Only show last 3 of this agent's messages
+
+      // Build lines in reverse to count own messages from most recent
+      const lines: string[] = [];
+      for (let i = recentMessages.length - 1; i >= 0; i--) {
+        const m = recentMessages[i];
+        if (m.speaker === agentId) {
+          ownMessageCount++;
+          if (ownMessageCount > maxOwnMessages) continue; // Skip older self-messages
+        }
+        // Highlight human messages so the model focuses on them
+        if (m.speakerName === humanName) {
+          lines.unshift(`>>> ${humanName}: ${m.text}`);
+        } else {
+          lines.unshift(`${m.speakerName}: ${m.text}`);
+        }
+      }
+
+      const convoText = lines.length > 0 ? lines.join('\n') : '(The room is quiet. No one has spoken yet.)';
+      finalContext = `CONVERSATION:\n${convoText}`;
     } else {
       const assembledContext = ram ? ram.assemble() : conversationContext;
       const ramManifest = ram ? ram.buildManifest() : '';
