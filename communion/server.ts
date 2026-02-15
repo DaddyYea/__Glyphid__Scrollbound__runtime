@@ -956,6 +956,13 @@ async function main() {
       return;
     }
 
+    // Speaking status — used by Whisper STT bridge to avoid picking up TTS output
+    if (url === '/speaking' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ speaking: communion.isSpeaking() }));
+      return;
+    }
+
     // Speech done — client reports audio playback finished
     if (url === '/speech-done' && req.method === 'POST') {
       communion.reportSpeechComplete();
