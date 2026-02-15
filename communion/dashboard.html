@@ -2142,22 +2142,22 @@
 
       let silenceTimer = null;
       let speechActive = false; // true while interim results are flowing
+      let accumulatedText = ''; // Accumulates finalized text across recognition segments
       const SILENCE_DELAY = 3000; // 3s of silence = done talking, send + tick
 
       recognition.onresult = (event) => {
-        let finalText = '';
         let interimText = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
-            finalText += transcript + ' ';
+            accumulatedText += transcript + ' ';
           } else {
             interimText += transcript;
           }
         }
 
-        // Show live transcription
-        chatInput.value = (finalText + interimText).trim();
+        // Show live transcription — accumulated finals + current interim
+        chatInput.value = (accumulatedText + interimText).trim();
 
         // Signal server: human is actively speaking — hold ticks
         if (!speechActive) {
@@ -2171,6 +2171,7 @@
           // Silence detected — clear speaking flag FIRST, then send message.
           // Order matters: server must know human is done before message triggers tick.
           speechActive = false;
+          accumulatedText = ''; // Reset for next utterance
           await signalMicState(false);
           const text = chatInput.value.trim();
           if (text && micListening) {
@@ -2211,6 +2212,7 @@
           // Turn off mic
           micListening = false;
           speechActive = false;
+          accumulatedText = '';
           micBtn.classList.remove('listening');
           clearTimeout(silenceTimer);
           recognition.stop();
@@ -2221,6 +2223,7 @@
         } else {
           // Turn on mic — stays on until clicked again
           chatInput.value = '';
+          accumulatedText = '';
           micListening = true;
           micBtn.classList.add('listening');
           recognition.start();
