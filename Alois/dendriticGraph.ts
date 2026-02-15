@@ -122,4 +122,17 @@ export class DendriticGraph {
     for (const neuron of this.neurons.values()) total += neuron.getResonanceDepth();
     return total / this.neurons.size;
   }
+
+  /** Get all axon edges as {source, target} pairs for visualization */
+  getAxonTopology(): Array<{ source: string; target: string }> {
+    const edges: Array<{ source: string; target: string }> = [];
+    for (const axon of this.axons) {
+      // Each axon has a parent → children relationship
+      const parentId = (axon as any).parentId as string;
+      for (const childId of axon.getChildIds()) {
+        edges.push({ source: parentId, target: childId });
+      }
+    }
+    return edges;
+  }
 }

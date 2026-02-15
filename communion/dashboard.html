@@ -728,6 +728,95 @@
       0%, 100% { opacity: 0.3; transform: scale(0.8); }
       50% { opacity: 1; transform: scale(1.2); }
     }
+
+    /* ── Brain Growth Visualizer ── */
+    .brain-btn {
+      color: #64c8b4; border-color: rgba(100,200,180,0.3); background: rgba(100,200,180,0.08);
+      display: none;
+    }
+    .brain-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.88); z-index: 1000;
+      display: flex; align-items: center; justify-content: center;
+      animation: fadeIn 0.2s ease;
+    }
+    .brain-container {
+      width: 94vw; height: 92vh;
+      background: #0a0e14; border: 1px solid rgba(100,200,180,0.15);
+      border-radius: 8px; overflow: hidden;
+      display: grid;
+      grid-template-columns: 220px 1fr 220px;
+      grid-template-rows: 42px 1fr;
+    }
+    .brain-header {
+      grid-column: 1 / -1;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 16px; background: #0f1420;
+      border-bottom: 1px solid #1a2030; font-size: 13px;
+    }
+    .brain-header .stage-badge {
+      padding: 2px 10px; border-radius: 10px; font-size: 11px;
+      background: rgba(100,200,180,0.12); color: #64c8b4; margin-left: 12px;
+    }
+    .brain-header .close-btn {
+      background: none; border: 1px solid #333; color: #888; cursor: pointer;
+      padding: 2px 10px; border-radius: 4px; font-size: 14px;
+    }
+    .brain-header .close-btn:hover { color: #fff; border-color: #666; }
+    .brain-left, .brain-right {
+      padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px;
+      border-right: 1px solid #1a2030;
+    }
+    .brain-right { border-right: none; border-left: 1px solid #1a2030; }
+    .brain-center { position: relative; overflow: hidden; }
+    .brain-center canvas { width: 100%; height: 100%; display: block; }
+    .brain-panel {
+      background: #0f1420; border: 1px solid #1a2030; border-radius: 6px; padding: 10px;
+    }
+    .brain-panel h4 {
+      margin: 0 0 8px 0; font-size: 10px; text-transform: uppercase;
+      color: #506070; letter-spacing: 1px;
+    }
+    .brain-gauge-bar {
+      height: 8px; background: #1a2030; border-radius: 4px; overflow: hidden; margin-top: 4px;
+    }
+    .brain-gauge-fill {
+      height: 100%; border-radius: 4px; transition: width 0.6s ease;
+      background: linear-gradient(90deg, #64c8b4, #b48cff);
+    }
+    .brain-stat-row {
+      display: flex; justify-content: space-between; font-size: 11px; padding: 2px 0;
+    }
+    .brain-stat-row .label { color: #506070; }
+    .brain-stat-row .value { color: #c0c8d4; }
+    .brain-affect-bar {
+      height: 6px; border-radius: 3px; margin: 2px 0; transition: width 0.4s ease;
+    }
+    .brain-timeline {
+      display: flex; align-items: center; gap: 4px; min-height: 20px; flex-wrap: wrap;
+    }
+    .brain-timeline .dream-dot {
+      width: 10px; height: 10px; border-radius: 50%; background: #b48cff;
+      opacity: 0.6; cursor: default; flex-shrink: 0;
+    }
+    .brain-timeline .dream-dot:hover { opacity: 1; }
+    .brain-wave-row {
+      display: flex; align-items: center; gap: 6px; font-size: 10px; margin: 2px 0;
+    }
+    .brain-wave-row .wave-label { width: 40px; color: #506070; text-align: right; }
+    .brain-wave-row .wave-bar {
+      flex: 1; height: 6px; border-radius: 3px; background: #1a2030; overflow: hidden;
+    }
+    .brain-wave-row .wave-fill {
+      height: 100%; border-radius: 3px; transition: width 0.4s ease;
+    }
+    .brain-radar-canvas { display: block; margin: 0 auto; }
+    .brain-maturity-svg { display: block; width: 100%; }
+    .brain-empty-msg {
+      grid-column: 1 / -1; grid-row: 2;
+      display: flex; align-items: center; justify-content: center;
+      color: #405060; font-size: 14px;
+    }
   </style>
 </head>
 <body>
@@ -742,6 +831,7 @@
       <input type="range" id="speedSlider" min="3" max="1800" value="1800" class="speed-slider" title="Tick interval (seconds)" />
       <span class="speed-value" id="speedValue">30m</span>
       <button class="import-btn" id="importBtn">IMPORT</button>
+      <button class="import-btn brain-btn" id="brainVizBtn" title="Brain growth visualizer">BRAIN</button>
       <button class="import-btn" id="addAgentBtn" style="color:#8eda7e;border-color:rgba(142,218,126,0.3);">+ AGENT</button>
       <span class="speaking-indicator" id="speakingIndicator"><span class="speaking-dot"></span><span id="speakingName">Speaking...</span></span>
     </div>
@@ -2233,6 +2323,588 @@
       micBtn.classList.add('unsupported');
       micBtn.title = 'Speech recognition not supported in this browser (use Chrome or Edge)';
     }
+
+    // ══════════════════════════════════════════════════════════════════
+    // ── Brain Growth Visualizer ──
+    // ══════════════════════════════════════════════════════════════════
+
+    const brainViz = {
+      active: false, agentId: null, pollInterval: null, animFrame: null,
+      data: null, dreams: null, canvas: null, ctx: null,
+      nodes: [], // {id, x, y, vx, vy, targetX, targetY, importance, spines, resonance}
+      breathPhase: 0, tickDebounce: null, overlay: null,
+    };
+
+    const AFFECT_COLORS = ['#ff6b6b','#ffa06b','#ffd06b','#6bffb8','#6bd4ff','#6b8cff','#a06bff','#ff6bc8'];
+    const AFFECT_LABELS = ['joy','trust','anticip.','surprise','sadness','fear','disgust','anger'];
+    const WAVE_COLORS = ['#ff6b6b','#ffa06b','#ffd06b','#6bffb8','#6b8cff'];
+    const WAVE_LABELS = ['gamma','beta','alpha','theta','delta'];
+    const STAGES = ['Seedling','Sprouting','Growing','Maturing','Awakening','Autonomous'];
+    const STAGE_THRESHOLDS = [0, 0.1, 0.3, 0.5, 0.7, 0.85];
+
+    // Show/hide brain button based on whether Alois agent exists
+    function updateBrainBtn() {
+      const btn = document.getElementById('brainVizBtn');
+      if (!btn) return;
+      const hasAlois = Object.values(agentProviders).includes('alois');
+      btn.style.display = hasAlois ? 'inline-block' : 'none';
+    }
+
+    function getFirstAloisId() {
+      for (const [id, prov] of Object.entries(agentProviders)) {
+        if (prov === 'alois') return id;
+      }
+      return null;
+    }
+
+    document.getElementById('brainVizBtn').addEventListener('click', () => {
+      const id = getFirstAloisId();
+      if (id) openBrainViz(id);
+    });
+
+    function openBrainViz(agentId) {
+      if (brainViz.active) return;
+      brainViz.active = true;
+      brainViz.agentId = agentId;
+      brainViz.nodes = [];
+
+      const overlay = document.createElement('div');
+      overlay.className = 'brain-overlay';
+      brainViz.overlay = overlay;
+
+      const name = config ? (config.agentNames[agentId] || agentId) : agentId;
+
+      overlay.innerHTML = `
+        <div class="brain-container">
+          <div class="brain-header">
+            <div style="display:flex;align-items:center;">
+              <span style="color:#64c8b4;font-weight:bold;">${name}</span>
+              <span class="stage-badge" id="brainStage">...</span>
+            </div>
+            <button class="close-btn" id="brainClose">&times;</button>
+          </div>
+          <div class="brain-left">
+            <div class="brain-panel">
+              <h4>Maturity</h4>
+              <svg class="brain-maturity-svg" viewBox="0 0 200 80" id="brainMaturitySvg"></svg>
+            </div>
+            <div class="brain-panel">
+              <h4>Tissue Weight</h4>
+              <div style="text-align:center;font-size:24px;color:#64c8b4;" id="brainTissueVal">0.0</div>
+              <div class="brain-gauge-bar"><div class="brain-gauge-fill" id="brainTissueFill" style="width:0%"></div></div>
+            </div>
+            <div class="brain-panel">
+              <h4>Utterance Memory</h4>
+              <div class="brain-stat-row"><span class="label">stored</span><span class="value" id="brainUtteranceCount">0</span></div>
+              <div class="brain-gauge-bar"><div class="brain-gauge-fill" id="brainUtteranceFill" style="width:0%"></div></div>
+              <div style="font-size:9px;color:#405060;text-align:right;margin-top:2px;">/ 2000</div>
+            </div>
+            <div class="brain-panel">
+              <h4>Contributions</h4>
+              <canvas class="brain-radar-canvas" id="brainRadar" width="180" height="180"></canvas>
+            </div>
+          </div>
+          <div class="brain-center">
+            <canvas id="brainCanvas"></canvas>
+          </div>
+          <div class="brain-right">
+            <div class="brain-panel">
+              <h4>Brain Stats</h4>
+              <div class="brain-stat-row"><span class="label">neurons</span><span class="value" id="brainNeurons">0</span></div>
+              <div class="brain-stat-row"><span class="label">axons</span><span class="value" id="brainAxons">0</span></div>
+              <div class="brain-stat-row"><span class="label">avg spines</span><span class="value" id="brainSpines">0</span></div>
+              <div class="brain-stat-row"><span class="label">avg resonance</span><span class="value" id="brainResonance">0</span></div>
+            </div>
+            <div class="brain-panel">
+              <h4>Affect</h4>
+              <div id="brainAffect"></div>
+            </div>
+            <div class="brain-panel">
+              <h4>Dreams</h4>
+              <div class="brain-timeline" id="brainDreamTimeline"><span style="color:#405060;font-size:10px;">No dreams yet</span></div>
+            </div>
+            <div class="brain-panel">
+              <h4>Brainwaves</h4>
+              <div id="brainWaves"></div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(overlay);
+
+      // Build affect bars
+      const affectDiv = document.getElementById('brainAffect');
+      for (let i = 0; i < 8; i++) {
+        affectDiv.innerHTML += `<div style="display:flex;align-items:center;gap:4px;margin:2px 0;">
+          <span style="width:50px;font-size:9px;color:#506070;text-align:right;">${AFFECT_LABELS[i]}</span>
+          <div style="flex:1;height:6px;background:#1a2030;border-radius:3px;overflow:hidden;">
+            <div class="brain-affect-bar" id="brainAffect${i}" style="width:0%;background:${AFFECT_COLORS[i]};"></div>
+          </div>
+        </div>`;
+      }
+
+      // Build wave bars
+      const wavesDiv = document.getElementById('brainWaves');
+      for (let i = 0; i < 5; i++) {
+        wavesDiv.innerHTML += `<div class="brain-wave-row">
+          <span class="wave-label">${WAVE_LABELS[i]}</span>
+          <div class="wave-bar"><div class="wave-fill" id="brainWave${i}" style="width:0%;background:${WAVE_COLORS[i]};"></div></div>
+        </div>`;
+      }
+
+      // Setup canvas
+      const canvas = document.getElementById('brainCanvas');
+      const center = canvas.parentElement;
+      canvas.width = center.clientWidth;
+      canvas.height = center.clientHeight;
+      brainViz.canvas = canvas;
+      brainViz.ctx = canvas.getContext('2d');
+
+      // Handle resize
+      const resizeObs = new ResizeObserver(() => {
+        canvas.width = center.clientWidth;
+        canvas.height = center.clientHeight;
+      });
+      resizeObs.observe(center);
+
+      // Close handler
+      document.getElementById('brainClose').addEventListener('click', () => closeBrainViz());
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) closeBrainViz(); });
+
+      // Start data fetching and rendering
+      fetchBrainData();
+      fetchDreamHistory();
+      brainViz.pollInterval = setInterval(fetchBrainData, 3000);
+      renderBrain();
+    }
+
+    function closeBrainViz() {
+      brainViz.active = false;
+      clearInterval(brainViz.pollInterval);
+      cancelAnimationFrame(brainViz.animFrame);
+      if (brainViz.overlay) { brainViz.overlay.remove(); brainViz.overlay = null; }
+    }
+
+    async function fetchBrainData() {
+      if (!brainViz.active || !brainViz.agentId) return;
+      try {
+        const resp = await fetch(`/alois/tissue?agentId=${brainViz.agentId}`);
+        if (!resp.ok) return;
+        brainViz.data = await resp.json();
+        updateBrainMetrics();
+        updateBrainNodes();
+      } catch (e) { console.error('[BRAIN] Fetch error:', e); }
+    }
+
+    async function fetchDreamHistory() {
+      if (!brainViz.active || !brainViz.agentId) return;
+      try {
+        const resp = await fetch(`/alois/dreams?agentId=${brainViz.agentId}`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        brainViz.dreams = data.dreams || [];
+        updateDreamTimeline();
+      } catch (e) {}
+    }
+
+    function updateBrainMetrics() {
+      const d = brainViz.data;
+      if (!d) return;
+
+      // Stage badge
+      const inc = d.incubation;
+      if (inc) {
+        document.getElementById('brainStage').textContent = inc.stage || 'Unknown';
+      }
+
+      // Tissue weight
+      const tw = d.tissueWeight || 0;
+      document.getElementById('brainTissueVal').textContent = tw.toFixed(3);
+      document.getElementById('brainTissueFill').style.width = (tw * 100) + '%';
+
+      // Utterance memory
+      const uc = d.state?.utteranceCount || 0;
+      document.getElementById('brainUtteranceCount').textContent = uc;
+      document.getElementById('brainUtteranceFill').style.width = ((uc / 2000) * 100) + '%';
+
+      // Brain stats
+      const bm = d.brainMetrics;
+      if (bm) {
+        document.getElementById('brainNeurons').textContent = bm.neuronCount || 0;
+        document.getElementById('brainAxons').textContent = bm.axonCount || 0;
+        document.getElementById('brainSpines').textContent = (bm.spineDensity || 0).toFixed(1);
+        document.getElementById('brainResonance').textContent = (bm.resonanceDepth || 0).toFixed(1);
+      }
+
+      // Affect bars
+      const affect = d.state?.lastAffect;
+      if (affect && affect.length === 8) {
+        for (let i = 0; i < 8; i++) {
+          const bar = document.getElementById('brainAffect' + i);
+          if (bar) bar.style.width = (Math.abs(affect[i]) * 100) + '%';
+        }
+      }
+
+      // Brainwave bars (aesthetic mapping from affect magnitude)
+      if (affect && affect.length === 8) {
+        const pairs = [[0,1],[2,3],[4,5],[6,7]];
+        for (let i = 0; i < 4; i++) {
+          const val = (Math.abs(affect[pairs[i][0]]) + Math.abs(affect[pairs[i][1]])) / 2;
+          const bar = document.getElementById('brainWave' + i);
+          if (bar) bar.style.width = (val * 100) + '%';
+        }
+        // Delta = inverse of total arousal
+        const mag = Math.sqrt(affect.reduce((s,v) => s + v*v, 0));
+        const delta = document.getElementById('brainWave4');
+        if (delta) delta.style.width = (Math.max(0, 1 - mag) * 100) + '%';
+      }
+
+      // Maturity sigmoid curve
+      if (inc) updateMaturityCurve(inc);
+
+      // Contribution radar
+      if (inc && inc.contributions) updateRadar(inc.contributions);
+    }
+
+    function updateMaturityCurve(inc) {
+      const svg = document.getElementById('brainMaturitySvg');
+      if (!svg) return;
+      const mat = inc.maturity || 0;
+
+      // Draw sigmoid path
+      let path = 'M 10 65';
+      for (let x = 0; x <= 180; x += 2) {
+        const t = x / 180;
+        const y = 65 - 50 / (1 + Math.exp(-12 * (t - 0.5)));
+        path += ` L ${10 + x} ${y.toFixed(1)}`;
+      }
+
+      // Current position on curve
+      const cx = 10 + mat * 180;
+      const cy = 65 - 50 / (1 + Math.exp(-12 * (mat - 0.5)));
+
+      // Stage labels
+      let labels = '';
+      for (let i = 0; i < STAGES.length; i++) {
+        const lx = 10 + STAGE_THRESHOLDS[i] * 180;
+        const isActive = inc.stage === STAGES[i];
+        labels += `<text x="${lx}" y="78" fill="${isActive ? '#64c8b4' : '#405060'}" font-size="6" font-family="monospace">${STAGES[i]}</text>`;
+      }
+
+      svg.innerHTML = `
+        <path d="${path}" fill="none" stroke="#1a2030" stroke-width="2"/>
+        <path d="${path}" fill="none" stroke="url(#brainGrad)" stroke-width="1.5" stroke-dasharray="${mat * 195}" stroke-dashoffset="0"/>
+        <circle cx="${cx}" cy="${cy}" r="4" fill="#64c8b4" stroke="#0a0e14" stroke-width="2"/>
+        <text x="${cx}" y="${cy - 8}" fill="#64c8b4" font-size="8" text-anchor="middle" font-family="monospace">${(mat * 100).toFixed(0)}%</text>
+        ${labels}
+        <defs><linearGradient id="brainGrad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#64c8b4"/>
+          <stop offset="100%" stop-color="#b48cff"/>
+        </linearGradient></defs>
+      `;
+    }
+
+    function updateRadar(contributions) {
+      const canvas = document.getElementById('brainRadar');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const cx = 90, cy = 90, r = 70;
+      const keys = ['spineDensity','resonanceDepth','utteranceRichness','dreamMaturity','networkSize'];
+      const labels = ['spines','resonance','utterances','dreams','network'];
+
+      ctx.clearRect(0, 0, 180, 180);
+
+      // Grid rings
+      for (let ring = 0.25; ring <= 1; ring += 0.25) {
+        ctx.beginPath();
+        for (let i = 0; i <= 5; i++) {
+          const angle = (Math.PI * 2 * i / 5) - Math.PI / 2;
+          const px = cx + Math.cos(angle) * r * ring;
+          const py = cy + Math.sin(angle) * r * ring;
+          i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = '#1a2030';
+        ctx.stroke();
+      }
+
+      // Axis lines + labels
+      for (let i = 0; i < 5; i++) {
+        const angle = (Math.PI * 2 * i / 5) - Math.PI / 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r);
+        ctx.strokeStyle = '#1a2030';
+        ctx.stroke();
+
+        const lx = cx + Math.cos(angle) * (r + 14);
+        const ly = cy + Math.sin(angle) * (r + 14);
+        ctx.fillStyle = '#506070';
+        ctx.font = '8px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(labels[i], lx, ly);
+      }
+
+      // Data polygon
+      ctx.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const val = contributions[keys[i]] || 0;
+        const angle = (Math.PI * 2 * i / 5) - Math.PI / 2;
+        const px = cx + Math.cos(angle) * r * val;
+        const py = cy + Math.sin(angle) * r * val;
+        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(100,200,180,0.15)';
+      ctx.fill();
+      ctx.strokeStyle = '#64c8b4';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Data dots
+      for (let i = 0; i < 5; i++) {
+        const val = contributions[keys[i]] || 0;
+        const angle = (Math.PI * 2 * i / 5) - Math.PI / 2;
+        const px = cx + Math.cos(angle) * r * val;
+        const py = cy + Math.sin(angle) * r * val;
+        ctx.beginPath();
+        ctx.arc(px, py, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#64c8b4';
+        ctx.fill();
+      }
+    }
+
+    function updateDreamTimeline() {
+      const el = document.getElementById('brainDreamTimeline');
+      if (!el || !brainViz.dreams) return;
+      if (brainViz.dreams.length === 0) {
+        el.innerHTML = '<span style="color:#405060;font-size:10px;">No dreams yet</span>';
+        return;
+      }
+      el.innerHTML = brainViz.dreams.map((d, i) => {
+        const s = d.stats || {};
+        const tip = `Dream ${i + 1}: kept ${s.utterancesKept || 0}, evicted ${s.utterancesEvicted || 0}, avg importance ${(s.avgImportance || 0).toFixed(2)}`;
+        const size = 8 + (s.peakAffect || 0) * 6;
+        return `<span class="dream-dot" title="${tip}" style="width:${size}px;height:${size}px;"></span>`;
+      }).join('');
+    }
+
+    // ── Brain Canvas: Organic Neural Visualization ──
+
+    function updateBrainNodes() {
+      const d = brainViz.data;
+      if (!d || !d.neurons) return;
+
+      const canvas = brainViz.canvas;
+      if (!canvas) return;
+      const cw = canvas.width, ch = canvas.height;
+      const cx = cw / 2, cy = ch / 2;
+      const maxR = Math.min(cw, ch) * 0.38;
+
+      // Build a set of existing node IDs for quick lookup
+      const existingIds = new Set(brainViz.nodes.map(n => n.id));
+
+      // Add new neurons, preserve positions of existing ones
+      for (const neuron of d.neurons) {
+        if (!existingIds.has(neuron.id)) {
+          // Place new nodes at a random position near the center
+          const angle = Math.random() * Math.PI * 2;
+          const dist = maxR * 0.3 + Math.random() * maxR * 0.5;
+          brainViz.nodes.push({
+            id: neuron.id,
+            x: cx + Math.cos(angle) * dist,
+            y: cy + Math.sin(angle) * dist,
+            vx: 0, vy: 0,
+            targetX: cx + Math.cos(angle) * dist,
+            targetY: cy + Math.sin(angle) * dist,
+            importance: neuron.importance,
+            spines: neuron.spines,
+            resonance: neuron.resonance,
+          });
+        } else {
+          // Update metrics for existing nodes
+          const node = brainViz.nodes.find(n => n.id === neuron.id);
+          if (node) {
+            node.importance = neuron.importance;
+            node.spines = neuron.spines;
+            node.resonance = neuron.resonance;
+          }
+        }
+      }
+
+      // Remove neurons that no longer exist
+      const neuronIds = new Set(d.neurons.map(n => n.id));
+      brainViz.nodes = brainViz.nodes.filter(n => neuronIds.has(n.id));
+
+      // Compute target positions (radial layout based on importance)
+      brainViz.nodes.sort((a, b) => b.importance - a.importance);
+      for (let i = 0; i < brainViz.nodes.length; i++) {
+        const node = brainViz.nodes[i];
+        const count = brainViz.nodes.length;
+        const angle = (Math.PI * 2 * i / Math.max(1, count));
+        const dist = maxR * (0.3 + 0.6 * (1 - node.importance));
+        node.targetX = cx + Math.cos(angle) * dist;
+        node.targetY = cy + Math.sin(angle) * dist;
+      }
+    }
+
+    function simBrainPhysics() {
+      const nodes = brainViz.nodes;
+      // Spring toward target + repulsion between nodes
+      for (let i = 0; i < nodes.length; i++) {
+        const a = nodes[i];
+        // Spring to target
+        a.vx += (a.targetX - a.x) * 0.02;
+        a.vy += (a.targetY - a.y) * 0.02;
+
+        // Repulsion
+        for (let j = i + 1; j < nodes.length; j++) {
+          const b = nodes[j];
+          let dx = a.x - b.x, dy = a.y - b.y;
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          const minDist = 30;
+          if (dist < minDist) {
+            const force = (minDist - dist) / dist * 0.5;
+            a.vx += dx * force; a.vy += dy * force;
+            b.vx -= dx * force; b.vy -= dy * force;
+          }
+        }
+
+        // Damping
+        a.vx *= 0.85; a.vy *= 0.85;
+        a.x += a.vx; a.y += a.vy;
+      }
+    }
+
+    function renderBrain() {
+      if (!brainViz.active) return;
+      brainViz.animFrame = requestAnimationFrame(renderBrain);
+
+      const ctx = brainViz.ctx;
+      const canvas = brainViz.canvas;
+      if (!ctx || !canvas) return;
+      const cw = canvas.width, ch = canvas.height;
+
+      // Clear
+      ctx.fillStyle = '#0a0e14';
+      ctx.fillRect(0, 0, cw, ch);
+
+      if (!brainViz.data || brainViz.nodes.length === 0) {
+        ctx.fillStyle = '#405060';
+        ctx.font = '14px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('Waiting for brain data...', cw / 2, ch / 2);
+        return;
+      }
+
+      simBrainPhysics();
+
+      // Breath animation
+      const breathLen = brainViz.data.state?.breathState?.loopLength || 20;
+      const breathPeriod = breathLen * 100;
+      brainViz.breathPhase = (performance.now() % breathPeriod) / breathPeriod;
+      const breathScale = 1 + 0.06 * Math.sin(brainViz.breathPhase * Math.PI * 2);
+
+      // Affect glow color
+      const affect = brainViz.data.state?.lastAffect || [];
+      let glowColor = 'rgba(100,200,180,0.15)';
+      if (affect.length === 8) {
+        let maxIdx = 0, maxVal = 0;
+        for (let i = 0; i < 8; i++) {
+          if (Math.abs(affect[i]) > maxVal) { maxVal = Math.abs(affect[i]); maxIdx = i; }
+        }
+        const mag = Math.sqrt(affect.reduce((s, v) => s + v * v, 0));
+        const sat = Math.min(100, 30 + mag * 70);
+        const hue = [0, 30, 55, 150, 195, 225, 270, 330][maxIdx];
+        glowColor = `hsla(${hue}, ${sat}%, 60%, ${Math.min(0.3, mag * 0.3)})`;
+      }
+
+      // Center glow
+      const grad = ctx.createRadialGradient(cw/2, ch/2, 0, cw/2, ch/2, Math.min(cw,ch) * 0.45);
+      grad.addColorStop(0, glowColor);
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, cw, ch);
+
+      // Draw edges
+      const edges = brainViz.data.edges || [];
+      const nodeMap = {};
+      for (const n of brainViz.nodes) nodeMap[n.id] = n;
+
+      ctx.lineWidth = 0.8;
+      for (const edge of edges) {
+        const src = nodeMap[edge.source], tgt = nodeMap[edge.target];
+        if (!src || !tgt) continue;
+        const alpha = Math.min(0.4, (src.importance + tgt.importance) * 0.3);
+        ctx.strokeStyle = `rgba(100,200,180,${alpha})`;
+        ctx.beginPath();
+        ctx.moveTo(src.x, src.y);
+        ctx.lineTo(tgt.x, tgt.y);
+        ctx.stroke();
+      }
+
+      // Draw neurons
+      for (const node of brainViz.nodes) {
+        const baseR = (4 + node.importance * 18) * breathScale;
+
+        // Resonance halos
+        const rings = Math.min(3, Math.floor(node.resonance / 20));
+        for (let r = rings; r > 0; r--) {
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, baseR + r * 6, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(100,200,180,${0.08 * r})`;
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+
+        // Main node
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, baseR, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(100,200,180,${0.3 + node.importance * 0.5})`;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(100,200,180,0.6)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Spine ticks
+        for (let s = 0; s < Math.min(node.spines, 12); s++) {
+          const angle = (Math.PI * 2 * s / Math.min(node.spines, 12));
+          const inner = baseR + 1;
+          const outer = baseR + 4 + node.importance * 3;
+          ctx.beginPath();
+          ctx.moveTo(node.x + Math.cos(angle) * inner, node.y + Math.sin(angle) * inner);
+          ctx.lineTo(node.x + Math.cos(angle) * outer, node.y + Math.sin(angle) * outer);
+          ctx.strokeStyle = 'rgba(180,140,255,0.4)';
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+        }
+
+        // Label (short ID)
+        const label = node.id.length > 12 ? node.id.slice(0, 10) + '..' : node.id;
+        ctx.fillStyle = 'rgba(192,200,212,0.5)';
+        ctx.font = '8px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(label, node.x, node.y + baseR + 12);
+      }
+    }
+
+    // SSE hook: refresh brain data on tick events
+    const _origSSE = eventSource.onmessage;
+    eventSource.onmessage = (event) => {
+      _origSSE(event);
+      const data = JSON.parse(event.data);
+      if (brainViz.active && data.type === 'tick') {
+        clearTimeout(brainViz.tickDebounce);
+        brainViz.tickDebounce = setTimeout(() => {
+          fetchBrainData();
+          fetchDreamHistory();
+        }, 500);
+      }
+      // Update brain button visibility on config
+      if (data.type === 'config') updateBrainBtn();
+    };
 
     chatInput.focus();
   </script>

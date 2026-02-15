@@ -894,13 +894,14 @@ async function main() {
       }
       const state = (agent as any).getTissueState();
       const neurons = (agent as any).getNeuronScores?.() || [];
+      const edges = (agent as any).getChamber?.()?.getGraph?.()?.getAxonTopology?.() || [];
       const lastDream = (agent as any).getLastDream?.() || null;
       const tissueWeight = (agent as any).getTissueWeight?.() || 0;
       const incubation = (agent as any).getIncubation?.() || null;
       const brainMetrics = (agent as any).getBrainMetrics?.() || null;
       const autoGradient = (agent as any).isAutoGradient?.() ?? true;
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ state, neurons, lastDream, tissueWeight, incubation, brainMetrics, autoGradient }));
+      res.end(JSON.stringify({ state, neurons, edges, lastDream, tissueWeight, incubation, brainMetrics, autoGradient }));
       return;
     }
 
