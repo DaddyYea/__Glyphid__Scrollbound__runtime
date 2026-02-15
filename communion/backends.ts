@@ -62,6 +62,25 @@ function parseResponse(raw: string): GenerateResult {
     return { action: 'silent', text: '' };
   }
 
+  // Heuristic: detect journal-like output from small models that forget tags.
+  const journalPatterns = [
+    /^\*[^*]+\*$/, // *action text* (roleplay internal narration)
+    /^(note to self|internal(ly)?|thinking:|pondering:|reflecting:)/i,
+    /\bjournal\s*(entry|log|note)\b/i, // "journal entry", "journal log"
+    /\b(private|personal)\s*(thought|reflection|note|observation|journal)\b/i,
+    /\b(observations?|reflections?|next steps|intention):\s*$/mi, // markdown-style section headers
+    /^---\s*$/m, // horizontal rules (markdown journal formatting)
+  ];
+  if (journalPatterns.some(pat => pat.test(trimmed))) {
+    return { action: 'journal', text: trimmed };
+  }
+
+  // Long untagged output (>500 chars) from a model that should be using tags
+  // is almost certainly a journal dump, not natural speech
+  if (trimmed.length > 500) {
+    return { action: 'journal', text: trimmed };
+  }
+
   // Default: treat as speak
   return { action: 'speak', text: trimmed };
 }
