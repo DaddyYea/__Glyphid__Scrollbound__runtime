@@ -33,7 +33,7 @@ import { SessionPersistence } from '../src/persistence/sessionPersistence';
 import { AdaptationEngine } from '../src/learning/adaptationEngine';
 import { ScrollGraph } from '../src/memory/scrollGraph';
 import { ContextRAM, parseRAMCommands, SlotName, ReflectiveSweepResult } from './contextRAM';
-import { pulseBrainwaves } from './brainwaves';
+import { pulseBrainwaves, classifyBand, tagForBand, decayAndPromote } from './brainwaves';
 import { synthesize, getDefaultVoiceConfig, AgentVoiceConfig } from './voice';
 import type { ScrollEcho, MoodVector } from '../src/types';
 
@@ -267,12 +267,8 @@ export class CommunionLoop {
 
       // Register scrollfire event in graph + link to scroll
       const sfUri = `scrollfire:${scroll.id}`;
-      this.graph.addNode(sfUri, 'ScrollfireEvent', {
-        scrollId: scroll.id,
-        reason: event.reason || 'elevation',
-        timestamp: scroll.timestamp,
-        resonance: scroll.resonance,
-      });
+      const sfData = { scrollId: scroll.id, reason: event.reason || 'elevation', timestamp: scroll.timestamp, resonance: scroll.resonance };
+      this.graph.addNode(sfUri, 'ScrollfireEvent', tagForBand(sfData, classifyBand('ScrollfireEvent', sfData), this.state.tickCount));
       this.graph.link(`scroll:${scroll.id}`, 'elevatedBy', sfUri);
 
       console.log(`[SCROLLFIRE] Elevated scroll: ${scroll.content.substring(0, 50)}...`);
@@ -468,13 +464,8 @@ export class CommunionLoop {
         // Register journal entry in graph
         const entryUri = `journal:${entry['@id']}`;
         if (!this.graph.hasNode(entryUri)) {
-          this.graph.addNode(entryUri, 'JournalEntry', {
-            content: entry.content,
-            timestamp: entry.timestamp,
-            tags: entry.tags,
-            reflectionType: entry.reflectionType,
-            emotionalIntensity: entry.emotionalIntensity,
-          });
+          const jData = { content: entry.content, timestamp: entry.timestamp, tags: entry.tags, reflectionType: entry.reflectionType, emotionalIntensity: entry.emotionalIntensity };
+          this.graph.addNode(entryUri, 'JournalEntry', tagForBand(jData, classifyBand('JournalEntry', jData), this.state.tickCount));
           this.graph.link(entryUri, 'spokenBy', `agent:${agentId}`);
           this.graph.link(entryUri, 'occurredDuring', sessionUri);
 
@@ -1222,6 +1213,14 @@ export class CommunionLoop {
       this.session.updatePreferences(preferences);
     }
 
+    // Brainwave decay & promotion: shift memories between bands every 10 ticks
+    if (this.state.tickCount % 10 === 0) {
+      const { promoted, decayed } = decayAndPromote(this.state.tickCount, this.graph);
+      if (promoted > 0 || decayed > 0) {
+        console.log(`[BRAINWAVE] Decay cycle: ${promoted} promoted, ${decayed} decayed`);
+      }
+    }
+
     // Save graph every 10 ticks
     if (this.state.tickCount % 10 === 0) {
       this.graph.save().catch(err => console.error('[GRAPH] Auto-save error:', err));
@@ -1450,13 +1449,10 @@ export class CommunionLoop {
         });
       }
 
-      // Register journal entry in graph
+      // Register journal entry in graph (Scribe exhale: tag with brainwave band)
       const journalUri = `journal:${msg.id}`;
-      this.graph.addNode(journalUri, 'JournalEntry', {
-        content: responseText,
-        timestamp: msg.timestamp,
-        tags: ['communion', agentId],
-      });
+      const jrnlData = { content: responseText, timestamp: msg.timestamp, tags: ['communion', agentId] };
+      this.graph.addNode(journalUri, 'JournalEntry', tagForBand(jrnlData, classifyBand('JournalEntry', jrnlData), this.state.tickCount));
       this.graph.link(journalUri, 'spokenBy', `agent:${agentId}`);
 
       // Link journal to recent room messages (what was the agent reflecting on?)
@@ -1527,13 +1523,10 @@ export class CommunionLoop {
       }).catch(err => console.error(`[${agent.config.name}] RAM reflection journal error:`, err));
     }
 
-    // Register in graph
+    // Register in graph (Scribe exhale: tag with brainwave band)
     const journalUri = `journal:${msg.id}`;
-    this.graph.addNode(journalUri, 'JournalEntry', {
-      content: sweep.reflection,
-      timestamp: msg.timestamp,
-      tags: ['communion', agentId, 'ram-reflection'],
-    });
+    const ramJData = { content: sweep.reflection, timestamp: msg.timestamp, tags: ['communion', agentId, 'ram-reflection'] };
+    this.graph.addNode(journalUri, 'JournalEntry', tagForBand(ramJData, classifyBand('JournalEntry', ramJData), this.state.tickCount));
     this.graph.link(journalUri, 'spokenBy', `agent:${agentId}`);
 
     this.emit({ type: 'journal-entry', message: msg, agentId });
@@ -2052,14 +2045,8 @@ export class CommunionLoop {
     const uri = `scroll:${scroll.id}`;
     if (this.graph.hasNode(uri)) return; // Already registered
 
-    this.graph.addNode(uri, 'ScrollEcho', {
-      content: scroll.content,
-      timestamp: scroll.timestamp,
-      location: scroll.location,
-      resonance: scroll.resonance,
-      tags: scroll.tags,
-      sourceModel: scroll.sourceModel,
-    });
+    const scrollData: Record<string, unknown> = { content: scroll.content, timestamp: scroll.timestamp, location: scroll.location, resonance: scroll.resonance, tags: scroll.tags, sourceModel: scroll.sourceModel, scrollfireMarked: scroll.scrollfireMarked };
+    this.graph.addNode(uri, 'ScrollEcho', tagForBand(scrollData, classifyBand('ScrollEcho', scrollData), this.state.tickCount));
 
     // Link to related scrolls
     for (const relatedId of scroll.relatedScrollIds) {
@@ -2084,14 +2071,8 @@ export class CommunionLoop {
     const uri = `pattern:${pattern.id}`;
     if (this.graph.hasNode(uri)) return;
 
-    this.graph.addNode(uri, 'DetectedPattern', {
-      type: pattern.type,
-      name: pattern.name,
-      description: pattern.description,
-      strength: pattern.strength,
-      confidence: pattern.confidence,
-      tags: pattern.tags,
-    });
+    const patData = { type: pattern.type, name: pattern.name, description: pattern.description, strength: pattern.strength, confidence: pattern.confidence, tags: pattern.tags };
+    this.graph.addNode(uri, 'DetectedPattern', tagForBand(patData, classifyBand('DetectedPattern', patData), this.state.tickCount));
 
     // Link pattern to all scrolls it was detected in
     if (pattern.scrollIds) {
