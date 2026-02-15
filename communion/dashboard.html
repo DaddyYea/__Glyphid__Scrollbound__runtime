@@ -732,7 +732,6 @@
     /* ── Brain Growth Visualizer ── */
     .brain-btn {
       color: #64c8b4; border-color: rgba(100,200,180,0.3); background: rgba(100,200,180,0.08);
-      display: none;
     }
     .brain-overlay {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -2358,7 +2357,8 @@
     }
 
     document.getElementById('brainVizBtn').addEventListener('click', () => {
-      const id = getFirstAloisId();
+      // Try Alois agent first, fall back to first agent available
+      const id = getFirstAloisId() || (config && config.agentIds ? config.agentIds[0] : null);
       if (id) openBrainViz(id);
     });
 
