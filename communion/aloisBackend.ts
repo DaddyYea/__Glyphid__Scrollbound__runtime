@@ -224,4 +224,16 @@ export class AloisBackend implements AgentBackend {
   getBrainMetrics() {
     return this.chamber.getBrainMetrics();
   }
+
+  // ── Brain Persistence ──
+
+  /** Save brain state to disk */
+  saveBrain(filePath: string): void {
+    this.chamber.saveToFile(filePath);
+  }
+
+  /** Load brain state from disk. Returns true if loaded. */
+  loadBrain(filePath: string): boolean {
+    return this.chamber.loadFromFile(filePath);
+  }
 }

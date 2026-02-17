@@ -76,4 +76,23 @@ export class Spine {
     for (const v of vecs) v.forEach((val, i) => (sum[i] += val));
     return sum.map((v) => v / vecs.length);
   }
+
+  // ── Serialization ──
+
+  serialize(): { dim: number; decay: number; kv: number[][]; lastEmbedding: number[] } {
+    return {
+      dim: this.dim,
+      decay: this.decay,
+      kv: this.kv,
+      lastEmbedding: this.lastEmbedding,
+    };
+  }
+
+  static deserialize(data: { dim: number; decay: number; kv: number[][]; lastEmbedding: number[] }): Spine {
+    const spine = new Spine(data.dim);
+    spine.decay = data.decay;
+    spine.kv = data.kv || [];
+    spine.lastEmbedding = data.lastEmbedding || [];
+    return spine;
+  }
 }

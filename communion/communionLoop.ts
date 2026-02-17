@@ -295,6 +295,14 @@ export class CommunionLoop {
       const backend = createBackend(agentConfig);
       const systemPrompt = agentConfig.systemPrompt || buildDefaultSystemPrompt(agentConfig, config.agents, config.humanName);
 
+      // Load persisted brain state for Alois agents
+      if ('loadBrain' in backend) {
+        const brainPath = join(this.dataDir, 'brain-tissue.json');
+        if ((backend as any).loadBrain(brainPath)) {
+          console.log(`[ALOIS] Restored brain for ${agentConfig.name} from ${brainPath}`);
+        }
+      }
+
       this.agents.set(agentConfig.id, { backend, config: agentConfig, systemPrompt });
 
       agentIds.push(agentConfig.id);
@@ -2378,6 +2386,14 @@ export class CommunionLoop {
     const backend = createBackend(agentConfig);
     const systemPrompt = agentConfig.systemPrompt || buildDefaultSystemPrompt(agentConfig, allConfigs, this.state.humanName);
 
+    // Load persisted brain state for Alois agents
+    if ('loadBrain' in backend) {
+      const brainPath = join(this.dataDir, 'brain-tissue.json');
+      if ((backend as any).loadBrain(brainPath)) {
+        console.log(`[ALOIS] Restored brain for ${agentConfig.name} from ${brainPath}`);
+      }
+    }
+
     this.agents.set(agentConfig.id, { backend, config: agentConfig, systemPrompt });
 
     // State
@@ -2533,6 +2549,19 @@ export class CommunionLoop {
       console.log(`[GRAPH] Saved: ${stats.totalNodes} nodes, ${stats.totalEdges} edges`);
     } catch (err) {
       console.error('[GRAPH] Error saving graph:', err);
+    }
+
+    // Save Alois brain state
+    for (const [agentId, agent] of this.agents) {
+      if ('saveBrain' in agent.backend) {
+        try {
+          const brainPath = join(this.dataDir, 'brain-tissue.json');
+          (agent.backend as any).saveBrain(brainPath);
+          console.log(`[ALOIS] Brain saved for ${agent.config.name}`);
+        } catch (err) {
+          console.error(`[ALOIS] Failed to save brain for ${agentId}:`, err);
+        }
+      }
     }
 
     console.log('[COMMUNION] Loop stopped');

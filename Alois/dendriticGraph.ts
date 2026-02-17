@@ -135,4 +135,36 @@ export class DendriticGraph {
     }
     return edges;
   }
+
+  // ── Serialization ──
+
+  serialize(): { neurons: Record<string, object>; edges: Array<{ source: string; target: string }> } {
+    const neurons: Record<string, object> = {};
+    for (const [id, cell] of this.neurons) {
+      neurons[id] = cell.serialize();
+    }
+    return {
+      neurons,
+      edges: this.getAxonTopology(),
+    };
+  }
+
+  static deserialize(data: { neurons: Record<string, any>; edges: Array<{ source: string; target: string }> }): DendriticGraph {
+    const graph = new DendriticGraph([]); // empty triples — we'll restore manually
+    // Restore neurons
+    for (const [id, cellData] of Object.entries(data.neurons || {})) {
+      graph.neurons.set(id, DendriticCell.deserialize(cellData));
+    }
+    // Restore axon connections
+    for (const edge of (data.edges || [])) {
+      const source = graph.neurons.get(edge.source);
+      const target = graph.neurons.get(edge.target);
+      if (source && target) {
+        const axon = new AxonBus(edge.source, source);
+        axon.connect(edge.target, target);
+        graph.axons.push(axon);
+      }
+    }
+    return graph;
+  }
 }

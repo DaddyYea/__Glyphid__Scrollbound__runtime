@@ -354,4 +354,82 @@ export class CommunionChamber {
   isAutoGradient(): boolean {
     return this.incubation.isAutoGradient();
   }
+
+  // ════════════════════════════════════════════
+  // Brain Persistence — save/restore full state
+  // ════════════════════════════════════════════
+
+  /**
+   * Serialize the entire brain state to a JSON-serializable object.
+   */
+  serialize(): object {
+    return {
+      version: 2,
+      serializedAt: new Date().toISOString(),
+      tick: this.tick,
+      lastAffect: this.lastAffect,
+      lastDreamTick: this.lastDreamTick,
+      utteranceMemory: this.utteranceMemory,
+      dreamHistory: this.dreamHistory,
+      graph: this.graph.serialize(),
+      breath: this.breath.getCurrentState(),
+      incubation: this.incubation.getFullState?.() || null,
+    };
+  }
+
+  /**
+   * Restore brain state from a previously serialized object.
+   * Replaces the current graph, utterance memory, and dream history.
+   */
+  restoreFrom(data: any): void {
+    if (!data || !data.graph) {
+      console.log('[ALOIS] No valid brain state to restore');
+      return;
+    }
+
+    // Restore graph (neurons + axons)
+    this.graph = DendriticGraph.deserialize(data.graph);
+    this.feeder = new MemoryFeeder(this.graph);
+    this.dreamEngine = new DreamEngine(this.graph);
+
+    // Restore scalar state
+    this.tick = data.tick || 0;
+    this.lastAffect = data.lastAffect || new Array(8).fill(0);
+    this.lastDreamTick = data.lastDreamTick || 0;
+
+    // Restore utterance memory
+    this.utteranceMemory = (data.utteranceMemory || []).slice(-this.MAX_UTTERANCES);
+
+    // Restore dream history
+    this.dreamHistory = (data.dreamHistory || []).slice(-this.MAX_DREAM_HISTORY);
+
+    const neuronCount = this.graph.getNeuronCount();
+    const axonCount = this.graph.getAxonCount();
+    console.log(`[ALOIS] Brain restored: ${neuronCount} neurons, ${axonCount} axons, ${this.utteranceMemory.length} utterances, tick ${this.tick}`);
+  }
+
+  /**
+   * Save brain state to a file.
+   */
+  saveToFile(filePath: string): void {
+    const state = this.serialize();
+    fs.writeFileSync(filePath, JSON.stringify(state));
+    console.log(`[ALOIS] Brain saved to ${filePath}`);
+  }
+
+  /**
+   * Load brain state from a file. Returns true if loaded successfully.
+   */
+  loadFromFile(filePath: string): boolean {
+    try {
+      if (!fs.existsSync(filePath)) return false;
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      const data = JSON.parse(raw);
+      this.restoreFrom(data);
+      return true;
+    } catch (err) {
+      console.error(`[ALOIS] Failed to load brain from ${filePath}:`, err);
+      return false;
+    }
+  }
 }

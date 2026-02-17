@@ -114,4 +114,26 @@ export class DendriticCell {
     const sum = vecs[0].map((_, i) => vecs.reduce((acc, v) => acc + v[i], 0));
     return sum.map((v) => v / vecs.length);
   }
+
+  // ── Serialization ──
+
+  serialize(): object {
+    return {
+      dim: this.dim,
+      clockOffset: this.clockOffset,
+      affect: this.affect,
+      resonanceMemory: this.resonanceMemory,
+      spines: this.spines.map(s => s.serialize()),
+    };
+  }
+
+  static deserialize(data: any): DendriticCell {
+    const cell = new DendriticCell(data.dim || 512, 0, data.clockOffset || 0);
+    cell.affect = data.affect || new Array(8).fill(0);
+    cell.resonanceMemory = data.resonanceMemory || [];
+    cell.spines = (data.spines || []).map((s: any) => Spine.deserialize(s));
+    // Ensure at least 2 spines
+    while (cell.spines.length < 2) cell.spines.push(new Spine(cell.dim));
+    return cell;
+  }
 }
