@@ -40,7 +40,8 @@ TTS_COOLDOWN_SECONDS = 0.5
 last_tts_end_time = 0.0
 
 # Voice activity tracking — signal server when human is speaking
-RMS_SPEECH_THRESHOLD = 0.01  # same as silence threshold
+RMS_SPEECH_THRESHOLD = 0.04  # voice activity threshold (rejects ambient room noise)
+RMS_SILENCE_THRESHOLD = 0.01  # below this = true silence (used for chunk-level skip)
 SILENCE_TIMEOUT = 2.0  # seconds of silence before signaling "not speaking"
 human_speaking_signaled = False
 last_voice_time = 0.0
@@ -142,7 +143,7 @@ def transcribe_loop():
 
         # Skip if audio is mostly silence (RMS below threshold)
         rms = np.sqrt(np.mean(audio_np ** 2))
-        if rms < 0.01:
+        if rms < RMS_SPEECH_THRESHOLD:
             continue
 
         # Double-check speaking state AFTER transcription (agent may have started talking)

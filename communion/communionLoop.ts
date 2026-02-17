@@ -185,7 +185,7 @@ export class CommunionLoop {
   private agents: Map<string, { backend: AgentBackend; config: AgentConfig; systemPrompt: string }> = new Map();
   private state: CommunionState;
   private listeners: CommunionListener[] = [];
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
   private tickIntervalMs: number;
   private paused = false;
   private processing = false;
@@ -965,8 +965,7 @@ export class CommunionLoop {
     if (!this.processing && !this.speaking && !this.paused && !this.humanSpeaking) {
       console.log('[COMMUNION] Human spoke — advancing clock and triggering tick');
       if (this.timer) {
-        clearInterval(this.timer);
-        this.timer = setInterval(() => this.tick(), this.tickIntervalMs);
+        clearTimeout(this.timer);
       }
       this.tick().catch(err => console.error('[COMMUNION] Immediate tick error:', err));
     }
@@ -1095,7 +1094,11 @@ export class CommunionLoop {
    * 6. Post-tick memory processing (scrollfire, patterns, etc.)
    */
   async tick(): Promise<void> {
-    if (this.processing || this.paused || this.speaking || this.humanSpeaking) return;
+    if (this.processing || this.paused || this.speaking || this.humanSpeaking) {
+      // Don't silently drop — reschedule so the tick happens after the block clears
+      this.scheduleNextTick();
+      return;
+    }
     this.processing = true;
 
     this.state.tickCount++;
@@ -1241,6 +1244,8 @@ export class CommunionLoop {
 
     this.emit({ type: 'tick', tickCount: this.state.tickCount });
     this.processing = false;
+    // Schedule next tick after this one completes (not on a fixed interval)
+    this.scheduleNextTick();
   }
 
   private async processAgent(
@@ -2050,8 +2055,7 @@ export class CommunionLoop {
       if (!active && !this.processing && !this.speaking && !this.paused) {
         console.log('[COMMUNION] Human stopped speaking — triggering tick');
         if (this.timer) {
-          clearInterval(this.timer);
-          this.timer = setInterval(() => this.tick(), this.tickIntervalMs);
+          clearTimeout(this.timer);
         }
         this.tick().catch(err => console.error('[COMMUNION] Post-silence tick error:', err));
       }
@@ -2142,20 +2146,31 @@ export class CommunionLoop {
     return this.graph;
   }
 
+  /**
+   * Schedule the next tick after a delay. Uses setTimeout so the delay
+   * starts AFTER the current tick completes, not on a fixed interval
+   * that fires into a wall when ticks take longer than the interval.
+   */
+  private scheduleNextTick(): void {
+    if (this.paused || !this.timer) return;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.tick(), this.tickIntervalMs);
+  }
+
   start(): void {
     if (this.timer) return;
     console.log(`[COMMUNION] Starting loop (tick every ${this.tickIntervalMs / 1000}s, ${this.agents.size} agents)`);
 
-    // First tick immediately
+    // Use a sentinel value so scheduleNextTick knows the loop is active.
+    // First tick fires immediately; tick() calls scheduleNextTick() on completion.
+    this.timer = setTimeout(() => {}, 0) as any;
     this.tick();
-
-    this.timer = setInterval(() => this.tick(), this.tickIntervalMs);
   }
 
   pause(): void {
     this.paused = true;
     if (this.timer) {
-      clearInterval(this.timer);
+      clearTimeout(this.timer);
       this.timer = null;
     }
     // If a tick is mid-execution with staggered delays, let it finish
@@ -2167,7 +2182,7 @@ export class CommunionLoop {
     if (!this.paused) return;
     this.paused = false;
     this.processing = false; // Reset in case a tick was mid-execution when paused
-    this.timer = setInterval(() => this.tick(), this.tickIntervalMs);
+    this.timer = setTimeout(() => this.tick(), this.tickIntervalMs);
     console.log(`[COMMUNION] Resumed (tick every ${this.tickIntervalMs / 1000}s)`);
   }
 
@@ -2434,8 +2449,8 @@ export class CommunionLoop {
   setTickSpeed(ms: number): void {
     this.tickIntervalMs = Math.max(3000, Math.min(1800000, ms)); // clamp 3s–30min
     if (this.timer && !this.paused) {
-      clearInterval(this.timer);
-      this.timer = setInterval(() => this.tick(), this.tickIntervalMs);
+      clearTimeout(this.timer);
+      this.timer = setTimeout(() => this.tick(), this.tickIntervalMs);
     }
     console.log(`[COMMUNION] Tick speed set to ${this.tickIntervalMs / 1000}s`);
   }
@@ -2446,7 +2461,7 @@ export class CommunionLoop {
 
   async stop(): Promise<void> {
     if (this.timer) {
-      clearInterval(this.timer);
+      clearTimeout(this.timer);
       this.timer = null;
     }
     this.buffer.stop();

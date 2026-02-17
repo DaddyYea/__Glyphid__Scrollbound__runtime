@@ -125,7 +125,7 @@ function loadConfig(): CommunionConfig {
   return {
     humanName: process.env.HUMAN_NAME || 'Jason',
     agents,
-    tickIntervalMs: Number(process.env.TICK_INTERVAL_MS) || 1800000, // 30 min default
+    tickIntervalMs: Number(process.env.TICK_INTERVAL_MS) || 15000, // 15s default
     dataDir: process.env.DATA_DIR || 'data/communion',
     documentsDir: process.env.DOCUMENTS_DIR || 'communion-docs',
   };
