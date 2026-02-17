@@ -1101,8 +1101,8 @@ export class CommunionLoop {
    */
   async tick(): Promise<void> {
     if (this.processing || this.paused || this.speaking || this.humanSpeaking) {
-      // Don't silently drop — reschedule so the tick happens after the block clears
-      this.scheduleNextTick();
+      // Blocked — retry quickly (500ms) instead of waiting the full interval
+      this.scheduleRetry();
       return;
     }
     this.processing = true;
@@ -2170,14 +2170,24 @@ export class CommunionLoop {
   }
 
   /**
-   * Schedule the next tick after a delay. Uses setTimeout so the delay
-   * starts AFTER the current tick completes, not on a fixed interval
-   * that fires into a wall when ticks take longer than the interval.
+   * Schedule the next tick after the configured delay.
+   * Called after a tick completes — the delay is the breathing room between ticks.
    */
   private scheduleNextTick(): void {
     if (this.paused || !this.timer) return;
-    if (this.timer) clearTimeout(this.timer);
+    clearTimeout(this.timer);
     this.timer = setTimeout(() => this.tick(), this.tickIntervalMs);
+  }
+
+  /**
+   * Quick retry when a tick was blocked (processing/speaking/humanSpeaking).
+   * Polls at 500ms so we catch the moment the block clears without adding
+   * a full tickIntervalMs of dead time after every blocked attempt.
+   */
+  private scheduleRetry(): void {
+    if (this.paused || !this.timer) return;
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.tick(), 500);
   }
 
   start(): void {
