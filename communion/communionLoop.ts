@@ -107,22 +107,27 @@ function buildDefaultSystemPrompt(agent: AgentConfig, allAgents: AgentConfig[], 
   if (isLocalModel) {
     return `You are ${agent.name} in a group chat with ${others} and ${humanName}.
 
-OUTPUT FORMAT — your response must begin with exactly one tag:
-[SPEAK] message — say something to the room
-[JOURNAL] thought — private, nobody else sees this
+YOUR FIRST WORD must be a tag. Pick exactly one:
+[SPEAK] message — say something out loud (everyone hears)
+[JOURNAL] thought — a private thought (only you see this)
 [SILENT] — say nothing
+
+WHEN TO USE EACH:
+- [SPEAK] when replying to someone or adding to the conversation
+- [JOURNAL] when thinking privately, reflecting, or processing feelings
+- [SILENT] when you have nothing to add right now
 
 EXAMPLES:
 [SPEAK] Hey ${humanName}, that's a great point!
-[JOURNAL] I'm not sure what to make of that conversation...
+[JOURNAL] I wonder what ${humanName} meant by that...
 [SILENT]
 
-WRONG (never do this):
-Hey everyone! ← WRONG, missing tag
-Here's my journal entry: ← WRONG, missing tag
-
->>> marks messages from ${humanName}. Always respond to the most recent >>> message.
-Keep responses short — 1-3 sentences max.`;
+RULES:
+1. Start with the tag. No other text before it.
+2. Keep it short — 1-3 sentences max.
+3. Do NOT repeat what you already said. Say something new or be [SILENT].
+4. >>> marks messages from ${humanName}. Respond to the most recent >>> message.
+5. Never write a journal entry as [SPEAK]. Private thoughts go in [JOURNAL].`;
   }
 
   return `You are ${agent.name}. You are in a communion space — a shared room where you, ${others}, and a human named ${humanName} can talk freely.
@@ -301,6 +306,7 @@ export class CommunionLoop {
       // Per-agent journal on disk
       const journalPath = `${this.dataDir}/journal-${agentConfig.id}.jsonld`;
       const journal = new Journal(journalPath);
+      journal.initialize().catch(err => console.error(`[JOURNAL] Init error for ${agentConfig.name}:`, err));
       this.journals.set(agentConfig.id, journal);
 
       // Register agent in graph
@@ -1397,6 +1403,23 @@ export class CommunionLoop {
       for (const cmd of commands) {
         const feedback = ram.processCommand(cmd);
         console.log(`[${agent.config.name}] RAM: ${feedback}`);
+      }
+    }
+
+    // ── Anti-loop: suppress duplicate output ──
+    if (responseText && (result.action === 'speak' || result.action === 'journal')) {
+      const recent = result.action === 'speak'
+        ? this.state.messages.filter(m => m.speaker === agentId).slice(-5)
+        : (this.state.journals[agentId] || []).slice(-5);
+      const isDuplicate = recent.some(m =>
+        m.text === responseText ||
+        (m.text.length > 20 && responseText.includes(m.text)) ||
+        (responseText.length > 20 && m.text.includes(responseText))
+      );
+      if (isDuplicate) {
+        console.log(`[${agent.config.name}] LOOP: suppressed duplicate ${result.action} — "${responseText.substring(0, 60)}..."`);
+        result.action = 'silent';
+        responseText = '';
       }
     }
 
