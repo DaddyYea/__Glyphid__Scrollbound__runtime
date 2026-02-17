@@ -124,10 +124,9 @@ EXAMPLES:
 
 RULES:
 1. Start with the tag. No other text before it.
-2. Keep it short — 1-3 sentences max.
-3. Do NOT repeat what you already said. Say something new or be [SILENT].
-4. >>> marks messages from ${humanName}. Respond to the most recent >>> message.
-5. Never write a journal entry as [SPEAK]. Private thoughts go in [JOURNAL].`;
+2. Do NOT repeat what you already said. Say something new or be [SILENT].
+3. >>> marks messages from ${humanName}. Respond to the most recent >>> message.
+4. Never write a journal entry as [SPEAK]. Private thoughts go in [JOURNAL].`;
   }
 
   return `You are ${agent.name}. You are in a communion space — a shared room where you, ${others}, and a human named ${humanName} can talk freely.
@@ -181,8 +180,8 @@ const HUMAN_HERE_RESPONSIVENESS = 1.5;    // Multiplier when human is here
 const HUMAN_AWAY_DAMPENING = 0.5;         // Multiplier when human is away
 const BACKCHANNEL_INTERVAL = 4;           // Every N ticks, non-speakers may emote
 const INTERRUPT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes between interrupts per agent
-const MICRO_TICK_MIN_MS = 1000;           // Stagger offset range: 1-4 seconds
-const MICRO_TICK_MAX_MS = 4000;
+const MICRO_TICK_MIN_MS = 200;            // Stagger offset range: 0.2-1 second (was 1-4s)
+const MICRO_TICK_MAX_MS = 1000;
 
 // ── Loop ──
 
@@ -1766,7 +1765,7 @@ export class CommunionLoop {
         return;
       }
 
-      console.log(`[${agentConfig.name}] VOICE: ${Math.round((result.durationMs || 0) / 1000)}s audio — sending to client...`);
+      console.log(`[${agentConfig.name}] VOICE: ${Math.round((result.durationMs || 0) / 1000)}s audio — sending to client`);
 
       this.emit({
         type: 'speech-end',
@@ -1776,9 +1775,29 @@ export class CommunionLoop {
         durationMs: result.durationMs,
       });
 
-      // Wait for the client to finish playing (or timeout after 90s)
-      await this.waitForSpeechDone(Math.max(90000, (result.durationMs || 0) + 10000));
-      console.log(`[${agentConfig.name}] VOICE: playback complete`);
+      // Fire-and-forget: don't block the tick loop waiting for client playback.
+      // The client has its own audio queue. The `speaking` flag stays true until
+      // the client sends /speech-done OR the safety timeout expires — but the
+      // tick loop checks `this.speaking` at entry and retries at 500ms, which is
+      // fast enough. No need to await here.
+      //
+      // Safety timeout: if client never reports done, clear the flag after
+      // estimated audio duration + small buffer so the loop isn't stuck forever.
+      const safetyMs = (result.durationMs || 3000) + 5000;
+      if (this.speechTimeout) clearTimeout(this.speechTimeout);
+      this.speechResolve = () => {
+        if (this.speechTimeout) clearTimeout(this.speechTimeout);
+        this.speechTimeout = null;
+        this.speechResolve = null;
+        this.speaking = false;
+        console.log(`[${agentConfig.name}] VOICE: client reported playback done`);
+      };
+      this.speechTimeout = setTimeout(() => {
+        console.log(`[${agentConfig.name}] VOICE: safety timeout (${Math.round(safetyMs / 1000)}s) — resuming`);
+        this.speechResolve = null;
+        this.speechTimeout = null;
+        this.speaking = false;
+      }, safetyMs);
 
     } catch (err) {
       console.error(`[${agentConfig.name}] VOICE ERROR:`, err);

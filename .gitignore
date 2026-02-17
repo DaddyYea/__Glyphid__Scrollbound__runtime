@@ -21,3 +21,12 @@ coverage/
 *.tmp
 *.swp
 *~
+
+# Runtime data — never commit
+data/
+runtime/models/
+llama.cpp/
+.claude/worktrees/
+
+# Large exports
+*.ndjson

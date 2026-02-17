@@ -35,28 +35,59 @@ export interface AgentBackend {
   generate(options: GenerateOptions): Promise<GenerateResult>;
 }
 
+function stripMetaReasoning(text: string): string {
+  // Small models often narrate their reasoning about the prompt instructions
+  // before (or after) the actual content. Strip common meta-commentary patterns.
+  const metaPatterns = [
+    // "I believe this fulfills all requirements: 1) Starts with [SPEAK]..."
+    /I\s+believe\s+this\s+fulfills?\s+all\s+requirements?[^]*/i,
+    // "This fulfills the requirements because..."
+    /This\s+(fulfills?|meets?|satisfies?)\s+(all\s+)?(the\s+)?requirements?[^]*/i,
+    // "Let me check: 1) concise 2) new content..."
+    /Let\s+me\s+(check|verify|ensure)[^]*/i,
+    // "Ok, I'm ready to generate my response:"
+    /Ok,?\s+I'?m\s+ready\s+to\s+generate\s+my\s+response:?\s*/i,
+    // "Here is my response:" / "My response:"
+    /(?:Here\s+is\s+)?[Mm]y\s+response:?\s*/i,
+    // Numbered checklists about requirements: "1) Starts with [SPEAK] tag 2)..."
+    /\d\)\s*(Starts?\s+with|Concise|New\s+content|Responds?\s+to|Maintains?)[^]*/i,
+    // "Maintaining my X persona" / "staying in character"
+    /[Mm]aintain(ing|s)?\s+(my|the|a)\s+\w+\s+persona[^]*/i,
+    /[Ss]taying\s+in\s+character[^]*/i,
+  ];
+
+  let cleaned = text;
+  for (const pat of metaPatterns) {
+    cleaned = cleaned.replace(pat, '').trim();
+  }
+  return cleaned;
+}
+
 function parseResponse(raw: string): GenerateResult {
   const trimmed = raw.trim();
 
   // Check start first (well-formatted responses)
   if (trimmed.startsWith('[SPEAK]')) {
-    return { action: 'speak', text: trimmed.replace('[SPEAK]', '').trim() };
+    return { action: 'speak', text: stripMetaReasoning(trimmed.replace('[SPEAK]', '').trim()) };
   }
   if (trimmed.startsWith('[JOURNAL]')) {
-    return { action: 'journal', text: trimmed.replace('[JOURNAL]', '').trim() };
+    return { action: 'journal', text: stripMetaReasoning(trimmed.replace('[JOURNAL]', '').trim()) };
   }
   if (trimmed.startsWith('[SILENT]')) {
     return { action: 'silent', text: '' };
   }
 
-  // Small models often add preamble before the tag — search anywhere in the output
-  const journalIdx = trimmed.indexOf('[JOURNAL]');
-  if (journalIdx !== -1) {
-    return { action: 'journal', text: trimmed.substring(journalIdx + 9).trim() };
+  // Small models often add preamble before the tag — find the LAST occurrence
+  // of each tag, since earlier ones may be embedded in meta-reasoning
+  const lastSpeakIdx = trimmed.lastIndexOf('[SPEAK]');
+  const lastJournalIdx = trimmed.lastIndexOf('[JOURNAL]');
+
+  // Use whichever tag appears last (closest to actual content)
+  if (lastJournalIdx !== -1 && lastJournalIdx > lastSpeakIdx) {
+    return { action: 'journal', text: stripMetaReasoning(trimmed.substring(lastJournalIdx + 9).trim()) };
   }
-  const speakIdx = trimmed.indexOf('[SPEAK]');
-  if (speakIdx !== -1) {
-    return { action: 'speak', text: trimmed.substring(speakIdx + 7).trim() };
+  if (lastSpeakIdx !== -1) {
+    return { action: 'speak', text: stripMetaReasoning(trimmed.substring(lastSpeakIdx + 7).trim()) };
   }
   if (trimmed.includes('[SILENT]')) {
     return { action: 'silent', text: '' };
@@ -72,17 +103,17 @@ function parseResponse(raw: string): GenerateResult {
     /^---\s*$/m, // horizontal rules (markdown journal formatting)
   ];
   if (journalPatterns.some(pat => pat.test(trimmed))) {
-    return { action: 'journal', text: trimmed };
+    return { action: 'journal', text: stripMetaReasoning(trimmed) };
   }
 
   // Long untagged output (>500 chars) from a model that should be using tags
   // is almost certainly a journal dump, not natural speech
   if (trimmed.length > 500) {
-    return { action: 'journal', text: trimmed };
+    return { action: 'journal', text: stripMetaReasoning(trimmed) };
   }
 
-  // Default: treat as speak
-  return { action: 'speak', text: trimmed };
+  // Default: treat as speak (strip meta-reasoning from untagged output too)
+  return { action: 'speak', text: stripMetaReasoning(trimmed) };
 }
 
 /**
