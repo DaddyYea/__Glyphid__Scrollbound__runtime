@@ -527,15 +527,16 @@ export class CommunionLoop {
     const hasAlois = [...this.agents.values()].some(a => a.config.provider === 'alois' && 'feedMessage' in a.backend);
     if (hasAlois) {
       // Feed journal entries first (Alois's own reflections — most semantically rich)
+      // Use MAX_UTTERANCES cap so we fill her retrieval memory fully from journals
       for (const [agentId, journal] of this.journals) {
-        const recent = await journal.getRecent(30);
+        const recent = await journal.getRecent(500);
         for (const entry of recent) {
           const agentName = this.state.agentNames[agentId] || agentId;
           this.feedAloisBrains(agentName, entry.content);
         }
       }
       // Feed recent room messages
-      for (const msg of this.state.messages.slice(-50)) {
+      for (const msg of this.state.messages.slice(-200)) {
         const spk = msg.speakerName || msg.speaker;
         const isHuman = msg.speaker === 'human' || spk === this.state.humanName;
         this.feedAloisBrains(spk, msg.text, isHuman);
