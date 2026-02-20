@@ -509,6 +509,13 @@ export class CommunionLoop {
     }
     console.log('[COMMUNION] Journals loaded from disk');
 
+    // ── Load imported chat history archives ──
+    await this.loadImportedArchives();
+
+    // ── Restore dynamically-added agents from previous sessions ──
+    // MUST happen before the hasAlois check — Alois is a dynamic agent
+    this.loadDynamicAgents();
+
     // ── Feed restored journal + room content into Alois brains ──
     // The brain's dendritic state is restored from brain-tissue.json, but the
     // utterance memory (used for retrieval decode) benefits from being re-primed
@@ -541,12 +548,6 @@ export class CommunionLoop {
         console.error('[INGEST] Failed to start archive ingestion:', err)
       );
     }
-
-    // ── Load imported chat history archives ──
-    await this.loadImportedArchives();
-
-    // ── Restore dynamically-added agents from previous sessions ──
-    this.loadDynamicAgents();
 
     // ── Load saved voice configs (voice selections + mute state) ──
     this.loadVoiceConfigs();
