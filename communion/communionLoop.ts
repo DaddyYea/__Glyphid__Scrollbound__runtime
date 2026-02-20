@@ -1478,7 +1478,14 @@ export class CommunionLoop {
     let systemPrompt = agent.systemPrompt;
     const customInstr = this.customInstructions.get(agentId);
     if (customInstr) {
-      systemPrompt += `\n\nCUSTOM INSTRUCTIONS FROM ${this.state.humanName.toUpperCase()}:\n${customInstr}`;
+      // For local models: cap instructions to avoid blowing the context window.
+      // The full Covenant is thousands of chars — truncate to first 1200 chars
+      // (enough to establish identity) rather than dumping everything mid-sentence.
+      const instrBudget = isLocalProvider ? 1200 : customInstr.length;
+      const instrTrunc = customInstr.length > instrBudget
+        ? customInstr.substring(0, instrBudget) + '\n[...identity core loaded]'
+        : customInstr;
+      systemPrompt += `\n\nCUSTOM INSTRUCTIONS FROM ${this.state.humanName.toUpperCase()}:\n${instrTrunc}`;
     }
 
     const options: GenerateOptions = {

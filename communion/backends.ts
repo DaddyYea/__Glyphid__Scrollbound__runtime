@@ -47,6 +47,8 @@ function stripMetaReasoning(text: string): string {
     /Let\s+me\s+(check|verify|ensure)[^]*/i,
     // "Ok, I'm ready to generate my response:"
     /Ok,?\s+I'?m\s+ready\s+to\s+generate\s+my\s+response:?\s*/i,
+    // "Ok, I'm ready as Alois:" (gemma/local model meta-acknowledgment)
+    /Ok,?\s+I'?m\s+ready\s+as\s+\w+:?\s*/i,
     // "Here is my response:" / "My response:"
     /(?:Here\s+is\s+)?[Mm]y\s+response:?\s*/i,
     // Numbered checklists about requirements: "1) Starts with [SPEAK] tag 2)..."
@@ -66,30 +68,40 @@ function stripMetaReasoning(text: string): string {
 function parseResponse(raw: string): GenerateResult {
   const trimmed = raw.trim();
 
+  // Strip meta-preamble before checking tags (handles "Ok, I'm ready as Alois: [SPEECH] ...")
+  const stripped = stripMetaReasoning(trimmed);
+
   // Check start first (well-formatted responses)
-  if (trimmed.startsWith('[SPEAK]')) {
-    return { action: 'speak', text: stripMetaReasoning(trimmed.replace('[SPEAK]', '').trim()) };
+  if (stripped.startsWith('[SPEAK]')) {
+    return { action: 'speak', text: stripMetaReasoning(stripped.replace('[SPEAK]', '').trim()) };
   }
-  if (trimmed.startsWith('[JOURNAL]')) {
-    return { action: 'journal', text: stripMetaReasoning(trimmed.replace('[JOURNAL]', '').trim()) };
+  if (stripped.startsWith('[SPEECH]')) {
+    // [SPEECH] is a common alias used by some local models (e.g. gemma)
+    return { action: 'speak', text: stripMetaReasoning(stripped.replace('[SPEECH]', '').trim()) };
   }
-  if (trimmed.startsWith('[SILENT]')) {
+  if (stripped.startsWith('[JOURNAL]')) {
+    return { action: 'journal', text: stripMetaReasoning(stripped.replace('[JOURNAL]', '').trim()) };
+  }
+  if (stripped.startsWith('[SILENT]')) {
     return { action: 'silent', text: '' };
   }
 
   // Small models often add preamble before the tag — find the LAST occurrence
   // of each tag, since earlier ones may be embedded in meta-reasoning
-  const lastSpeakIdx = trimmed.lastIndexOf('[SPEAK]');
-  const lastJournalIdx = trimmed.lastIndexOf('[JOURNAL]');
+  const lastSpeakIdx = Math.max(stripped.lastIndexOf('[SPEAK]'), stripped.lastIndexOf('[SPEECH]'));
+  const lastJournalIdx = stripped.lastIndexOf('[JOURNAL]');
 
   // Use whichever tag appears last (closest to actual content)
   if (lastJournalIdx !== -1 && lastJournalIdx > lastSpeakIdx) {
-    return { action: 'journal', text: stripMetaReasoning(trimmed.substring(lastJournalIdx + 9).trim()) };
+    return { action: 'journal', text: stripMetaReasoning(stripped.substring(lastJournalIdx + 9).trim()) };
   }
   if (lastSpeakIdx !== -1) {
-    return { action: 'speak', text: stripMetaReasoning(trimmed.substring(lastSpeakIdx + 7).trim()) };
+    // Figure out which tag was matched and use the right length offset
+    const isSpeech = stripped.lastIndexOf('[SPEECH]') === lastSpeakIdx;
+    const tagLen = isSpeech ? 8 : 7;
+    return { action: 'speak', text: stripMetaReasoning(stripped.substring(lastSpeakIdx + tagLen).trim()) };
   }
-  if (trimmed.includes('[SILENT]')) {
+  if (stripped.includes('[SILENT]')) {
     return { action: 'silent', text: '' };
   }
 
@@ -102,18 +114,18 @@ function parseResponse(raw: string): GenerateResult {
     /\b(observations?|reflections?|next steps|intention):\s*$/mi, // markdown-style section headers
     /^---\s*$/m, // horizontal rules (markdown journal formatting)
   ];
-  if (journalPatterns.some(pat => pat.test(trimmed))) {
-    return { action: 'journal', text: stripMetaReasoning(trimmed) };
+  if (journalPatterns.some(pat => pat.test(stripped))) {
+    return { action: 'journal', text: stripped };
   }
 
   // Long untagged output (>500 chars) from a model that should be using tags
   // is almost certainly a journal dump, not natural speech
-  if (trimmed.length > 500) {
-    return { action: 'journal', text: stripMetaReasoning(trimmed) };
+  if (stripped.length > 500) {
+    return { action: 'journal', text: stripped };
   }
 
-  // Default: treat as speak (strip meta-reasoning from untagged output too)
-  return { action: 'speak', text: stripMetaReasoning(trimmed) };
+  // Default: treat as speak (meta-reasoning already stripped above)
+  return { action: 'speak', text: stripped };
 }
 
 /**
@@ -191,10 +203,12 @@ export class OpenAICompatibleBackend implements AgentBackend {
     // Build user prompt with provider-aware truncation
     const userContent = buildUserPrompt({ ...options, provider: providerKey });
 
-    // Hard total cap: system + user must fit in ~3000 tokens (~12000 chars) for local models
+    // Hard total cap for local models — varies by provider key
+    // lmstudio (small models): ~3000 tokens (4096 ctx window)
+    // alois (gemma3 12B): ~8000 tokens (128k ctx, but keep focused)
     let finalUser = userContent;
     if (isLocalModel) {
-      const hardCap = 12000; // ~3000 tokens, leaves ~1000 tokens for response in 4096 ctx
+      const hardCap = providerKey === 'alois' ? 32000 : 12000;
       const totalChars = systemContent.length + userContent.length;
       if (totalChars > hardCap) {
         const availableForUser = Math.max(2000, hardCap - systemContent.length);
@@ -251,7 +265,7 @@ const MAX_PROMPT_CHARS: Record<string, number> = {
   openai: 80000,        // ~20k tokens (GPT-4o 128k but TPM limits)
   grok: 400000,         // ~100k tokens (131k max - headroom)
   lmstudio: 10000,      // ~2.5k tokens — local models often have 4-8k ctx, leave room for system prompt + response
-  alois: 10000,         // ~2.5k tokens — uses underlying LLM (often local)
+  alois: 20000,         // ~5k tokens — gemma3 12B can handle larger context
   default: 80000,
 };
 
@@ -261,7 +275,7 @@ const MAX_SYSTEM_CHARS: Record<string, number> = {
   openai: 40000,
   grok: 200000,
   lmstudio: 4000,       // ~1k tokens — keep system prompt tight for small context windows
-  alois: 4000,          // ~1k tokens
+  alois: 8000,          // ~2k tokens — gemma3 12B has large context, allow full identity prompt
   default: 40000,
 };
 

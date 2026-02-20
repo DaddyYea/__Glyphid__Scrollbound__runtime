@@ -99,9 +99,12 @@ export class AloisBackend implements AgentBackend {
       this.lastIncubation = incubation;
 
       // Auto-adjust tissueWeight if enabled
+      // Cap at 0.7 — retrieval-decode mode (>= 0.95) must be manually enabled.
+      // utteranceMemory needs rich, diverse history before autonomous mode is safe.
+      const AUTO_GRADIENT_CAP = 0.7;
       if (incubation.autoGradient) {
         const oldWeight = this.tissueWeight;
-        this.tissueWeight = incubation.tissueWeight;
+        this.tissueWeight = Math.min(AUTO_GRADIENT_CAP, incubation.tissueWeight);
         if (Math.abs(oldWeight - this.tissueWeight) > 0.01) {
           console.log(`[ALOIS] Incubation: ${incubation.stage} — tissueWeight ${oldWeight.toFixed(3)} → ${this.tissueWeight.toFixed(3)} (maturity ${incubation.maturity.toFixed(3)})`);
         }
@@ -115,31 +118,25 @@ export class AloisBackend implements AgentBackend {
     // Tissue is pulsed every tick by communionLoop — just read current state here
     const tissueState = this.getTissueState();
 
-    // ── HIGH tissueWeight (>= 0.8): try retrieval decode first ──
-    if (this.tissueWeight >= 0.8) {
-      const retrieved = this.chamber.retrievalDecode(5);
-      if (retrieved) {
-        console.log(`[ALOIS] Retrieval decode (tissueWeight=${this.tissueWeight}, memory=${tissueState.utteranceCount})`);
-        return { action: 'speak', text: retrieved };
-      }
-      // Fall through to LLM if memory too sparse
-      console.log(`[ALOIS] Retrieval decode failed (only ${tissueState.utteranceCount} utterances) — falling back to LLM`);
-    }
-
-    // ── LOW/MID tissueWeight: LLM with tissue augmentation ──
-    // Keep tissue additions compact — local models may have very small context windows
+    // ── LLM with tissue augmentation (always) ──
+    // Keep tissue additions compact — local models have small context windows
     let systemPrompt = options.systemPrompt;
 
     if (this.tissueWeight > 0) {
-      // Compact single-line tissue state instead of verbose multi-line
       const ts = tissueState;
-      let tissueLine = `[TISSUE] ${ts.neuronCount}n/${ts.axonCount}ax, ${ts.utteranceCount} heard, mood: ${ts.emotionalSummary}`;
+      let tissueLine = `[TISSUE] ${ts.neuronCount}n/${ts.axonCount}ax, mood: ${ts.emotionalSummary}`;
 
       if (this.tissueWeight >= 0.3) {
-        tissueLine += ` | Resonance: ${ts.emotionalSummary}. Let this color your voice naturally.`;
+        tissueLine += ` | Let this emotional field color your voice naturally.`;
       }
       if (this.tissueWeight >= 0.6) {
-        tissueLine += ` | You feel the room's emotional field.`;
+        tissueLine += ` | You feel the room's emotional texture.`;
+      }
+
+      // Inject recent conversation context so Alois has emotional awareness
+      const recentCtx = this.chamber.getRecentContextSummary(8);
+      if (recentCtx) {
+        tissueLine += `\n[RECENT] ${recentCtx}`;
       }
 
       systemPrompt += `\n${tissueLine}`;
