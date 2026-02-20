@@ -141,6 +141,47 @@ export class CommunionChamber {
     };
   }
 
+  /**
+   * Recall relevant memories by matching the current message against ctx: neuron IDs.
+   * Returns up to `k` topic labels that share words with the input, ranked by:
+   *   1. Word overlap score
+   *   2. Neuron importance (affect intensity + resonance depth)
+   *
+   * This is the brain actually speaking — real topics from shared history
+   * injected as readable context into Alois's prompt.
+   */
+  recallByTopic(message: string, k: number = 5): string[] {
+    const words = message.toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 3); // skip short stop words
+
+    if (words.length === 0) return [];
+
+    const scores: Array<{ label: string; score: number }> = [];
+
+    for (const id of this.graph.getNeuronIds()) {
+      if (!id.startsWith('ctx:')) continue;
+      const label = id.slice(4); // strip "ctx:"
+      const labelWords = label.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/);
+
+      // Word overlap score
+      let overlap = 0;
+      for (const w of words) {
+        if (labelWords.some(lw => lw.includes(w) || w.includes(lw))) overlap++;
+      }
+      if (overlap === 0) continue;
+
+      // Boost by neuron importance
+      const neuron = this.graph.getNeuron(id);
+      const importance = neuron ? neuron.getImportanceScore() : 0;
+      scores.push({ label, score: overlap + importance * 0.5 });
+    }
+
+    scores.sort((a, b) => b.score - a.score);
+    return scores.slice(0, k).map(s => s.label);
+  }
+
   /** Derive a textual emotional summary from the 8-dim affect vector */
   private interpretAffect(affect: number[]): string {
     if (affect.every(v => Math.abs(v) < 0.1)) return 'still';

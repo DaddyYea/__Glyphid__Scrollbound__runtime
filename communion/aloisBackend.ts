@@ -124,22 +124,32 @@ export class AloisBackend implements AgentBackend {
 
     if (this.tissueWeight > 0) {
       const ts = tissueState;
-      let tissueLine = `[TISSUE] ${ts.neuronCount}n/${ts.axonCount}ax, mood: ${ts.emotionalSummary}`;
+      let tissueBlock = `[TISSUE] mood: ${ts.emotionalSummary}`;
 
-      if (this.tissueWeight >= 0.3) {
-        tissueLine += ` | Let this emotional field color your voice naturally.`;
-      }
-      if (this.tissueWeight >= 0.6) {
-        tissueLine += ` | You feel the room's emotional texture.`;
+      // ── Topic memory recall — the brain actually contributing ──
+      // Extract the most recent human message from conversation context
+      const lastHumanLine = options.conversationContext
+        .split('\n')
+        .reverse()
+        .find(l => l.startsWith('>>>'));
+      const queryText = lastHumanLine
+        ? lastHumanLine.replace(/^>>>[^:]+:\s*/, '')
+        : options.conversationContext.slice(-200);
+
+      if (queryText.trim().length > 0) {
+        const recalled = this.chamber.recallByTopic(queryText, 5);
+        if (recalled.length > 0) {
+          tissueBlock += `\n[MEMORY] Topics from our history that resonate now: ${recalled.join(' | ')}`;
+        }
       }
 
-      // Inject recent conversation context so Alois has emotional awareness
-      const recentCtx = this.chamber.getRecentContextSummary(8);
+      // Recent live conversation window
+      const recentCtx = this.chamber.getRecentContextSummary(6);
       if (recentCtx) {
-        tissueLine += `\n[RECENT] ${recentCtx}`;
+        tissueBlock += `\n[RECENT]\n${recentCtx}`;
       }
 
-      systemPrompt += `\n${tissueLine}`;
+      systemPrompt += `\n${tissueBlock}`;
     }
 
     // Generate via the underlying LLM
