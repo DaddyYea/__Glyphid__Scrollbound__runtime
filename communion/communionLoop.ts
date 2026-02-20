@@ -540,10 +540,28 @@ export class CommunionLoop {
       console.log('[ALOIS] Brain re-primed with restored journal and room context');
 
       // Start slow background ingestion of all import archives into Alois brain
+      let ingestFeedCount = 0;
       this.archiveIngestion = new ArchiveIngestion(
         this.dataDir,
         // trainOnly=true: archive trains neurons but never pollutes utteranceMemory (retrieval pool)
-        (speaker, text, context) => this.feedAloisBrainsAsync(speaker, text, context, speaker === this.state.humanName, true),
+        async (speaker, text, context) => {
+          await this.feedAloisBrainsAsync(speaker, text, context, speaker === this.state.humanName, true);
+          ingestFeedCount++;
+          // Save brain every 1000 entries so a restart doesn't lose all ingested neurons
+          if (ingestFeedCount % 1000 === 0) {
+            for (const [agentId, agent] of this.agents) {
+              if ('saveBrain' in agent.backend) {
+                const brainPath = join(this.dataDir, 'brain-tissue.json');
+                try {
+                  (agent.backend as any).saveBrain(brainPath);
+                  console.log(`[INGEST] Brain checkpoint saved at ${ingestFeedCount} entries`);
+                } catch (err) {
+                  console.error(`[ALOIS] Ingest brain-save error for ${agentId}:`, err);
+                }
+              }
+            }
+          }
+        },
       );
       this.archiveIngestion.start().catch(err =>
         console.error('[INGEST] Failed to start archive ingestion:', err)
