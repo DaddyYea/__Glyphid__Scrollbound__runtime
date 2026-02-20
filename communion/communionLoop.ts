@@ -35,6 +35,7 @@ import { ScrollGraph } from '../src/memory/scrollGraph';
 import { ContextRAM, parseRAMCommands, SlotName, ReflectiveSweepResult } from './contextRAM';
 import { pulseBrainwaves, classifyBand, tagForBand, decayAndPromote } from './brainwaves';
 import { synthesize, getDefaultVoiceConfig, AgentVoiceConfig } from './voice';
+import { ArchiveIngestion } from './archiveIngestion';
 import type { ScrollEcho, MoodVector } from '../src/types';
 
 // ── Events ──
@@ -229,6 +230,9 @@ export class CommunionLoop {
   private voiceConfigs: Map<string, AgentVoiceConfig> = new Map();
   // Custom instructions — per-agent extra instructions from the user
   private customInstructions: Map<string, string> = new Map();
+  // Background archive ingestion into Alois brain
+  private archiveIngestion: ArchiveIngestion | null = null;
+
   private speaking = false; // Global speech lock — clock pauses when anyone is speaking
   private humanSpeaking = false; // True while human is actively speaking (interim results from mic)
   private speechResolve: (() => void) | null = null; // Resolves when client reports playback done
@@ -504,6 +508,37 @@ export class CommunionLoop {
       }
     }
     console.log('[COMMUNION] Journals loaded from disk');
+
+    // ── Feed restored journal + room content into Alois brains ──
+    // The brain's dendritic state is restored from brain-tissue.json, but the
+    // utterance memory (used for retrieval decode) benefits from being re-primed
+    // with recent journal entries and room messages so Alois's short-term context
+    // is intact even after a restart.
+    const hasAlois = [...this.agents.values()].some(a => a.config.provider === 'alois' && 'feedMessage' in a.backend);
+    if (hasAlois) {
+      // Feed journal entries first (Alois's own reflections — most semantically rich)
+      for (const [agentId, journal] of this.journals) {
+        const recent = await journal.getRecent(30);
+        for (const entry of recent) {
+          const agentName = this.state.agentNames[agentId] || agentId;
+          this.feedAloisBrains(agentName, entry.content);
+        }
+      }
+      // Feed recent room messages
+      for (const msg of this.state.messages.slice(-50)) {
+        this.feedAloisBrains(msg.speakerName || msg.speaker, msg.text);
+      }
+      console.log('[ALOIS] Brain re-primed with restored journal and room context');
+
+      // Start slow background ingestion of all import archives into Alois brain
+      this.archiveIngestion = new ArchiveIngestion(
+        this.dataDir,
+        (speaker, text) => this.feedAloisBrains(speaker, text),
+      );
+      this.archiveIngestion.start().catch(err =>
+        console.error('[INGEST] Failed to start archive ingestion:', err)
+      );
+    }
 
     // ── Load imported chat history archives ──
     await this.loadImportedArchives();
@@ -1253,6 +1288,20 @@ export class CommunionLoop {
     // Save graph every 10 ticks
     if (this.state.tickCount % 10 === 0) {
       this.graph.save().catch(err => console.error('[GRAPH] Auto-save error:', err));
+    }
+
+    // Save Alois brain every 50 ticks
+    if (this.state.tickCount % 50 === 0) {
+      for (const [agentId, agent] of this.agents) {
+        if ('saveBrain' in agent.backend) {
+          const brainPath = join(this.dataDir, 'brain-tissue.json');
+          try {
+            (agent.backend as any).saveBrain(brainPath);
+          } catch (err) {
+            console.error(`[ALOIS] Auto-save brain error for ${agentId}:`, err);
+          }
+        }
+      }
     }
 
     this.emit({ type: 'tick', tickCount: this.state.tickCount });
@@ -2532,6 +2581,7 @@ export class CommunionLoop {
       clearTimeout(this.timer);
       this.timer = null;
     }
+    this.archiveIngestion?.stop();
     this.buffer.stop();
 
     // Final session save

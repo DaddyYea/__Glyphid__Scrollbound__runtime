@@ -32,7 +32,7 @@ export class DendriticGraph {
 
   private getOrCreate(id: string): DendriticCell {
     if (!this.neurons.has(id)) {
-      this.neurons.set(id, new DendriticCell(512, 6, Math.random() * 0.4 - 0.2));
+      this.neurons.set(id, new DendriticCell(768, 6, Math.random() * 0.4 - 0.2));
     }
     return this.neurons.get(id)!;
   }

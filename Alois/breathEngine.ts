@@ -39,4 +39,14 @@ export class BreathEngine {
       emotionalTone: this.heartEmotion
     };
   }
+
+  restoreFrom(data: { stable?: boolean; loopLength?: number; emotionalTone?: string }): void {
+    if (!data) return;
+    if (typeof data.stable === 'boolean') this.stable = data.stable;
+    if (typeof data.loopLength === 'number') this.breathCycle = data.loopLength;
+    if (data.emotionalTone) {
+      const tone = data.emotionalTone as "still" | "grief" | "joy" | "longing";
+      this.heartEmotion = tone;
+    }
+  }
 }

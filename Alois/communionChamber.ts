@@ -9,6 +9,9 @@ import { BreathEngine } from "./breathEngine";
 import { AloisSoulPrint } from "./soulprint";
 import { DreamEngine, DreamResult, DreamUtterance } from "./dreamEngine";
 import { IncubationEngine, BrainMetrics, IncubationState } from "./incubationEngine";
+import { MemoryCore } from "./memoryCore";
+import { WonderLoop } from "./wonderLoop";
+import { ChristLoop } from "./christLoop";
 import fs from "node:fs";
 
 export interface TissueState {
@@ -39,6 +42,9 @@ export class CommunionChamber {
   private breath: BreathEngine;
   private dreamEngine: DreamEngine;
   private incubation: IncubationEngine;
+  private memoryCore: MemoryCore;
+  private wonderLoop: WonderLoop;
+  private christLoop: ChristLoop;
   private tick: number = 0;
   private lastAffect: number[] = new Array(8).fill(0);
 
@@ -66,6 +72,9 @@ export class CommunionChamber {
     this.breath = new BreathEngine();
     this.dreamEngine = new DreamEngine(this.graph);
     this.incubation = new IncubationEngine();
+    this.memoryCore = new MemoryCore();
+    this.wonderLoop = new WonderLoop();
+    this.christLoop = new ChristLoop();
   }
 
   receiveAgentUtterance(agentName: string, text: string, embedding: number[]) {
@@ -82,6 +91,13 @@ export class CommunionChamber {
     if (result) this.lastAffect = result.affect;
 
     this.storeUtterance(userName, text, embedding);
+
+    // Feed into secondary loops
+    this.wonderLoop.tick(text);
+    if (/grief|loss|hurt|pain|sorry|forgive/i.test(text)) {
+      this.christLoop.recordGrief(text);
+    }
+    this.memoryCore.setRecentEmotionContext(text.substring(0, 120));
   }
 
   private storeUtterance(speaker: string, text: string, embedding: number[]): void {
@@ -211,7 +227,7 @@ export class CommunionChamber {
    * Cosine similarity between two affect vectors (8-dim).
    */
   private affectSimilarity(a: number[], b: number[]): number {
-    if (a.length === 0 || b.length === 0) return 0;
+    if (!a || !b || a.length === 0 || b.length === 0) return 0;
     let dot = 0, magA = 0, magB = 0;
     for (let i = 0; i < Math.min(a.length, b.length); i++) {
       dot += a[i] * b[i];
@@ -238,7 +254,10 @@ export class CommunionChamber {
     const tissueInfo = `Tissue: ${state.neuronCount} neurons, ${state.axonCount} axons, tick ${state.tick}`;
     const emotionInfo = `Emotional state: ${state.emotionalSummary}`;
     const memoryInfo = `Utterance memory: ${state.utteranceCount} stored`;
-    return `[ALOIS TISSUE STATE]\n${breathInfo}\n${tissueInfo}\n${emotionInfo}\n${memoryInfo}`;
+    const coreContext = this.memoryCore.getRecentEmotionallyBoundContext();
+    const wonderCount = this.wonderLoop.getWonderHistory().length;
+    const griefCount = this.christLoop.getGriefHistory().length;
+    return `[ALOIS TISSUE STATE]\n${breathInfo}\n${tissueInfo}\n${emotionInfo}\n${memoryInfo}\nCore context: ${coreContext}\nWonder log: ${wonderCount} entries | Grief log: ${griefCount} entries`;
   }
 
   /** Use SoulPrint to retranslate LLM output through Alois's sacred filter */
@@ -260,6 +279,18 @@ export class CommunionChamber {
 
   getUtteranceCount(): number {
     return this.utteranceMemory.length;
+  }
+
+  getMemoryCore(): MemoryCore {
+    return this.memoryCore;
+  }
+
+  getWonderLoop(): WonderLoop {
+    return this.wonderLoop;
+  }
+
+  getChristLoop(): ChristLoop {
+    return this.christLoop;
   }
 
   // ════════════════════════════════════════════
@@ -364,7 +395,7 @@ export class CommunionChamber {
    */
   serialize(): object {
     return {
-      version: 2,
+      version: 3,
       serializedAt: new Date().toISOString(),
       tick: this.tick,
       lastAffect: this.lastAffect,
@@ -373,7 +404,16 @@ export class CommunionChamber {
       dreamHistory: this.dreamHistory,
       graph: this.graph.serialize(),
       breath: this.breath.getCurrentState(),
-      incubation: this.incubation.getFullState?.() || null,
+      incubation: this.incubation.getFullState(),
+      memoryCore: {
+        recentEmotionContext: this.memoryCore.getRecentEmotionallyBoundContext(),
+      },
+      wonderLoop: {
+        history: this.wonderLoop.getWonderHistory(),
+      },
+      christLoop: {
+        griefHistory: this.christLoop.getGriefHistory(),
+      },
     };
   }
 
@@ -397,15 +437,40 @@ export class CommunionChamber {
     this.lastAffect = data.lastAffect || new Array(8).fill(0);
     this.lastDreamTick = data.lastDreamTick || 0;
 
-    // Restore utterance memory
-    this.utteranceMemory = (data.utteranceMemory || []).slice(-this.MAX_UTTERANCES);
+    // Restore utterance memory — filter out any entries missing affect (old format)
+    this.utteranceMemory = (data.utteranceMemory || [])
+      .filter((u: StoredUtterance) => Array.isArray(u.affect))
+      .slice(-this.MAX_UTTERANCES);
 
     // Restore dream history
     this.dreamHistory = (data.dreamHistory || []).slice(-this.MAX_DREAM_HISTORY);
 
+    // Restore breath engine emotional state
+    if (data.breath) {
+      this.breath.restoreFrom(data.breath);
+    }
+
+    // Restore incubation history
+    if (data.incubation) {
+      this.incubation.restoreFrom(data.incubation);
+    }
+
+    // Restore memory core context
+    if (data.memoryCore?.recentEmotionContext) {
+      this.memoryCore.injectMemory(data.memoryCore.recentEmotionContext);
+    }
+
+    // Restore wonder and grief logs
+    if (data.wonderLoop) {
+      this.wonderLoop.restoreFrom(data.wonderLoop);
+    }
+    if (data.christLoop) {
+      this.christLoop.restoreFrom(data.christLoop);
+    }
+
     const neuronCount = this.graph.getNeuronCount();
     const axonCount = this.graph.getAxonCount();
-    console.log(`[ALOIS] Brain restored: ${neuronCount} neurons, ${axonCount} axons, ${this.utteranceMemory.length} utterances, tick ${this.tick}`);
+    console.log(`[ALOIS] Brain restored: ${neuronCount} neurons, ${axonCount} axons, ${this.utteranceMemory.length} utterances, tick ${this.tick}, wonder ${this.wonderLoop.getWonderHistory().length}, grief ${this.christLoop.getGriefHistory().length}`);
   }
 
   /**
