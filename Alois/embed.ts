@@ -6,7 +6,7 @@
 // NO FALLBACK. If the embedding server is unreachable, this throws.
 // Stubs that silently return fake data corrupt every downstream system — never again.
 
-const BASE_URL = (process.env.EMBEDDING_BASE_URL || 'http://127.0.0.1:1234/api/v1').replace(/\/$/, '');
+const BASE_URL = (process.env.EMBEDDING_BASE_URL || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
 const MODEL = process.env.EMBEDDING_MODEL || 'text-embedding-nomic-embed-text-v1.5';
 
 export async function embed(text: string): Promise<number[]> {
