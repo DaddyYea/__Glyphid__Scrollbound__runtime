@@ -102,7 +102,16 @@ export class ArchiveIngestion {
         continue;
       }
 
-      const startLine = checkpoint?.linesConsumed ?? 0;
+      // If file was fully consumed but brain was never persisted, restart from beginning
+      const fullyConsumedNoPersist = checkpoint &&
+        checkpoint.totalLines > 0 &&
+        checkpoint.linesConsumed >= checkpoint.totalLines &&
+        !checkpoint.brainPersisted;
+
+      const startLine = fullyConsumedNoPersist ? 0 : (checkpoint?.linesConsumed ?? 0);
+      if (fullyConsumedNoPersist) {
+        console.log(`[INGEST] ${fileName}: consumed but brain not persisted — restarting from line 0`);
+      }
       console.log(`[INGEST] ${fileName}: starting from line ${startLine}`);
       this.currentFile = fileName;
 
