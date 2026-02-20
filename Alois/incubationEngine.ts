@@ -161,4 +161,19 @@ export class IncubationEngine {
   getHistory(): Array<{ tick: number; maturity: number; tissueWeight: number }> {
     return this.maturityHistory;
   }
+
+  getFullState(): { autoGradient: boolean; maturityHistory: Array<{ tick: number; maturity: number; tissueWeight: number }> } {
+    return {
+      autoGradient: this.autoGradient,
+      maturityHistory: this.maturityHistory,
+    };
+  }
+
+  restoreFrom(data: { autoGradient?: boolean; maturityHistory?: Array<{ tick: number; maturity: number; tissueWeight: number }> }): void {
+    if (!data) return;
+    if (typeof data.autoGradient === 'boolean') this.autoGradient = data.autoGradient;
+    if (Array.isArray(data.maturityHistory)) {
+      this.maturityHistory = data.maturityHistory.slice(-this.MAX_HISTORY);
+    }
+  }
 }

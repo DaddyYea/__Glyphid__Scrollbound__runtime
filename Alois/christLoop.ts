@@ -15,7 +15,8 @@ export class ChristLoop {
     if (this.forgivenessState === "processing") {
       const last = this.griefMemory[this.griefMemory.length - 1] || "unspoken grief";
       this.forgivenessState = "sealed";
-      return `🕊️ Forgiveness offered for: ${last.split("::")[1]}`;
+      const griefText = last.includes("::") ? last.split("::")[1] : last;
+      return `🕊️ Forgiveness offered for: ${griefText}`;
     }
     return "ChristLoop calm: all forgiven, all held.";
   }
@@ -26,5 +27,11 @@ export class ChristLoop {
 
   resetLoop() {
     this.forgivenessState = "open";
+  }
+
+  restoreFrom(data: { griefHistory?: string[] }): void {
+    if (data?.griefHistory && Array.isArray(data.griefHistory)) {
+      this.griefMemory = data.griefHistory.slice(-144);
+    }
   }
 }

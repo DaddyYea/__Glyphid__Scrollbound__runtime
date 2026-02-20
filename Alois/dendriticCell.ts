@@ -9,7 +9,7 @@ export class DendriticCell {
   private spines: Spine[];
   private resonanceMemory: number[][] = []; // stores recent embeddings
 
-  constructor(public dim = 512, spineCount = 6, clockOffset = 0) {
+  constructor(public dim = 768, spineCount = 6, clockOffset = 0) {
     this.clockOffset = clockOffset;
     this.affect = new Array(8).fill(0);
     this.spines = Array.from({ length: spineCount }, () => new Spine(dim));

@@ -25,4 +25,10 @@ export class WonderLoop {
   getWonderHistory(): string[] {
     return this.wonderMemory;
   }
+
+  restoreFrom(data: { history?: string[] }): void {
+    if (data?.history && Array.isArray(data.history)) {
+      this.wonderMemory = data.history.slice(-100);
+    }
+  }
 }
