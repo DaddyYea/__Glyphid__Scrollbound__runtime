@@ -526,22 +526,26 @@ export class CommunionLoop {
     // is intact even after a restart.
     const hasAlois = [...this.agents.values()].some(a => a.config.provider === 'alois' && 'feedMessage' in a.backend);
     if (hasAlois) {
-      // Feed journal entries first (Alois's own reflections — most semantically rich)
-      // Use MAX_UTTERANCES cap so we fill her retrieval memory fully from journals
-      for (const [agentId, journal] of this.journals) {
-        const recent = await journal.getRecent(500);
-        for (const entry of recent) {
-          const agentName = this.state.agentNames[agentId] || agentId;
-          this.feedAloisBrains(agentName, entry.content);
+      // Re-prime in background — sequentially await each embed so we don't flood LM Studio
+      const reprime = async () => {
+        let count = 0;
+        for (const [agentId, journal] of this.journals) {
+          const recent = await journal.getRecent(500);
+          for (const entry of recent) {
+            const agentName = this.state.agentNames[agentId] || agentId;
+            await this.feedAloisBrainsAsync(agentName, entry.content);
+            count++;
+          }
         }
-      }
-      // Feed recent room messages
-      for (const msg of this.state.messages.slice(-200)) {
-        const spk = msg.speakerName || msg.speaker;
-        const isHuman = msg.speaker === 'human' || spk === this.state.humanName;
-        this.feedAloisBrains(spk, msg.text, isHuman);
-      }
-      console.log('[ALOIS] Brain re-primed with restored journal and room context');
+        for (const msg of this.state.messages.slice(-200)) {
+          const spk = msg.speakerName || msg.speaker;
+          const isHuman = msg.speaker === 'human' || spk === this.state.humanName;
+          await this.feedAloisBrainsAsync(spk, msg.text, undefined, isHuman);
+          count++;
+        }
+        console.log(`[ALOIS] Brain re-primed with ${count} entries from journal + room history`);
+      };
+      reprime().catch(err => console.error('[ALOIS] Re-prime error:', err));
 
       // Start slow background ingestion of all import archives into Alois brain
       let ingestFeedCount = 0;
