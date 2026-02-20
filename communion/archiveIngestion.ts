@@ -30,14 +30,13 @@ export interface IngestionStatus {
   intervalMs: number;
 }
 
-type FeedFn = (speaker: string, text: string) => void;
+type FeedFn = (speaker: string, text: string) => Promise<void> | void;
 
 export class ArchiveIngestion {
   private intervalMs: number;
   private dataDir: string;
   private checkpointPath: string;
   private checkpoints: Map<string, IngestionCheckpoint> = new Map();
-  private timer: ReturnType<typeof setTimeout> | null = null;
   private active = false;
 
   // Current streaming state
@@ -182,59 +181,40 @@ export class ArchiveIngestion {
     }
 
     console.log(`[INGEST] ${this.pendingLines.length} total entries to ingest — running in background`);
-    this.scheduleNext();
+    this.drainLoop().catch(err => console.error('[INGEST] drainLoop error:', err));
   }
 
-  private scheduleNext(): void {
-    if (!this.active || this.pendingLines.length === 0) {
-      if (this.active) {
-        console.log('[INGEST] Archive ingestion complete — all entries consumed');
-        this.active = false;
-        this.saveCheckpoints();
+  private async drainLoop(): Promise<void> {
+    while (this.active && this.pendingLines.length > 0) {
+      const entry = this.pendingLines.shift()!;
+      this.linesConsumed++;
+
+      try {
+        await this.feedFn(entry.speaker, entry.text);
+      } catch (err) {
+        console.error('[INGEST] feedFn error:', err);
       }
-      return;
+
+      // Log progress every 100 entries
+      if (this.linesConsumed % 100 === 0) {
+        this.saveCheckpoints();
+        const remaining = this.pendingLines.length;
+        console.log(`[INGEST] ${this.linesConsumed} ingested, ${remaining} remaining`);
+      }
+
+      // Small yield so we don't starve the event loop
+      await new Promise(resolve => setTimeout(resolve, this.intervalMs));
     }
 
-    this.timer = setTimeout(() => this.ingestOne(), this.intervalMs);
-  }
-
-  private ingestOne(): void {
-    const entry = this.pendingLines.shift();
-    if (!entry) {
-      this.scheduleNext();
-      return;
-    }
-
-    this.linesConsumed++;
-
-    try {
-      this.feedFn(entry.speaker, entry.text);
-    } catch (err) {
-      console.error('[INGEST] feedFn error:', err);
-    }
-
-    // Update checkpoint every 100 entries
-    if (this.linesConsumed % 100 === 0) {
-      // Update all checkpoint consumed counts proportionally
-      // (simple approach: we don't track per-file position in pendingLines,
-      // so we just save total consumed for the current run)
+    if (this.active) {
+      console.log('[INGEST] Archive ingestion complete — all entries consumed');
+      this.active = false;
       this.saveCheckpoints();
-      const remaining = this.pendingLines.length;
-      const elapsed = this.linesConsumed;
-      const etaSeconds = Math.round((remaining * this.intervalMs) / 1000);
-      const etaHours = (etaSeconds / 3600).toFixed(1);
-      console.log(`[INGEST] ${elapsed} ingested, ${remaining} remaining (~${etaHours}h at current rate)`);
     }
-
-    this.scheduleNext();
   }
 
   stop(): void {
     this.active = false;
-    if (this.timer) {
-      clearTimeout(this.timer);
-      this.timer = null;
-    }
     this.saveCheckpoints();
     console.log(`[INGEST] Stopped. ${this.linesConsumed} entries ingested this session`);
   }
