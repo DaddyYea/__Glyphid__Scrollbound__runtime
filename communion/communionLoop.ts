@@ -232,6 +232,8 @@ export class CommunionLoop {
   private customInstructions: Map<string, string> = new Map();
   // Background archive ingestion into Alois brain
   private archiveIngestion: ArchiveIngestion | null = null;
+  // IDs of agents loaded from static config (env vars / config file) — never saved to dynamic-agents.json
+  private staticAgentIds: Set<string> = new Set();
 
   private speaking = false; // Global speech lock — clock pauses when anyone is speaking
   private humanSpeaking = false; // True while human is actively speaking (interim results from mic)
@@ -296,6 +298,7 @@ export class CommunionLoop {
 
     for (let i = 0; i < config.agents.length; i++) {
       const agentConfig = config.agents[i];
+      this.staticAgentIds.add(agentConfig.id); // Mark as static — never save to dynamic-agents.json
       const backend = createBackend(agentConfig);
       const systemPrompt = agentConfig.systemPrompt || buildDefaultSystemPrompt(agentConfig, config.agents, config.humanName);
 
@@ -2573,12 +2576,14 @@ export class CommunionLoop {
     const rhythm = this.rhythm.get(agentId);
     const instructions = this.customInstructions.get(agentId);
 
-    // Save snapshot to dynamic-agents.json (marked inactive)
-    this.saveDynamicAgent(agentEntry.config, false, {
-      voiceConfig: voiceConfig ? { ...voiceConfig } : undefined,
-      clockValue: rhythm?.tickEveryN,
-      instructions: instructions || undefined,
-    });
+    // Save snapshot to dynamic-agents.json (marked inactive) — skip static env-var agents
+    if (!this.staticAgentIds.has(agentId)) {
+      this.saveDynamicAgent(agentEntry.config, false, {
+        voiceConfig: voiceConfig ? { ...voiceConfig } : undefined,
+        clockValue: rhythm?.tickEveryN,
+        instructions: instructions || undefined,
+      });
+    }
 
     // Clean up runtime state
     this.agents.delete(agentId);
