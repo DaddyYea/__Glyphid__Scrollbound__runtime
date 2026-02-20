@@ -542,7 +542,8 @@ export class CommunionLoop {
       // Start slow background ingestion of all import archives into Alois brain
       this.archiveIngestion = new ArchiveIngestion(
         this.dataDir,
-        (speaker, text, context) => this.feedAloisBrainsAsync(speaker, text, context, speaker === this.state.humanName),
+        // trainOnly=true: archive trains neurons but never pollutes utteranceMemory (retrieval pool)
+        (speaker, text, context) => this.feedAloisBrainsAsync(speaker, text, context, speaker === this.state.humanName, true),
       );
       this.archiveIngestion.start().catch(err =>
         console.error('[INGEST] Failed to start archive ingestion:', err)
@@ -1813,13 +1814,14 @@ export class CommunionLoop {
     }
   }
 
-  /** Async version — awaits all Alois embeds before resolving. Used by archive ingestion to pace ingest rate. */
-  private async feedAloisBrainsAsync(speaker: string, text: string, context?: string, isHuman = false): Promise<void> {
+  /** Async version — awaits all Alois embeds before resolving. Used by archive ingestion to pace ingest rate.
+   * trainOnly=true skips utteranceMemory storage so archive data trains neurons without flooding retrieval. */
+  private async feedAloisBrainsAsync(speaker: string, text: string, context?: string, isHuman = false, trainOnly = false): Promise<void> {
     const promises: Promise<void>[] = [];
     for (const [id, agent] of this.agents.entries()) {
       if (agent.config.provider === 'alois' && 'feedMessage' in agent.backend) {
         promises.push(
-          (agent.backend as any).feedMessage(speaker, text, context, isHuman).catch((err: any) =>
+          (agent.backend as any).feedMessage(speaker, text, context, isHuman, trainOnly).catch((err: any) =>
             console.error(`[ALOIS] Feed error for ${id}:`, err)
           )
         );

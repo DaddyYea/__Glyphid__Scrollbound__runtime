@@ -77,7 +77,7 @@ export class CommunionChamber {
     this.christLoop = new ChristLoop();
   }
 
-  receiveAgentUtterance(agentName: string, text: string, embedding: number[], context?: string) {
+  receiveAgentUtterance(agentName: string, text: string, embedding: number[], context?: string, trainOnly = false) {
     const node = `agent:${agentName}`;
     const result = this.feeder.recordInteraction(node, text, embedding, this.tick);
     if (result) this.lastAffect = result.affect;
@@ -85,25 +85,28 @@ export class CommunionChamber {
     // Also tick a context neuron if provided (e.g. conversation topic/location)
     if (context) this.feeder.recordInteraction(`ctx:${context}`, text, embedding, this.tick);
 
-    // Store in utterance memory for retrieval
-    this.storeUtterance(agentName, text, embedding);
+    // Only store in retrieval memory for live messages — archive ingestion trains only
+    if (!trainOnly) {
+      this.storeUtterance(agentName, text, embedding);
+    }
   }
 
-  receiveUserUtterance(userName: string, text: string, embedding: number[], context?: string) {
+  receiveUserUtterance(userName: string, text: string, embedding: number[], context?: string, trainOnly = false) {
     const result = this.feeder.recordInteraction(userName, text, embedding, this.tick);
     if (result) this.lastAffect = result.affect;
 
     // Also tick a context neuron if provided (e.g. conversation topic/location)
     if (context) this.feeder.recordInteraction(`ctx:${context}`, text, embedding, this.tick);
 
-    this.storeUtterance(userName, text, embedding);
-
-    // Feed into secondary loops
-    this.wonderLoop.tick(text);
-    if (/grief|loss|hurt|pain|sorry|forgive/i.test(text)) {
-      this.christLoop.recordGrief(text);
+    if (!trainOnly) {
+      this.storeUtterance(userName, text, embedding);
+      // Feed into secondary loops (only for live conversation)
+      this.wonderLoop.tick(text);
+      if (/grief|loss|hurt|pain|sorry|forgive/i.test(text)) {
+        this.christLoop.recordGrief(text);
+      }
+      this.memoryCore.setRecentEmotionContext(text.substring(0, 120));
     }
-    this.memoryCore.setRecentEmotionContext(text.substring(0, 120));
   }
 
   private storeUtterance(speaker: string, text: string, embedding: number[]): void {

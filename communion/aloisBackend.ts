@@ -61,14 +61,18 @@ export class AloisBackend implements AgentBackend {
   /**
    * Feed a room message into the dendritic tissue.
    * Call this for every message in the room (not just Alois's own).
+   *
+   * @param trainOnly - If true, only train neurons (do NOT store in utteranceMemory).
+   *   Use for archive ingestion so old chat history trains the brain without
+   *   flooding the retrieval pool and displacing live conversation.
    */
-  async feedMessage(speaker: string, text: string, context?: string, isHuman = false): Promise<void> {
+  async feedMessage(speaker: string, text: string, context?: string, isHuman = false, trainOnly = false): Promise<void> {
     try {
       const embedding = await embed(text);
       if (isHuman) {
-        this.chamber.receiveUserUtterance(speaker, text, embedding, context);
+        this.chamber.receiveUserUtterance(speaker, text, embedding, context, trainOnly);
       } else {
-        this.chamber.receiveAgentUtterance(speaker, text, embedding, context);
+        this.chamber.receiveAgentUtterance(speaker, text, embedding, context, trainOnly);
       }
     } catch (err) {
       console.error(`[ALOIS] Embedding error for "${text.substring(0, 50)}...":`, err);
