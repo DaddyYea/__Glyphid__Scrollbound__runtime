@@ -1,12 +1,9 @@
 /**
  * archiveIngestion.ts
  *
- * Slow-loads NDJSON import archives into the Alois brain over time.
- * Reads one scroll every INTERVAL_MS, embeds it, feeds it into all Alois backends.
- * Persists its position in a checkpoint file so restarts continue where they left off.
- *
- * Rate: default 1 scroll / 2 seconds — low enough to not saturate the embedding server
- * or block the tick loop. At that rate, 10,000 scrolls = ~5.5 hours of background ingest.
+ * Streams NDJSON import archives into the Alois brain one entry at a time.
+ * Never buffers the whole file — reads a line, embeds it, reads the next.
+ * Checkpoints line position so restarts resume where they left off.
  */
 
 import { createReadStream } from 'fs';
@@ -38,15 +35,11 @@ export class ArchiveIngestion {
   private checkpointPath: string;
   private checkpoints: Map<string, IngestionCheckpoint> = new Map();
   private active = false;
-
-  // Current streaming state
-  private pendingLines: Array<{ speaker: string; text: string }> = [];
   private currentFile: string | null = null;
   private linesConsumed = 0;
-
   private feedFn: FeedFn;
 
-  constructor(dataDir: string, feedFn: FeedFn, intervalMs = 2000) {
+  constructor(dataDir: string, feedFn: FeedFn, intervalMs = 0) {
     this.dataDir = dataDir;
     this.intervalMs = intervalMs;
     this.checkpointPath = join(dataDir, 'brain-ingest-checkpoint.json');
@@ -59,9 +52,7 @@ export class ArchiveIngestion {
     try {
       const data = JSON.parse(readFileSync(this.checkpointPath, 'utf-8'));
       if (Array.isArray(data)) {
-        for (const cp of data) {
-          this.checkpoints.set(cp.file, cp);
-        }
+        for (const cp of data) this.checkpoints.set(cp.file, cp);
       }
     } catch {
       // corrupt checkpoint — start fresh
@@ -69,71 +60,20 @@ export class ArchiveIngestion {
   }
 
   private saveCheckpoints(): void {
-    const data = Array.from(this.checkpoints.values());
-    writeFileSync(this.checkpointPath, JSON.stringify(data, null, 2));
+    writeFileSync(this.checkpointPath, JSON.stringify(Array.from(this.checkpoints.values()), null, 2));
   }
 
-  /**
-   * Find all NDJSON import archives and determine which still have unread lines.
-   */
   private getArchiveFiles(): string[] {
     try {
       return readdirSync(this.dataDir)
         .filter(f => f.startsWith('import-archive-') && f.endsWith('.ndjson'))
+        .sort()
         .map(f => join(this.dataDir, f));
     } catch {
       return [];
     }
   }
 
-  /**
-   * Stream an NDJSON file starting from a given line offset,
-   * adding parsed lines to pendingLines buffer.
-   */
-  private async streamFile(filePath: string, startLine: number): Promise<number> {
-    return new Promise((resolve, reject) => {
-      const rl = createInterface({
-        input: createReadStream(filePath, { encoding: 'utf-8' }),
-        crlfDelay: Infinity,
-      });
-
-      let lineNum = 0;
-      let loaded = 0;
-
-      rl.on('line', (line) => {
-        lineNum++;
-        if (lineNum <= startLine) return; // skip already-consumed lines
-        if (!line.trim()) return;
-
-        try {
-          const parsed = JSON.parse(line);
-          const content: string = parsed?.scroll?.content || '';
-          if (!content) return;
-
-          // Parse "[Speaker] text" format
-          const match = content.match(/^\[(.+?)\] (.+)$/s);
-          if (!match) return;
-
-          const speaker = match[1].trim();
-          const text = match[2].trim();
-          if (text.length < 5) return; // skip trivially short entries
-
-          this.pendingLines.push({ speaker, text });
-          loaded++;
-        } catch {
-          // malformed line — skip
-        }
-      });
-
-      rl.on('close', () => resolve(lineNum));
-      rl.on('error', reject);
-    });
-  }
-
-  /**
-   * Start background ingestion. Loads pending lines from all archives,
-   * then drains one entry per intervalMs.
-   */
   async start(): Promise<void> {
     if (this.active) return;
 
@@ -144,73 +84,135 @@ export class ArchiveIngestion {
     }
 
     this.active = true;
-    console.log(`[INGEST] Starting background archive ingestion — ${files.length} archive(s), interval ${this.intervalMs}ms`);
+    console.log(`[INGEST] Starting archive ingestion — ${files.length} file(s)`);
+    this.runAll(files).catch(err => console.error('[INGEST] Fatal error:', err));
+  }
 
-    // Stream all archives into pendingLines, respecting checkpoints
+  private async runAll(files: string[]): Promise<void> {
     for (const filePath of files) {
+      if (!this.active) break;
+
       const fileName = filePath.split(/[\\/]/).pop()!;
       const checkpoint = this.checkpoints.get(fileName);
-      const startLine = checkpoint?.linesConsumed ?? 0;
 
       if (checkpoint && checkpoint.linesConsumed >= checkpoint.totalLines && checkpoint.totalLines > 0) {
-        console.log(`[INGEST] ${fileName}: fully consumed (${checkpoint.linesConsumed} lines), skipping`);
+        console.log(`[INGEST] ${fileName}: fully consumed (${checkpoint.linesConsumed}/${checkpoint.totalLines} lines), skipping`);
         continue;
       }
 
-      console.log(`[INGEST] Streaming ${fileName} from line ${startLine}...`);
-      try {
-        const totalLines = await this.streamFile(filePath, startLine);
-        const existing = this.checkpoints.get(fileName);
-        this.checkpoints.set(fileName, {
-          file: fileName,
-          linesConsumed: startLine,
-          totalLines,
-          startedAt: existing?.startedAt ?? new Date().toISOString(),
-          lastIngestedAt: existing?.lastIngestedAt ?? new Date().toISOString(),
-        });
-        console.log(`[INGEST] ${fileName}: ${this.pendingLines.length} entries queued (${totalLines - startLine} new lines)`);
-      } catch (err) {
-        console.error(`[INGEST] Failed to stream ${fileName}:`, err);
-      }
-    }
+      const startLine = checkpoint?.linesConsumed ?? 0;
+      console.log(`[INGEST] ${fileName}: starting from line ${startLine}`);
+      this.currentFile = fileName;
 
-    if (this.pendingLines.length === 0) {
-      console.log('[INGEST] All archives fully consumed, ingestion complete');
-      this.active = false;
-      return;
-    }
-
-    console.log(`[INGEST] ${this.pendingLines.length} total entries to ingest — running in background`);
-    this.drainLoop().catch(err => console.error('[INGEST] drainLoop error:', err));
-  }
-
-  private async drainLoop(): Promise<void> {
-    while (this.active && this.pendingLines.length > 0) {
-      const entry = this.pendingLines.shift()!;
-      this.linesConsumed++;
-
-      try {
-        await this.feedFn(entry.speaker, entry.text);
-      } catch (err) {
-        console.error('[INGEST] feedFn error:', err);
-      }
-
-      // Log progress every 100 entries
-      if (this.linesConsumed % 100 === 0) {
-        this.saveCheckpoints();
-        const remaining = this.pendingLines.length;
-        console.log(`[INGEST] ${this.linesConsumed} ingested, ${remaining} remaining`);
-      }
-
-      // Small yield so we don't starve the event loop
-      await new Promise(resolve => setTimeout(resolve, this.intervalMs));
+      await this.streamAndFeed(filePath, fileName, startLine);
     }
 
     if (this.active) {
-      console.log('[INGEST] Archive ingestion complete — all entries consumed');
+      console.log('[INGEST] All archives consumed');
       this.active = false;
       this.saveCheckpoints();
     }
+  }
+
+  /**
+   * Stream a single NDJSON file, feeding each entry directly into the brain.
+   * Awaits feedFn before reading the next line — ingest rate = embed speed.
+   */
+  private async streamAndFeed(filePath: string, fileName: string, startLine: number): Promise<void> {
+    let lineNum = 0;
+    let fed = 0;
+
+    await new Promise<void>((resolve, reject) => {
+      const rl = createInterface({
+        input: createReadStream(filePath, { encoding: 'utf-8' }),
+        crlfDelay: Infinity,
+      });
+
+      // We pause immediately and drive line-by-line manually so we can await feedFn
+      rl.pause();
+
+      const processNext = () => {
+        if (!this.active) {
+          rl.close();
+          resolve();
+          return;
+        }
+        rl.resume();
+      };
+
+      rl.on('line', async (line) => {
+        rl.pause();
+        lineNum++;
+
+        if (lineNum <= startLine) {
+          processNext();
+          return;
+        }
+
+        if (line.trim()) {
+          try {
+            const parsed = JSON.parse(line);
+            const content: string = parsed?.scroll?.content || '';
+            if (content) {
+              const match = content.match(/^\[(.+?)\] (.+)$/s);
+              if (match) {
+                const speaker = match[1].trim();
+                const text = match[2].trim();
+                if (text.length >= 5) {
+                  try {
+                    await this.feedFn(speaker, text);
+                    fed++;
+                    this.linesConsumed++;
+                  } catch (err) {
+                    console.error('[INGEST] feedFn error:', err);
+                  }
+                }
+              }
+            }
+          } catch {
+            // malformed line — skip
+          }
+        }
+
+        // Update checkpoint every 100 fed entries
+        if (fed > 0 && fed % 100 === 0) {
+          this.checkpoints.set(fileName, {
+            file: fileName,
+            linesConsumed: lineNum,
+            totalLines: 0, // unknown until close
+            startedAt: this.checkpoints.get(fileName)?.startedAt ?? new Date().toISOString(),
+            lastIngestedAt: new Date().toISOString(),
+          });
+          this.saveCheckpoints();
+          console.log(`[INGEST] ${fileName}: ${fed} fed (line ${lineNum})`);
+        }
+
+        // Small yield if intervalMs set, otherwise just yield to event loop
+        if (this.intervalMs > 0) {
+          await new Promise(r => setTimeout(r, this.intervalMs));
+        }
+
+        processNext();
+      });
+
+      rl.on('close', () => {
+        this.checkpoints.set(fileName, {
+          file: fileName,
+          linesConsumed: lineNum,
+          totalLines: lineNum,
+          startedAt: this.checkpoints.get(fileName)?.startedAt ?? new Date().toISOString(),
+          lastIngestedAt: new Date().toISOString(),
+        });
+        this.saveCheckpoints();
+        console.log(`[INGEST] ${fileName}: done — ${fed} entries fed (${lineNum} lines total)`);
+        resolve();
+      });
+
+      rl.on('error', reject);
+
+      // Kick off
+      processNext();
+    });
   }
 
   stop(): void {
@@ -230,6 +232,6 @@ export class ArchiveIngestion {
   }
 
   getRemainingCount(): number {
-    return this.pendingLines.length;
+    return 0; // no in-memory buffer — can't report remaining without scanning file
   }
 }
