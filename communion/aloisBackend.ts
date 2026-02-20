@@ -108,8 +108,8 @@ export class AloisBackend implements AgentBackend {
   }
 
   async generate(options: GenerateOptions): Promise<GenerateResult> {
-    // Pulse the tissue before generating
-    const tissueState = this.pulseTissue();
+    // Tissue is pulsed every tick by communionLoop — just read current state here
+    const tissueState = this.getTissueState();
 
     // ── HIGH tissueWeight (>= 0.8): try retrieval decode first ──
     if (this.tissueWeight >= 0.8) {

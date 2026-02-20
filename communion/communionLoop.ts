@@ -1185,6 +1185,13 @@ export class CommunionLoop {
       }
     }
 
+    // ── Pulse all Alois tissue every tick (not just during generate) ──
+    for (const [, agent] of this.agents) {
+      if (agent.config.provider === 'alois' && 'pulseTissue' in agent.backend) {
+        (agent.backend as any).pulseTissue();
+      }
+    }
+
     // ── Staggered agent activation ──
     // Sort agents by micro-tick offset so they activate in a natural staggered order
     // Per-agent clock: positive = every Nth tick (slow), negative = N turns per tick (fast), 1 = normal

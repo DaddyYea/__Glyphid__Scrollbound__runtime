@@ -51,6 +51,10 @@ export class DendriticGraph {
     for (const axon of this.axons) axon.propagate(globalTick);
   }
 
+  getAxons(): AxonBus[] {
+    return this.axons;
+  }
+
   getNeuronIds(): string[] {
     return Array.from(this.neurons.keys());
   }

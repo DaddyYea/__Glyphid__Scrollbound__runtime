@@ -20,17 +20,37 @@ export class DendriticCell {
     const spikes: number[][] = [];
 
     for (const spine of this.spines) {
-      const score = spine.similarity(input) * this.affectMagnitude();
-      if (score > 0.6) {
+      // Use raw similarity for gating — not multiplied by affect (affect was always 0)
+      const score = spine.similarity(input);
+      if (score > 0.3) {
         const updated = spine.update(input);
         spikes.push(updated);
       }
+    }
+
+    // First tick: all spines empty, seed the first spine unconditionally
+    if (spikes.length === 0 && this.resonanceMemory.length === 0) {
+      spikes.push(this.spines[0].update(input));
     }
 
     if (spikes.length > 0) {
       const mean = this.meanVector(spikes);
       this.resonanceMemory.push(mean);
       if (spikes.length > 4) this.spines.push(new Spine(this.dim));
+
+      // Update affect from spike activity:
+      // - intensity = fraction of spines that fired (0-1)
+      // - inputMag = magnitude of incoming embedding
+      // Each affect dimension receives a signal based on different frequency components
+      const intensity = spikes.length / this.spines.length;
+      const inputMag = Math.sqrt(input.reduce((s, v) => s + v * v, 0)) / Math.sqrt(input.length);
+      const signal = intensity * inputMag;
+      const decay = 0.85;
+      for (let i = 0; i < this.affect.length; i++) {
+        // Different dims modulated by different embedding bands
+        const band = Math.abs(input[Math.floor((i / this.affect.length) * input.length)] || 0);
+        this.affect[i] = this.affect[i] * decay + band * signal * (1 - decay);
+      }
     }
 
     if (this.resonanceMemory.length > 64) this.resonanceMemory.shift();
