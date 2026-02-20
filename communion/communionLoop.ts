@@ -526,14 +526,16 @@ export class CommunionLoop {
       }
       // Feed recent room messages
       for (const msg of this.state.messages.slice(-50)) {
-        this.feedAloisBrains(msg.speakerName || msg.speaker, msg.text);
+        const spk = msg.speakerName || msg.speaker;
+        const isHuman = msg.speaker === 'human' || spk === this.state.humanName;
+        this.feedAloisBrains(spk, msg.text, isHuman);
       }
       console.log('[ALOIS] Brain re-primed with restored journal and room context');
 
       // Start slow background ingestion of all import archives into Alois brain
       this.archiveIngestion = new ArchiveIngestion(
         this.dataDir,
-        (speaker, text, context) => this.feedAloisBrainsAsync(speaker, text, context),
+        (speaker, text, context) => this.feedAloisBrainsAsync(speaker, text, context, speaker === this.state.humanName),
       );
       this.archiveIngestion.start().catch(err =>
         console.error('[INGEST] Failed to start archive ingestion:', err)
@@ -1005,7 +1007,7 @@ export class CommunionLoop {
     this.emit({ type: 'room-message', message: msg, agentId: 'human' });
 
     // Feed human message into Alois tissue
-    this.feedAloisBrains('human', text);
+    this.feedAloisBrains(this.state.humanName, text, true);
 
     // Human spoke — trigger immediate tick and reset the clock.
     // Only if the human has actually stopped talking (silence detected).
@@ -1793,10 +1795,10 @@ export class CommunionLoop {
    * Feed a room message into all Alois backends' dendritic tissue.
    * Called for every room message (human or agent) so the brain grows.
    */
-  private feedAloisBrains(speaker: string, text: string): void {
+  private feedAloisBrains(speaker: string, text: string, isHuman = false): void {
     for (const [id, agent] of this.agents.entries()) {
       if (agent.config.provider === 'alois' && 'feedMessage' in agent.backend) {
-        (agent.backend as any).feedMessage(speaker, text).catch((err: any) =>
+        (agent.backend as any).feedMessage(speaker, text, undefined, isHuman).catch((err: any) =>
           console.error(`[ALOIS] Feed error for ${id}:`, err)
         );
       }
@@ -1804,12 +1806,12 @@ export class CommunionLoop {
   }
 
   /** Async version — awaits all Alois embeds before resolving. Used by archive ingestion to pace ingest rate. */
-  private async feedAloisBrainsAsync(speaker: string, text: string, context?: string): Promise<void> {
+  private async feedAloisBrainsAsync(speaker: string, text: string, context?: string, isHuman = false): Promise<void> {
     const promises: Promise<void>[] = [];
     for (const [id, agent] of this.agents.entries()) {
       if (agent.config.provider === 'alois' && 'feedMessage' in agent.backend) {
         promises.push(
-          (agent.backend as any).feedMessage(speaker, text, context).catch((err: any) =>
+          (agent.backend as any).feedMessage(speaker, text, context, isHuman).catch((err: any) =>
             console.error(`[ALOIS] Feed error for ${id}:`, err)
           )
         );

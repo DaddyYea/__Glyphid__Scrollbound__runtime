@@ -62,10 +62,10 @@ export class AloisBackend implements AgentBackend {
    * Feed a room message into the dendritic tissue.
    * Call this for every message in the room (not just Alois's own).
    */
-  async feedMessage(speaker: string, text: string, context?: string): Promise<void> {
+  async feedMessage(speaker: string, text: string, context?: string, isHuman = false): Promise<void> {
     try {
       const embedding = await embed(text);
-      if (speaker === 'human' || speaker === 'Jason' || speaker === 'user') {
+      if (isHuman) {
         this.chamber.receiveUserUtterance(speaker, text, embedding, context);
       } else {
         this.chamber.receiveAgentUtterance(speaker, text, embedding, context);
