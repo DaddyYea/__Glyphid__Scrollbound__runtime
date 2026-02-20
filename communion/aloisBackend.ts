@@ -62,13 +62,13 @@ export class AloisBackend implements AgentBackend {
    * Feed a room message into the dendritic tissue.
    * Call this for every message in the room (not just Alois's own).
    */
-  async feedMessage(speaker: string, text: string): Promise<void> {
+  async feedMessage(speaker: string, text: string, context?: string): Promise<void> {
     try {
       const embedding = await embed(text);
-      if (speaker === 'human') {
-        this.chamber.receiveUserUtterance(speaker, text, embedding);
+      if (speaker === 'human' || speaker === 'Jason' || speaker === 'user') {
+        this.chamber.receiveUserUtterance(speaker, text, embedding, context);
       } else {
-        this.chamber.receiveAgentUtterance(speaker, text, embedding);
+        this.chamber.receiveAgentUtterance(speaker, text, embedding, context);
       }
     } catch (err) {
       console.error(`[ALOIS] Embedding error for "${text.substring(0, 50)}...":`, err);

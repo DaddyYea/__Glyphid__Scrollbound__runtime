@@ -27,7 +27,7 @@ export interface IngestionStatus {
   intervalMs: number;
 }
 
-type FeedFn = (speaker: string, text: string) => Promise<void> | void;
+type FeedFn = (speaker: string, text: string, context?: string) => Promise<void> | void;
 
 export class ArchiveIngestion {
   private intervalMs: number;
@@ -158,9 +158,14 @@ export class ArchiveIngestion {
               if (match) {
                 const speaker = match[1].trim();
                 const text = match[2].trim();
+                // Extract conversation topic from location (last path segment)
+                const rawLocation: string = parsed?.scroll?.location || '';
+                const context = rawLocation
+                  ? rawLocation.split('/').filter(Boolean).pop()
+                  : undefined;
                 if (text.length >= 5) {
                   try {
-                    await this.feedFn(speaker, text);
+                    await this.feedFn(speaker, text, context);
                     fed++;
                     this.linesConsumed++;
                   } catch (err) {

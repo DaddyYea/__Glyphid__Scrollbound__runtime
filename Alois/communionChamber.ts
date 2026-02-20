@@ -77,18 +77,24 @@ export class CommunionChamber {
     this.christLoop = new ChristLoop();
   }
 
-  receiveAgentUtterance(agentName: string, text: string, embedding: number[]) {
+  receiveAgentUtterance(agentName: string, text: string, embedding: number[], context?: string) {
     const node = `agent:${agentName}`;
     const result = this.feeder.recordInteraction(node, text, embedding, this.tick);
     if (result) this.lastAffect = result.affect;
+
+    // Also tick a context neuron if provided (e.g. conversation topic/location)
+    if (context) this.feeder.recordInteraction(`ctx:${context}`, text, embedding, this.tick);
 
     // Store in utterance memory for retrieval
     this.storeUtterance(agentName, text, embedding);
   }
 
-  receiveUserUtterance(userName: string, text: string, embedding: number[]) {
+  receiveUserUtterance(userName: string, text: string, embedding: number[], context?: string) {
     const result = this.feeder.recordInteraction(userName, text, embedding, this.tick);
     if (result) this.lastAffect = result.affect;
+
+    // Also tick a context neuron if provided (e.g. conversation topic/location)
+    if (context) this.feeder.recordInteraction(`ctx:${context}`, text, embedding, this.tick);
 
     this.storeUtterance(userName, text, embedding);
 

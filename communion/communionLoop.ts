@@ -533,7 +533,7 @@ export class CommunionLoop {
       // Start slow background ingestion of all import archives into Alois brain
       this.archiveIngestion = new ArchiveIngestion(
         this.dataDir,
-        (speaker, text) => this.feedAloisBrainsAsync(speaker, text),
+        (speaker, text, context) => this.feedAloisBrainsAsync(speaker, text, context),
       );
       this.archiveIngestion.start().catch(err =>
         console.error('[INGEST] Failed to start archive ingestion:', err)
@@ -1804,12 +1804,12 @@ export class CommunionLoop {
   }
 
   /** Async version — awaits all Alois embeds before resolving. Used by archive ingestion to pace ingest rate. */
-  private async feedAloisBrainsAsync(speaker: string, text: string): Promise<void> {
+  private async feedAloisBrainsAsync(speaker: string, text: string, context?: string): Promise<void> {
     const promises: Promise<void>[] = [];
     for (const [id, agent] of this.agents.entries()) {
       if (agent.config.provider === 'alois' && 'feedMessage' in agent.backend) {
         promises.push(
-          (agent.backend as any).feedMessage(speaker, text).catch((err: any) =>
+          (agent.backend as any).feedMessage(speaker, text, context).catch((err: any) =>
             console.error(`[ALOIS] Feed error for ${id}:`, err)
           )
         );
