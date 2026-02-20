@@ -552,17 +552,21 @@ export class CommunionLoop {
           ingestFeedCount++;
           // Save brain every 1000 entries so a restart doesn't lose all ingested neurons
           if (ingestFeedCount % 1000 === 0) {
+            let saved = false;
             for (const [agentId, agent] of this.agents) {
               if ('saveBrain' in agent.backend) {
                 const brainPath = join(this.dataDir, 'brain-tissue.json');
                 try {
                   (agent.backend as any).saveBrain(brainPath);
                   console.log(`[INGEST] Brain checkpoint saved at ${ingestFeedCount} entries`);
+                  saved = true;
                 } catch (err) {
                   console.error(`[ALOIS] Ingest brain-save error for ${agentId}:`, err);
                 }
               }
             }
+            // Mark checkpoint as brain-persisted so a clean restart won't re-run completed files
+            if (saved) this.archiveIngestion?.markBrainPersisted();
           }
         },
       );

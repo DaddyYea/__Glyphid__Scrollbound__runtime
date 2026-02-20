@@ -17,6 +17,8 @@ export interface IngestionCheckpoint {
   totalLines: number;
   startedAt: string;
   lastIngestedAt: string;
+  /** True only if the brain was actually saved after ingestion completed — safe to skip on next run */
+  brainPersisted?: boolean;
 }
 
 export interface IngestionStatus {
@@ -95,8 +97,8 @@ export class ArchiveIngestion {
       const fileName = filePath.split(/[\\/]/).pop()!;
       const checkpoint = this.checkpoints.get(fileName);
 
-      if (checkpoint && checkpoint.linesConsumed >= checkpoint.totalLines && checkpoint.totalLines > 0) {
-        console.log(`[INGEST] ${fileName}: fully consumed (${checkpoint.linesConsumed}/${checkpoint.totalLines} lines), skipping`);
+      if (checkpoint && checkpoint.linesConsumed >= checkpoint.totalLines && checkpoint.totalLines > 0 && checkpoint.brainPersisted) {
+        console.log(`[INGEST] ${fileName}: fully consumed and brain persisted (${checkpoint.linesConsumed}/${checkpoint.totalLines} lines), skipping`);
         continue;
       }
 
@@ -186,6 +188,16 @@ export class ArchiveIngestion {
       this.saveCheckpoints();
       console.log(`[INGEST] ${fileName}: done — ${fed} entries fed (${lineNum} lines total)`);
     }
+  }
+
+  /** Call this after successfully saving the brain to disk — marks checkpoint as safe to skip on restart */
+  markBrainPersisted(): void {
+    for (const [fileName, cp] of this.checkpoints) {
+      if (cp.totalLines > 0 && cp.linesConsumed >= cp.totalLines) {
+        cp.brainPersisted = true;
+      }
+    }
+    this.saveCheckpoints();
   }
 
   stop(): void {
