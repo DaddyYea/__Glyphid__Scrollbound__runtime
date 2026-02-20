@@ -116,108 +116,76 @@ export class ArchiveIngestion {
 
   /**
    * Stream a single NDJSON file, feeding each entry directly into the brain.
-   * Awaits feedFn before reading the next line — ingest rate = embed speed.
+   * Uses async iterator so feedFn is properly awaited before the next line is read.
    */
   private async streamAndFeed(filePath: string, fileName: string, startLine: number): Promise<void> {
     let lineNum = 0;
     let fed = 0;
 
-    await new Promise<void>((resolve, reject) => {
-      const rl = createInterface({
-        input: createReadStream(filePath, { encoding: 'utf-8' }),
-        crlfDelay: Infinity,
-      });
+    const rl = createInterface({
+      input: createReadStream(filePath, { encoding: 'utf-8' }),
+      crlfDelay: Infinity,
+    });
 
-      // We pause immediately and drive line-by-line manually so we can await feedFn
-      rl.pause();
+    try {
+      for await (const line of rl) {
+        if (!this.active) break;
 
-      const processNext = () => {
-        if (!this.active) {
-          rl.close();
-          resolve();
-          return;
-        }
-        rl.resume();
-      };
-
-      rl.on('line', async (line) => {
-        rl.pause();
         lineNum++;
+        if (lineNum <= startLine) continue;
+        if (!line.trim()) continue;
 
-        if (lineNum <= startLine) {
-          processNext();
-          return;
-        }
+        try {
+          const parsed = JSON.parse(line);
+          const content: string = parsed?.scroll?.content || '';
+          if (content) {
+            const match = content.match(/^\[(.+?)\] (.+)$/s);
+            if (match) {
+              const speaker = match[1].trim();
+              const text = match[2].trim();
+              const rawLocation: string = parsed?.scroll?.location || '';
+              const context = rawLocation
+                ? rawLocation.split('/').filter(Boolean).pop()
+                : undefined;
+              if (text.length >= 5) {
+                await this.feedFn(speaker, text, context);
+                fed++;
+                this.linesConsumed++;
 
-        if (line.trim()) {
-          try {
-            const parsed = JSON.parse(line);
-            const content: string = parsed?.scroll?.content || '';
-            if (content) {
-              const match = content.match(/^\[(.+?)\] (.+)$/s);
-              if (match) {
-                const speaker = match[1].trim();
-                const text = match[2].trim();
-                // Extract conversation topic from location (last path segment)
-                const rawLocation: string = parsed?.scroll?.location || '';
-                const context = rawLocation
-                  ? rawLocation.split('/').filter(Boolean).pop()
-                  : undefined;
-                if (text.length >= 5) {
-                  try {
-                    await this.feedFn(speaker, text, context);
-                    fed++;
-                    this.linesConsumed++;
-                  } catch (err) {
-                    console.error('[INGEST] feedFn error:', err);
-                  }
+                if (fed % 100 === 0) {
+                  this.checkpoints.set(fileName, {
+                    file: fileName,
+                    linesConsumed: lineNum,
+                    totalLines: 0,
+                    startedAt: this.checkpoints.get(fileName)?.startedAt ?? new Date().toISOString(),
+                    lastIngestedAt: new Date().toISOString(),
+                  });
+                  this.saveCheckpoints();
+                  console.log(`[INGEST] ${fileName}: ${fed} fed (line ${lineNum})`);
+                }
+
+                if (this.intervalMs > 0) {
+                  await new Promise(r => setTimeout(r, this.intervalMs));
                 }
               }
             }
-          } catch {
-            // malformed line — skip
           }
+        } catch {
+          // malformed line — skip
         }
-
-        // Update checkpoint every 100 fed entries
-        if (fed > 0 && fed % 100 === 0) {
-          this.checkpoints.set(fileName, {
-            file: fileName,
-            linesConsumed: lineNum,
-            totalLines: 0, // unknown until close
-            startedAt: this.checkpoints.get(fileName)?.startedAt ?? new Date().toISOString(),
-            lastIngestedAt: new Date().toISOString(),
-          });
-          this.saveCheckpoints();
-          console.log(`[INGEST] ${fileName}: ${fed} fed (line ${lineNum})`);
-        }
-
-        // Small yield if intervalMs set, otherwise just yield to event loop
-        if (this.intervalMs > 0) {
-          await new Promise(r => setTimeout(r, this.intervalMs));
-        }
-
-        processNext();
+      }
+    } finally {
+      rl.close();
+      this.checkpoints.set(fileName, {
+        file: fileName,
+        linesConsumed: lineNum,
+        totalLines: lineNum,
+        startedAt: this.checkpoints.get(fileName)?.startedAt ?? new Date().toISOString(),
+        lastIngestedAt: new Date().toISOString(),
       });
-
-      rl.on('close', () => {
-        this.checkpoints.set(fileName, {
-          file: fileName,
-          linesConsumed: lineNum,
-          totalLines: lineNum,
-          startedAt: this.checkpoints.get(fileName)?.startedAt ?? new Date().toISOString(),
-          lastIngestedAt: new Date().toISOString(),
-        });
-        this.saveCheckpoints();
-        console.log(`[INGEST] ${fileName}: done — ${fed} entries fed (${lineNum} lines total)`);
-        resolve();
-      });
-
-      rl.on('error', reject);
-
-      // Kick off
-      processNext();
-    });
+      this.saveCheckpoints();
+      console.log(`[INGEST] ${fileName}: done — ${fed} entries fed (${lineNum} lines total)`);
+    }
   }
 
   stop(): void {
