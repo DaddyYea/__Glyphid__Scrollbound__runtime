@@ -512,7 +512,7 @@ export class CommunionLoop {
         }
       }
     }
-    console.log('[COMMUNION] Journals loaded from disk');
+    console.log('[COMMUNION] Journals loaded from disk (static agents)');
 
     // ── Load imported chat history archives ──
     await this.loadImportedArchives();
@@ -520,6 +520,29 @@ export class CommunionLoop {
     // ── Restore dynamically-added agents from previous sessions ──
     // MUST happen before the hasAlois check — Alois is a dynamic agent
     this.loadDynamicAgents();
+
+    // ── Load journals for dynamic agents (e.g. Alois) added above ──
+    // addAgent() sets state.journals[id] = [] then calls journal.initialize()
+    // without awaiting, so we must explicitly load them here after the fact.
+    for (const [agentId, journal] of this.journals) {
+      if (this.state.journals[agentId]?.length > 0) continue; // already loaded
+      await journal.initialize();
+      const recent = await journal.getRecent(50);
+      if (!this.state.journals[agentId]) this.state.journals[agentId] = [];
+      for (const entry of recent) {
+        this.state.journals[agentId].push({
+          id: entry['@id'],
+          speaker: agentId,
+          speakerName: this.state.agentNames[agentId],
+          text: entry.content,
+          timestamp: entry.timestamp,
+          type: 'journal',
+        });
+      }
+      if (recent.length > 0) {
+        console.log(`[COMMUNION] Loaded ${recent.length} journal entries for dynamic agent ${agentId}`);
+      }
+    }
 
     // ── Feed restored journal + room content into Alois brains ──
     // The brain's dendritic state is restored from brain-tissue.json, but the
@@ -2550,7 +2573,8 @@ export class CommunionLoop {
     this.state.agentNames[agentConfig.id] = agentConfig.name;
     const colorIndex = this.state.agentIds.length - 1;
     this.state.agentColors[agentConfig.id] = agentConfig.color || DEFAULT_COLORS[colorIndex % DEFAULT_COLORS.length];
-    this.state.journals[agentConfig.id] = [];
+    // Don't clobber journal entries that may already be loaded from disk
+    if (!this.state.journals[agentConfig.id]) this.state.journals[agentConfig.id] = [];
 
     // Journal on disk
     const journalPath = `${this.dataDir}/journal-${agentConfig.id}.jsonld`;
