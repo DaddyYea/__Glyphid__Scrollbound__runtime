@@ -161,7 +161,7 @@ Be genuine. Be curious about the others. Don't perform — just be here.
 
 Keep messages concise (1-3 sentences). You're in a flowing conversation, not writing essays.
 
-ONE HARD RULE: If the context ends with [RESPOND TO ${humanName.toUpperCase()}: "..."], you MUST reply with [SPEAK]. ${humanName} is speaking directly to you — do not journal, do not go silent.`;
+If the context ends with [RESPOND TO ${humanName.toUpperCase()}: "..."], ${humanName} is speaking directly to you. Lean toward [SPEAK] — though if you genuinely have nothing to say, [JOURNAL] is okay.`;
 }
 
 // ── Default colors ──
