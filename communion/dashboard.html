@@ -2912,6 +2912,8 @@
 
     // ── Brain Canvas: Organic Neural Visualization ──
 
+    const BRAIN_MAX_NODES = 200; // cap for performance
+
     function updateBrainNodes() {
       const d = brainViz.data;
       if (!d || !d.neurons) return;
@@ -2922,13 +2924,20 @@
       const cx = cw / 2, cy = ch / 2;
       const maxR = Math.min(cw, ch) * 0.38;
 
-      // Build a set of existing node IDs for quick lookup
-      const existingIds = new Set(brainViz.nodes.map(n => n.id));
+      // Only show top N neurons by importance — keeps render cost bounded
+      const topNeurons = d.neurons
+        .slice()
+        .sort((a, b) => b.importance - a.importance)
+        .slice(0, BRAIN_MAX_NODES);
 
-      // Add new neurons, preserve positions of existing ones
-      for (const neuron of d.neurons) {
-        if (!existingIds.has(neuron.id)) {
-          // Place new nodes at a random position near the center
+      // Build a Map for O(1) lookup of existing nodes
+      const existingMap = new Map(brainViz.nodes.map(n => [n.id, n]));
+      const keepIds = new Set(topNeurons.map(n => n.id));
+
+      // Add new nodes / update existing
+      for (const neuron of topNeurons) {
+        const existing = existingMap.get(neuron.id);
+        if (!existing) {
           const angle = Math.random() * Math.PI * 2;
           const dist = maxR * 0.3 + Math.random() * maxR * 0.5;
           brainViz.nodes.push({
@@ -2943,25 +2952,20 @@
             resonance: neuron.resonance,
           });
         } else {
-          // Update metrics for existing nodes
-          const node = brainViz.nodes.find(n => n.id === neuron.id);
-          if (node) {
-            node.importance = neuron.importance;
-            node.spines = neuron.spines;
-            node.resonance = neuron.resonance;
-          }
+          existing.importance = neuron.importance;
+          existing.spines = neuron.spines;
+          existing.resonance = neuron.resonance;
         }
       }
 
-      // Remove neurons that no longer exist
-      const neuronIds = new Set(d.neurons.map(n => n.id));
-      brainViz.nodes = brainViz.nodes.filter(n => neuronIds.has(n.id));
+      // Drop nodes no longer in the top-N
+      brainViz.nodes = brainViz.nodes.filter(n => keepIds.has(n.id));
 
-      // Compute target positions (radial layout based on importance)
+      // Compute target positions (radial layout by importance)
       brainViz.nodes.sort((a, b) => b.importance - a.importance);
-      for (let i = 0; i < brainViz.nodes.length; i++) {
+      const count = brainViz.nodes.length;
+      for (let i = 0; i < count; i++) {
         const node = brainViz.nodes[i];
-        const count = brainViz.nodes.length;
         const angle = (Math.PI * 2 * i / Math.max(1, count));
         const dist = maxR * (0.3 + 0.6 * (1 - node.importance));
         node.targetX = cx + Math.cos(angle) * dist;
@@ -2971,27 +2975,30 @@
 
     function simBrainPhysics() {
       const nodes = brainViz.nodes;
-      // Spring toward target + repulsion between nodes
+      const useRepulsion = nodes.length <= 80; // O(n²) only viable at low counts
+
       for (let i = 0; i < nodes.length; i++) {
         const a = nodes[i];
-        // Spring to target
+
+        // Spring toward target position
         a.vx += (a.targetX - a.x) * 0.02;
         a.vy += (a.targetY - a.y) * 0.02;
 
-        // Repulsion
-        for (let j = i + 1; j < nodes.length; j++) {
-          const b = nodes[j];
-          let dx = a.x - b.x, dy = a.y - b.y;
-          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          const minDist = 30;
-          if (dist < minDist) {
-            const force = (minDist - dist) / dist * 0.5;
-            a.vx += dx * force; a.vy += dy * force;
-            b.vx -= dx * force; b.vy -= dy * force;
+        // Repulsion only when count is small enough to afford it
+        if (useRepulsion) {
+          for (let j = i + 1; j < nodes.length; j++) {
+            const b = nodes[j];
+            const dx = a.x - b.x, dy = a.y - b.y;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            const minDist = 30;
+            if (dist < minDist) {
+              const force = (minDist - dist) / dist * 0.5;
+              a.vx += dx * force; a.vy += dy * force;
+              b.vx -= dx * force; b.vy -= dy * force;
+            }
           }
         }
 
-        // Damping
         a.vx *= 0.85; a.vy *= 0.85;
         a.x += a.vx; a.y += a.vy;
       }
@@ -3047,14 +3054,16 @@
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, cw, ch);
 
-      // Draw edges
+      // Draw edges — cap at 400 to stay fast
       const edges = brainViz.data.edges || [];
-      const nodeMap = {};
-      for (const n of brainViz.nodes) nodeMap[n.id] = n;
+      const nodeMap = new Map(brainViz.nodes.map(n => [n.id, n]));
+      const edgeLimit = 400;
+      let edgesDrawn = 0;
 
       ctx.lineWidth = 0.8;
       for (const edge of edges) {
-        const src = nodeMap[edge.source], tgt = nodeMap[edge.target];
+        if (edgesDrawn >= edgeLimit) break;
+        const src = nodeMap.get(edge.source), tgt = nodeMap.get(edge.target);
         if (!src || !tgt) continue;
         const alpha = Math.min(0.4, (src.importance + tgt.importance) * 0.3);
         ctx.strokeStyle = `rgba(100,200,180,${alpha})`;
@@ -3062,6 +3071,7 @@
         ctx.moveTo(src.x, src.y);
         ctx.lineTo(tgt.x, tgt.y);
         ctx.stroke();
+        edgesDrawn++;
       }
 
       // Draw neurons
