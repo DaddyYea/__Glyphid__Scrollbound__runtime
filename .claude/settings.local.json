@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm start)",
+      "Bash(find:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node:*)",
+      "Bash(npx tsx test-import.mjs)",
+      "Bash(npx tsx:*)",
+      "Bash(taskkill:*)",
+      "Bash(netstat:*)",
+      "Bash(ollama list:*)",
+      "Bash(dir:*)",
+      "Bash(nul)",
+      "Bash(where cmake:*)",
+      "Bash(cmake:*)",
+      "Bash(start \"Qwen-Server\" cmd /k \"llama-server.exe -m ../../../../runtime/models/Qwen/Qwen1.5-4B-Chat-GGUF/qwen1_5-4b-chat-q4_k_m.gguf --port 1234 --ctx-size 4096\")",
+      "Bash(llama.cpp/build/bin/Release/llama-server.exe:*)",
+      "Bash(timeout /t 5)",
+      "Bash(findstr:*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(command -v:*)",
+      "Bash(where:*)",
+      "Bash(ls:*)",
+      "Bash(cmd /c \"dir D:\\\\ScrollboundRuntime\\\\.claude\\\\worktrees\\\\great-wing\\\\node_modules 2>&1 | findstr tsx\")",
+      "Bash(cmd /c \"dir D:\\\\ScrollboundRuntime\\\\node_modules\\\\.bin\\\\tsx* 2>&1\")",
+      "Bash(cmd /c \"dir D:\\\\ScrollboundRuntime\\\\node_modules 2>&1 | head -5\")",
+      "Bash(cmd /c \"dir D:\\\\ScrollboundRuntime 2>&1\")",
+      "Bash(cmd /c dir:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(/c/nvm4w/nodejs/node.exe /d/ScrollboundRuntime/node_modules/tsx/dist/cli.mjs /d/ScrollboundRuntime/node_modules/typescript/bin/tsc:*)",
+      "Bash(/c/nvm4w/nodejs/node.exe /d/ScrollboundRuntime/node_modules/typescript/bin/tsc:*)",
+      "Bash(echo:*)",
+      "Bash(to respond\" even when the last message was from the human — actively:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

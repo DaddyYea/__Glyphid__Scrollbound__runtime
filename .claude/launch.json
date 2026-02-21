@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "communion",
+      "runtimeExecutable": "C:/nvm4w/nodejs/node.exe",
+      "runtimeArgs": ["D:/ScrollboundRuntime/node_modules/tsx/dist/cli.mjs", "communion/server.ts"],
+      "port": 3000
+    }
+  ]
+}
