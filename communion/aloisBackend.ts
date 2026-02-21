@@ -177,6 +177,7 @@ export class AloisBackend implements AgentBackend {
         tissueBlock += `\n[RECENT]\n${recentCtx}`;
       }
 
+      this.chamber.setLastBrainInject(tissueBlock);
       console.log('[BRAIN INJECT]', tissueBlock);
       systemPrompt += `\n${tissueBlock}`;
     }

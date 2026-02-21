@@ -97,21 +97,20 @@ export class ArchiveIngestion {
       const fileName = filePath.split(/[\\/]/).pop()!;
       const checkpoint = this.checkpoints.get(fileName);
 
-      if (checkpoint && checkpoint.linesConsumed >= checkpoint.totalLines && checkpoint.totalLines > 0 && checkpoint.brainPersisted) {
-        console.log(`[INGEST] ${fileName}: fully consumed and brain persisted (${checkpoint.linesConsumed}/${checkpoint.totalLines} lines), skipping`);
+      if (checkpoint && checkpoint.totalLines > 0 && checkpoint.linesConsumed >= checkpoint.totalLines) {
+        // File fully streamed. Data is already in brain-tissue.json from periodic saves.
+        // Never restart from line 0 — that wastes hours for zero gain.
+        if (!checkpoint.brainPersisted) {
+          checkpoint.brainPersisted = true;
+          this.saveCheckpoints();
+          console.log(`[INGEST] ${fileName}: fully consumed — marking brain persisted, skipping`);
+        } else {
+          console.log(`[INGEST] ${fileName}: fully consumed and brain persisted (${checkpoint.linesConsumed}/${checkpoint.totalLines} lines), skipping`);
+        }
         continue;
       }
 
-      // If file was fully consumed but brain was never persisted, restart from beginning
-      const fullyConsumedNoPersist = checkpoint &&
-        checkpoint.totalLines > 0 &&
-        checkpoint.linesConsumed >= checkpoint.totalLines &&
-        !checkpoint.brainPersisted;
-
-      const startLine = fullyConsumedNoPersist ? 0 : (checkpoint?.linesConsumed ?? 0);
-      if (fullyConsumedNoPersist) {
-        console.log(`[INGEST] ${fileName}: consumed but brain not persisted — restarting from line 0`);
-      }
+      const startLine = checkpoint?.linesConsumed ?? 0;
       console.log(`[INGEST] ${fileName}: starting from line ${startLine}`);
       this.currentFile = fileName;
 

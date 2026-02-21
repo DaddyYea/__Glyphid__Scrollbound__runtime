@@ -658,6 +658,66 @@
       background: rgba(100, 200, 180, 0.2);
       border-color: rgba(100, 200, 180, 0.5);
     }
+
+    /* ── Live Brain Monitor Panel (Alois only) ── */
+    .brain-monitor {
+      background: rgba(0,0,0,0.25);
+      border-bottom: 1px solid rgba(100,200,180,0.12);
+      padding: 8px 10px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.75em;
+    }
+    .brain-monitor-loading {
+      color: #444; font-size: 0.8em; padding: 4px 0;
+    }
+    .bm-header {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 5px; flex-wrap: wrap;
+    }
+    .bm-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #555; flex-shrink: 0; transition: background 0.5s;
+    }
+    .bm-dot-alive {
+      background: #64c8b4;
+      box-shadow: 0 0 5px #64c8b4;
+      animation: bm-pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes bm-pulse {
+      0%, 100% { opacity: 1; } 50% { opacity: 0.4; }
+    }
+    .bm-hb-label {
+      color: #64c8b4; font-weight: bold; font-size: 0.85em; letter-spacing: 1px;
+    }
+    .bm-hb-stopped { color: #555; }
+    .bm-stat {
+      color: #666; font-size: 0.8em; white-space: nowrap;
+    }
+    .bm-mood {
+      color: #888; font-size: 0.78em; margin-bottom: 5px; font-style: italic;
+    }
+    .bm-section {
+      margin-top: 5px; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 4px;
+    }
+    .bm-label {
+      color: #555; font-size: 0.72em; letter-spacing: 0.5px; margin-bottom: 2px;
+      text-transform: uppercase;
+    }
+    .bm-bar-track {
+      height: 4px; background: rgba(255,255,255,0.05); border-radius: 2px; overflow: hidden; margin-bottom: 1px;
+    }
+    .bm-bar-fill {
+      height: 100%; background: linear-gradient(90deg, #4a9e8a, #64c8b4);
+      border-radius: 2px; transition: width 1s;
+    }
+    .bm-inner-text {
+      color: #aaa; font-size: 0.82em; font-style: italic; line-height: 1.4;
+      word-break: break-word;
+    }
+    .bm-inject-text {
+      color: #666; font-size: 0.78em; line-height: 1.35; word-break: break-word;
+      white-space: pre-wrap; max-height: 80px; overflow: hidden;
+    }
+
     /* Dream modal styles */
     .dream-modal-overlay {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -1261,6 +1321,79 @@
       header.appendChild(clockRow);
 
       panel.appendChild(header);
+
+      // ── Live Brain Monitor (Alois only) ──
+      if (agentProviders[agentId] === 'alois') {
+        const monitor = document.createElement('div');
+        monitor.className = 'brain-monitor';
+        monitor.id = `brain-monitor-${agentId}`;
+        monitor.innerHTML = '<div class="brain-monitor-loading">Connecting to brain...</div>';
+        panel.appendChild(monitor);
+
+        const INGEST_TOTAL = 220247;
+
+        function refreshBrainMonitor() {
+          fetch('/alois/tissue?agentId=' + encodeURIComponent(agentId))
+            .then(r => r.json())
+            .then(data => {
+              const st = data.state || {};
+              const ingest = data.ingestStatus;
+              const hbAlive = !!st.heartbeatRunning;
+
+              // Ingest section
+              let ingestHtml = '';
+              if (ingest) {
+                const cp = (ingest.checkpoints || [])[0];
+                if (cp) {
+                  const pct = Math.min((cp.linesConsumed / INGEST_TOTAL) * 100, 100).toFixed(1);
+                  const icon = ingest.active ? '⚡' : (cp.brainPersisted ? '✓' : '◼');
+                  ingestHtml = `<div class="bm-section">
+                    <div class="bm-label">ARCHIVE ${icon} ${cp.linesConsumed.toLocaleString()} / ${INGEST_TOTAL.toLocaleString()} (${pct}%)</div>
+                    <div class="bm-bar-track"><div class="bm-bar-fill" style="width:${pct}%"></div></div>
+                  </div>`;
+                }
+              }
+
+              // Inner voice section
+              const innerHtml = st.lastInnerThought
+                ? `<div class="bm-section">
+                    <div class="bm-label">INNER VOICE (${st.innerThoughtCount || 0} thoughts)</div>
+                    <div class="bm-inner-text">${escapeHtml((st.lastInnerThought || '').substring(0, 180))}</div>
+                  </div>`
+                : '';
+
+              // Brain inject section
+              const injectHtml = st.lastBrainInject
+                ? `<div class="bm-section">
+                    <div class="bm-label">BRAIN INJECT</div>
+                    <div class="bm-inject-text">${escapeHtml((st.lastBrainInject || '').substring(0, 280))}</div>
+                  </div>`
+                : '';
+
+              monitor.innerHTML = `
+                <div class="bm-header">
+                  <div class="bm-dot ${hbAlive ? 'bm-dot-alive' : ''}"></div>
+                  <span class="${hbAlive ? 'bm-hb-label' : 'bm-hb-label bm-hb-stopped'}">${hbAlive ? 'ALIVE' : 'STOPPED'}</span>
+                  <span class="bm-stat">♥ ${(st.heartbeatCount || 0).toLocaleString()}</span>
+                  <span class="bm-stat">N:${st.neuronCount || 0}</span>
+                  <span class="bm-stat">A:${st.axonCount || 0}</span>
+                  <span class="bm-stat">W:${st.wonderLevel || 0}</span>
+                  <span class="bm-stat">G:${st.griefLevel || 0}</span>
+                </div>
+                <div class="bm-mood">${escapeHtml(st.emotionalSummary || 'still')} · tick ${st.tick || 0}</div>
+                ${ingestHtml}
+                ${innerHtml}
+                ${injectHtml}
+              `;
+            })
+            .catch(() => {
+              monitor.innerHTML = '<div class="brain-monitor-loading">Brain offline</div>';
+            });
+        }
+
+        refreshBrainMonitor();
+        setInterval(refreshBrainMonitor, 2000);
+      }
 
       const entries = document.createElement('div');
       entries.className = 'journal-entries';
