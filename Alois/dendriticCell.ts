@@ -36,7 +36,14 @@ export class DendriticCell {
     if (spikes.length > 0) {
       const mean = this.meanVector(spikes);
       this.resonanceMemory.push(mean);
-      if (spikes.length > 4) this.spines.push(new Spine(this.dim));
+      // Grow a new spine when ≥ half of current spines fire simultaneously.
+      // Seed it immediately with the current input so it isn't flagged dormant
+      // and pruned before it ever gets a chance to activate.
+      if (spikes.length >= Math.ceil(this.spines.length / 2)) {
+        const newSpine = new Spine(this.dim);
+        newSpine.update(input);
+        this.spines.push(newSpine);
+      }
 
       // Update affect from spike activity:
       // - intensity = fraction of spines that fired (0-1)
