@@ -900,8 +900,17 @@ async function main() {
       const incubation = (agent as any).getIncubation?.() || null;
       const brainMetrics = (agent as any).getBrainMetrics?.() || null;
       const autoGradient = (agent as any).isAutoGradient?.() ?? true;
+      const ingestStatus = communion.getIngestStatus();
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ state, neurons, edges, lastDream, tissueWeight, incubation, brainMetrics, autoGradient }));
+      res.end(JSON.stringify({ state, neurons, edges, lastDream, tissueWeight, incubation, brainMetrics, autoGradient, ingestStatus }));
+      return;
+    }
+
+    // Get archive ingest progress (for brain monitor progress bar)
+    if (url === '/alois/ingest' && req.method === 'GET') {
+      const status = communion.getIngestStatus();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status }));
       return;
     }
 

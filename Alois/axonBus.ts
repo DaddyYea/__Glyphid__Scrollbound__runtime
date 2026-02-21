@@ -28,4 +28,8 @@ export class AxonBus {
   getChildIds(): string[] {
     return Array.from(this.children.keys());
   }
+
+  getParentId(): string {
+    return this.parentId;
+  }
 }

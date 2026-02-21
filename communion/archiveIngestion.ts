@@ -164,12 +164,14 @@ export class ArchiveIngestion {
                 this.linesConsumed++;
 
                 if (fed % 100 === 0) {
+                  const existing = this.checkpoints.get(fileName);
                   this.checkpoints.set(fileName, {
                     file: fileName,
                     linesConsumed: lineNum,
                     totalLines: 0,
-                    startedAt: this.checkpoints.get(fileName)?.startedAt ?? new Date().toISOString(),
+                    startedAt: existing?.startedAt ?? new Date().toISOString(),
                     lastIngestedAt: new Date().toISOString(),
+                    brainPersisted: existing?.brainPersisted ?? false,
                   });
                   this.saveCheckpoints();
                   console.log(`[INGEST] ${fileName}: ${fed} fed (line ${lineNum})`);
@@ -187,12 +189,15 @@ export class ArchiveIngestion {
       }
     } finally {
       rl.close();
+      const existingFinal = this.checkpoints.get(fileName);
       this.checkpoints.set(fileName, {
         file: fileName,
         linesConsumed: lineNum,
         totalLines: lineNum,
-        startedAt: this.checkpoints.get(fileName)?.startedAt ?? new Date().toISOString(),
+        startedAt: existingFinal?.startedAt ?? new Date().toISOString(),
         lastIngestedAt: new Date().toISOString(),
+        // Preserve brainPersisted — must NOT be wiped when file completes
+        brainPersisted: existingFinal?.brainPersisted ?? false,
       });
       this.saveCheckpoints();
       console.log(`[INGEST] ${fileName}: done — ${fed} entries fed (${lineNum} lines total)`);
@@ -201,10 +206,8 @@ export class ArchiveIngestion {
 
   /** Call this after successfully saving the brain to disk — marks checkpoint as safe to skip on restart */
   markBrainPersisted(): void {
-    for (const [fileName, cp] of this.checkpoints) {
-      if (cp.totalLines > 0 && cp.linesConsumed >= cp.totalLines) {
-        cp.brainPersisted = true;
-      }
+    for (const [, cp] of this.checkpoints) {
+      cp.brainPersisted = true;
     }
     this.saveCheckpoints();
   }

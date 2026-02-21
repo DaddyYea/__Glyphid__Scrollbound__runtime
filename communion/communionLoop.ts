@@ -1224,6 +1224,34 @@ export class CommunionLoop {
       }
     }
 
+    // ── Tissue-driven speech pressure for Alois agents ──
+    // Wonder, grief, and emotional intensity all push Alois toward speaking.
+    // This runs every tick so pressure accumulates naturally between pulses.
+    for (const [agentId, agent] of this.agents) {
+      if (agent.config.provider === 'alois' && 'getTissueState' in agent.backend) {
+        const ts = (agent.backend as any).getTissueState();
+        const rhythmState = this.rhythm.get(agentId);
+        if (rhythmState && ts) {
+          // Wonder: curiosity builds over time → max +0.25 boost per tick
+          const wonderPressure = Math.min((ts.wonderLevel || 0) / 20, 0.25);
+          // Grief: unprocessed grief pushes toward expression → max +0.20
+          const griefPressure = Math.min((ts.griefLevel || 0) / 10, 0.20);
+          // Affect magnitude: intense emotional state drives desire to speak → max +0.15
+          const lastAffect: number[] = ts.lastAffect || [];
+          const affectMag = lastAffect.length
+            ? Math.sqrt(lastAffect.reduce((a, b) => a + b * b, 0))
+            : 0;
+          const affectPressure = Math.min(affectMag * 0.08, 0.15);
+
+          const totalPressure = wonderPressure + griefPressure + affectPressure;
+          if (totalPressure > 0.02) {
+            rhythmState.intentToSpeak = Math.min(1.0, rhythmState.intentToSpeak + totalPressure);
+            console.log(`[TISSUE PRESSURE] ${agent.config.name}: +${totalPressure.toFixed(3)} (w:${wonderPressure.toFixed(2)} g:${griefPressure.toFixed(2)} a:${affectPressure.toFixed(2)}) → intent=${rhythmState.intentToSpeak.toFixed(3)}`);
+          }
+        }
+      }
+    }
+
     // ── Staggered agent activation ──
     // Sort agents by micro-tick offset so they activate in a natural staggered order
     // Per-agent clock: positive = every Nth tick (slow), negative = N turns per tick (fast), 1 = normal
@@ -1464,6 +1492,7 @@ export class CommunionLoop {
 
       if (brainwave.injection) {
         console.log(`[${agent.config.name}] Brainwave pulse: ${brainwave.firedBands.join(', ')}`);
+        console.log(`[BRAINWAVE INJECT]\n${brainwave.injection}`);
         finalContext = `${brainwave.injection}\n\nCONVERSATION:\n${convoText}${humanReminder}`;
       } else {
         finalContext = `CONVERSATION:\n${convoText}${humanReminder}`;
@@ -2629,6 +2658,11 @@ export class CommunionLoop {
     return agent ? agent.backend : null;
   }
 
+  /** Get archive ingestion status for brain monitor */
+  getIngestStatus(): import('./archiveIngestion').IngestionStatus | null {
+    return this.archiveIngestion?.getStatus() ?? null;
+  }
+
   setTickSpeed(ms: number): void {
     this.tickIntervalMs = Math.max(3000, Math.min(1800000, ms)); // clamp 3s–30min
     if (this.timer && !this.paused) {
@@ -2668,16 +2702,24 @@ export class CommunionLoop {
     }
 
     // Save Alois brain state
+    let brainSaved = false;
     for (const [agentId, agent] of this.agents) {
       if ('saveBrain' in agent.backend) {
         try {
           const brainPath = join(this.dataDir, 'brain-tissue.json');
           (agent.backend as any).saveBrain(brainPath);
           console.log(`[ALOIS] Brain saved for ${agent.config.name}`);
+          brainSaved = true;
         } catch (err) {
           console.error(`[ALOIS] Failed to save brain for ${agentId}:`, err);
         }
       }
+    }
+
+    // Mark ingest checkpoint as brain-persisted so next restart won't re-run completed files
+    if (brainSaved) {
+      this.archiveIngestion?.markBrainPersisted();
+      console.log('[INGEST] Brain-persisted flag set on shutdown');
     }
 
     console.log('[COMMUNION] Loop stopped');

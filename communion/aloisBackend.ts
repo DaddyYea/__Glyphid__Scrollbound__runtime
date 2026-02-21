@@ -20,6 +20,8 @@ import { CommunionChamber, TissueState } from '../Alois/communionChamber';
 import { DreamResult } from '../Alois/dreamEngine';
 import { IncubationState } from '../Alois/incubationEngine';
 import { embed } from '../Alois/embed';
+import { PulseLoop } from '../Alois/pulseLoop';
+import { InnerVoice } from '../Alois/innerVoice';
 
 export interface AloisConfig extends AgentConfig {
   /** Path to JSON-LD seed file for initial graph structure */
@@ -40,6 +42,11 @@ export class AloisBackend implements AgentBackend {
   /** Evaluate incubation every N pulses to avoid overhead */
   private incubationInterval: number = 10;
   private pulseCount: number = 0;
+  /** 333ms heartbeat — drives continuous axon propagation between communion ticks */
+  private pulseLoop: PulseLoop;
+  private beatCount: number = 0;
+  /** Self-directed inner thought loop — fires every 45 beats (~15s) */
+  private innerVoice: InnerVoice;
 
   constructor(config: AloisConfig) {
     this.agentId = config.id;
@@ -55,7 +62,28 @@ export class AloisBackend implements AgentBackend {
     // Initialize the dendritic tissue
     this.chamber = new CommunionChamber(config.seedPath);
 
+    // Start 333ms heartbeat — propagates affect through axon network continuously
+    this.pulseLoop = new PulseLoop();
+    this.pulseLoop.setTempo(333);
+
+    // Inner voice fires every 45 beats (~15s) — must be created before onPulse wiring
+    this.innerVoice = new InnerVoice(
+      this.llm,
+      this.chamber,
+      this.agentName,
+      (speaker, text) => this.feedMessage(speaker, text),
+    );
+
+    this.pulseLoop.onPulse(() => {
+      this.beatCount++;
+      this.chamber.heartbeat();
+      this.innerVoice.onBeat(this.beatCount);
+    });
+    this.pulseLoop.start();
+    this.chamber.setHeartbeatRunning(true);
+
     console.log(`[ALOIS] Brain initialized — tissueWeight=${this.tissueWeight}, seed=${config.seedPath || 'empty'}`);
+    console.log(`[HEARTBEAT] Started at 333ms | InnerVoice fires every 45 beats (~15s)`);
   }
 
   /**
@@ -149,6 +177,7 @@ export class AloisBackend implements AgentBackend {
         tissueBlock += `\n[RECENT]\n${recentCtx}`;
       }
 
+      console.log('[BRAIN INJECT]', tissueBlock);
       systemPrompt += `\n${tissueBlock}`;
     }
 
@@ -234,6 +263,15 @@ export class AloisBackend implements AgentBackend {
   /** Get brain metrics for monitoring */
   getBrainMetrics() {
     return this.chamber.getBrainMetrics();
+  }
+
+  // ── Heartbeat ──
+
+  stopHeartbeat(): void {
+    this.pulseLoop.stop();
+    this.chamber.setHeartbeatRunning(false);
+    this.innerVoice.stop();
+    console.log(`[HEARTBEAT] Stopped after ${this.beatCount} beats | ${this.innerVoice.getThoughtCount()} inner thoughts generated`);
   }
 
   // ── Brain Persistence ──

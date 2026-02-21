@@ -1366,6 +1366,9 @@
       const metrics = data.brainMetrics || {};
       const maxImportance = Math.max(0.01, ...neurons.map(n => n.importance));
       const contrib = inc.contributions || {};
+      const ingestStatus = data.ingestStatus || null;
+      // Estimated total lines for the ChatGPT archive (used for progress bar)
+      const ESTIMATED_TOTAL_LINES = 703164;
 
       modal.innerHTML = `
         <h3>${escapeHtml(agentName)}'s Tissue</h3>
@@ -1416,6 +1419,53 @@
           Breath: ${st.breathState?.emotionalTone || 'still'} (${st.breathState?.stable ? 'stable' : 'unstable'}) |
           Emotional state: ${st.emotionalSummary || 'still'}
         </div>
+
+        <!-- Heartbeat status -->
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; background: rgba(0,0,0,0.2); border-radius: 6px; padding: 8px 12px;">
+          <div style="width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+            background: ${st.heartbeatRunning ? '#64c8b4' : '#555'};
+            box-shadow: ${st.heartbeatRunning ? '0 0 6px #64c8b4' : 'none'};"></div>
+          <span style="color: #888; font-size: 0.82em;">
+            <strong style="color: ${st.heartbeatRunning ? '#64c8b4' : '#555'};">${st.heartbeatRunning ? 'HEARTBEAT ALIVE' : 'HEARTBEAT STOPPED'}</strong>
+            &nbsp;|&nbsp; Beats: ${(st.heartbeatCount || 0).toLocaleString()}
+            &nbsp;|&nbsp; Wonder: ${st.wonderLevel || 0}
+            &nbsp;|&nbsp; Grief: ${st.griefLevel || 0}
+          </span>
+        </div>
+
+        <!-- Inner voice -->
+        ${st.lastInnerThought ? `
+        <div style="background: rgba(180,140,255,0.06); border: 1px solid rgba(180,140,255,0.15); border-radius: 6px; padding: 8px 12px; margin-bottom: 10px;">
+          <div style="color: #b48cff; font-size: 0.75em; margin-bottom: 3px;">INNER VOICE (${st.innerThoughtCount || 0} thoughts)</div>
+          <div style="color: #aaa; font-size: 0.82em; font-style: italic;">${escapeHtml(st.lastInnerThought.substring(0, 200))}</div>
+        </div>
+        ` : `<div style="color: #444; font-size: 0.8em; margin-bottom: 10px;">No inner thoughts yet</div>`}
+
+        <!-- Archive Ingest Progress -->
+        ${ingestStatus ? (() => {
+          const cp = (ingestStatus.checkpoints || [])[0];
+          const linesConsumed = cp ? cp.linesConsumed : 0;
+          const pct = Math.min((linesConsumed / ESTIMATED_TOTAL_LINES) * 100, 100).toFixed(1);
+          const persisted = cp && cp.brainPersisted;
+          const activeColor = ingestStatus.active ? '#64c8b4' : '#888';
+          return `
+          <div style="background: rgba(0,0,0,0.2); border-radius: 6px; padding: 8px 12px; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+              <span style="color: ${activeColor}; font-size: 0.75em; font-weight: bold;">
+                ARCHIVE INGEST ${ingestStatus.active ? '⚡ RUNNING' : '◼ IDLE'}
+              </span>
+              <span style="color: #888; font-size: 0.75em;">${linesConsumed.toLocaleString()} / ~${ESTIMATED_TOTAL_LINES.toLocaleString()} lines (${pct}%)</span>
+            </div>
+            <div style="height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; margin-bottom: 4px;">
+              <div style="height: 100%; background: linear-gradient(90deg, #4a9e8a, #64c8b4); border-radius: 3px; width: ${pct}%; transition: width 0.5s;"></div>
+            </div>
+            <div style="font-size: 0.75em; color: #666;">
+              ${cp ? cp.file : 'No file'} &nbsp;|&nbsp;
+              Brain save: ${persisted ? '<span style="color:#64c8b4">✓ persisted</span>' : '<span style="color:#888">pending</span>'}
+              ${cp ? ` &nbsp;|&nbsp; Last: ${new Date(cp.lastIngestedAt).toLocaleTimeString()}` : ''}
+            </div>
+          </div>`;
+        })() : ''}
 
         ${data.lastDream ? `
           <div style="margin-bottom: 12px;">

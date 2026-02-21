@@ -79,20 +79,29 @@ export class Spine {
 
   // ── Serialization ──
 
-  serialize(): { dim: number; decay: number; kv: number[][]; lastEmbedding: number[] } {
+  serialize(): object {
+    // Save mean embedding only — not full kv array — to keep brain-tissue.json manageable
+    const meanEmbedding = this.kv.length > 0 ? this.meanVector(this.kv) : [];
     return {
       dim: this.dim,
       decay: this.decay,
-      kv: this.kv,
-      lastEmbedding: this.lastEmbedding,
+      tokenCount: this.kv.length,
+      meanEmbedding,
     };
   }
 
-  static deserialize(data: { dim: number; decay: number; kv: number[][]; lastEmbedding: number[] }): Spine {
+  static deserialize(data: any): Spine {
     const spine = new Spine(data.dim);
-    spine.decay = data.decay;
-    spine.kv = data.kv || [];
-    spine.lastEmbedding = data.lastEmbedding || [];
+    spine.decay = data.decay ?? 0.92;
+    if (data.meanEmbedding && data.meanEmbedding.length > 0) {
+      // Restore as 3 copies of mean so similarity matching works and spine isn't flagged dormant
+      spine.kv = [data.meanEmbedding, data.meanEmbedding, data.meanEmbedding];
+      spine.lastEmbedding = data.meanEmbedding;
+    } else if (data.kv) {
+      // Legacy format
+      spine.kv = data.kv;
+      spine.lastEmbedding = data.lastEmbedding || [];
+    }
     return spine;
   }
 }

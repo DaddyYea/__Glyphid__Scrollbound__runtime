@@ -42,6 +42,19 @@ export class DendriticGraph {
     return this.getOrCreate(id);
   }
 
+  /** Connect two existing neurons with an axon. No-op if either neuron missing or axon already exists. */
+  connectNeurons(fromId: string, toId: string): boolean {
+    const from = this.neurons.get(fromId);
+    const to = this.neurons.get(toId);
+    if (!from || !to || fromId === toId) return false;
+    const already = this.axons.some(a => a.getParentId() === fromId && a.getChildIds().includes(toId));
+    if (already) return false;
+    const axon = new AxonBus(fromId, from);
+    axon.connect(toId, to);
+    this.axons.push(axon);
+    return true;
+  }
+
   /** Get an existing neuron (returns undefined if not found) */
   getNeuron(id: string): DendriticCell | undefined {
     return this.neurons.get(id);

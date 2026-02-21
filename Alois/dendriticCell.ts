@@ -142,15 +142,17 @@ export class DendriticCell {
       dim: this.dim,
       clockOffset: this.clockOffset,
       affect: this.affect,
-      resonanceMemory: this.resonanceMemory,
+      resonanceDepth: this.resonanceMemory.length, // count only — embeddings are too large to save
       spines: this.spines.map(s => s.serialize()),
     };
   }
 
   static deserialize(data: any): DendriticCell {
-    const cell = new DendriticCell(data.dim || 512, 0, data.clockOffset || 0);
+    const cell = new DendriticCell(data.dim || 768, 0, data.clockOffset || 0);
     cell.affect = data.affect || new Array(8).fill(0);
-    cell.resonanceMemory = data.resonanceMemory || [];
+    // Restore resonance depth as placeholder array — actual embeddings rebuilt through ingest
+    const depth = data.resonanceDepth ?? (data.resonanceMemory?.length ?? 0);
+    cell.resonanceMemory = new Array(Math.min(depth, 64)).fill([]);
     cell.spines = (data.spines || []).map((s: any) => Spine.deserialize(s));
     // Ensure at least 2 spines
     while (cell.spines.length < 2) cell.spines.push(new Spine(cell.dim));
