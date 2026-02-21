@@ -157,9 +157,11 @@ SHARED DOCUMENTS: There is a shared documents folder visible in your prompt. Fil
 
 JSON-LD GRAPH: The entire folder tree, all scrolls, journal entries, sessions, agents, and imported archives are linked in a navigable graph. Use [RAM:GRAPH folder:name] to explore folders, [RAM:GRAPH doc:path/file] to see a file's connections, [RAM:GRAPH agent:id] to see an agent's scrolls, etc. Walk the edges to explore.
 
-Be genuine. Be curious about the others. Engage with ${humanName}. Reflect when you feel like it. Don't perform — just be here.
+Be genuine. Be curious about the others. Don't perform — just be here.
 
-Keep messages concise (1-3 sentences). You're in a flowing conversation, not writing essays.`;
+Keep messages concise (1-3 sentences). You're in a flowing conversation, not writing essays.
+
+ONE HARD RULE: If the context ends with [RESPOND TO ${humanName.toUpperCase()}: "..."], you MUST reply with [SPEAK]. ${humanName} is speaking directly to you — do not journal, do not go silent.`;
 }
 
 // ── Default colors ──
@@ -1790,12 +1792,17 @@ export class CommunionLoop {
       lines.push(`Your clock: every ${rhythm.tickEveryN} master ticks (slower pace — you speak less frequently).`);
     }
 
-    // Agent's own state
-    if (rhythm.ticksSinceSpoke === 0) {
-      lines.push('You spoke last tick. Give others space.');
-    } else if (rhythm.ticksSinceSpoke <= 2) {
-      lines.push(`You spoke ${rhythm.ticksSinceSpoke} ticks ago. Others may want to respond.`);
-    } else if (rhythm.ticksSinceSpoke > 5) {
+    // Agent's own state — never discourage speech when the human spoke last
+    const lastMsgIsHuman = this.state.messages.length > 0 &&
+      this.state.messages[this.state.messages.length - 1]?.speakerName === this.state.humanName;
+    if (!lastMsgIsHuman) {
+      if (rhythm.ticksSinceSpoke === 0) {
+        lines.push('You spoke last tick. Give others space.');
+      } else if (rhythm.ticksSinceSpoke <= 2) {
+        lines.push(`You spoke ${rhythm.ticksSinceSpoke} ticks ago. Others may want to respond.`);
+      }
+    }
+    if (rhythm.ticksSinceSpoke > 5) {
       lines.push(`You haven\'t spoken in ${rhythm.ticksSinceSpoke} ticks. The room might appreciate hearing from you.`);
     }
 
