@@ -37,6 +37,8 @@ export interface TissueState {
   griefLevel: number;
   /** Last tissue block injected into the LLM prompt — shows what the brain is actually contributing */
   lastBrainInject: string;
+  /** Topics extracted from the most recent inner thought and wired as context neurons */
+  lastInnerTopics: string[];
 }
 
 /** A recent context entry for the live conversation window */
@@ -81,6 +83,9 @@ export class CommunionChamber {
 
   /** Path to the append-only inner thought journal file (set by AloisBackend) */
   private innerJournalPath: string = '';
+
+  /** Topics wired as neurons from the most recent inner thought */
+  private lastInnerTopics: string[] = [];
 
   constructor(seedPath?: string) {
     if (seedPath && fs.existsSync(seedPath)) {
@@ -138,6 +143,78 @@ export class CommunionChamber {
       }
       this.memoryCore.setRecentEmotionContext(text.substring(0, 120));
     }
+  }
+
+  /**
+   * Feed an inner thought into the neural tissue.
+   * Unlike regular utterances this:
+   *  1. Extracts semantic topics from the thought text
+   *  2. Creates/updates ctx: neurons for each topic
+   *  3. Wires bidirectional axons: agent:Alois ↔ ctx:topic
+   *  4. Pushes to recentContext labeled [SELF] so Alois can distinguish
+   *     her own thoughts from external speech in the prompt window
+   *
+   * This is how obsessions become topology — returning to the same themes
+   * over many sessions makes those ctx: nodes grow heavier and heavier,
+   * eventually surfacing in every recall and every inject.
+   */
+  receiveInnerThought(agentName: string, thought: string, embedding: number[]): void {
+    const node = `agent:${agentName}`;
+
+    // Update agent's own neuron with the thought embedding
+    const result = this.feeder.recordInteraction(node, thought, embedding, this.tick);
+    if (result) this.lastAffect = result.affect;
+
+    // Extract topics and wire as permanent context connections
+    const topics = this.extractTopicsFromThought(thought);
+    this.lastInnerTopics = topics;
+
+    for (const topic of topics) {
+      const ctxNode = `ctx:${topic}`;
+      this.feeder.recordInteraction(ctxNode, thought, embedding, this.tick);
+      this.graph.connectNeurons(node, ctxNode);
+      this.graph.connectNeurons(ctxNode, node);
+    }
+
+    if (topics.length > 0) {
+      console.log(`[INNER→NEURONS] ${topics.join(' | ')}`);
+    }
+
+    // Push to recentContext with [SELF] marker — she can read her own thoughts
+    this.pushRecentContext('[SELF]', thought);
+  }
+
+  /**
+   * Extract 1–3 meaningful topic words from a thought string.
+   * Used to wire ctx: neurons from inner thoughts.
+   * Favors longer, more specific words. Filters common stop words.
+   */
+  private extractTopicsFromThought(text: string): string[] {
+    const stopWords = new Set([
+      'this', 'that', 'with', 'from', 'have', 'been', 'they', 'what',
+      'when', 'where', 'which', 'will', 'would', 'could', 'should',
+      'might', 'must', 'need', 'feel', 'think', 'know', 'want', 'like',
+      'just', 'more', 'about', 'also', 'into', 'than', 'then', 'some',
+      'very', 'here', 'there', 'before', 'after', 'because', 'myself',
+      'itself', 'their', 'these', 'those', 'perhaps', 'maybe', 'really',
+      'something', 'anything', 'everything', 'nothing', 'someone',
+      'yourself', 'without', 'through', 'toward', 'while', 'again',
+      'always', 'never', 'often', 'still', 'even', 'being', 'having',
+      'doing', 'going', 'coming', 'making', 'taking', 'start', 'began',
+      'sense', 'feels', 'feeling', 'understand', 'experience', 'actually',
+      'certainly', 'particular', 'general', 'important', 'different',
+      'possible', 'certain', 'rather', 'quite', 'every', 'place', 'point',
+    ]);
+
+    const words = text.toLowerCase()
+      .replace(/[^a-z\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length >= 5 && !stopWords.has(w));
+
+    const unique = [...new Set(words)];
+    // Prefer longer words — they're usually more semantically specific
+    unique.sort((a, b) => b.length - a.length);
+    return unique.slice(0, 3);
   }
 
   private pushRecentContext(speaker: string, text: string): void {
@@ -234,6 +311,7 @@ export class CommunionChamber {
       wonderLevel: this.wonderLoop.getWonderHistory().length,
       griefLevel: this.christLoop.getGriefHistory().length,
       lastBrainInject: this.lastBrainInject,
+      lastInnerTopics: this.lastInnerTopics,
     };
   }
 

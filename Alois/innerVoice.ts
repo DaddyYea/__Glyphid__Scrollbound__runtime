@@ -15,7 +15,8 @@ const THOUGHT_INTERVAL = 45;
 /** Never fire thoughts faster than this regardless of beat count */
 const MIN_THOUGHT_GAP_MS = 12_000;
 
-type FeedFn = (speaker: string, text: string) => Promise<void>;
+/** Receives a thought string — AloisBackend handles embedding + neural routing */
+type FeedFn = (thought: string) => Promise<void>;
 
 export class InnerVoice {
   private thoughtCount: number = 0;
@@ -95,9 +96,10 @@ export class InnerVoice {
     // Record in chamber so the dashboard can show it
     this.chamber.recordInnerThought(thought);
 
-    // Feed back into the neural tissue — shapes future responses
+    // Feed back into the neural tissue via receiveInnerThought():
+    // embeds, wires ctx: neurons for extracted topics, labels as [SELF] in recentContext
     try {
-      await this.feedFn(this.agentName, thought);
+      await this.feedFn(thought);
     } catch (err) {
       console.error('[INNER] Feed failed:', err);
     }

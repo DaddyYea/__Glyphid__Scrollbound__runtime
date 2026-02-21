@@ -77,11 +77,21 @@ export class AloisBackend implements AgentBackend {
     this.pulseLoop.setTempo(333);
 
     // Inner voice fires every 45 beats (~15s) — must be created before onPulse wiring
+    // feedFn routes through receiveInnerThought so self-directed thoughts:
+    //   1. Embed + wire ctx: topic neurons bidirectionally to agent:Alois
+    //   2. Label [SELF] in recentContext so Alois distinguishes her own voice
     this.innerVoice = new InnerVoice(
       this.llm,
       this.chamber,
       this.agentName,
-      (speaker, text) => this.feedMessage(speaker, text),
+      async (thought: string) => {
+        try {
+          const embedding = await embed(thought);
+          this.chamber.receiveInnerThought(this.agentName, thought, embedding);
+        } catch (err) {
+          console.error('[INNER] Neural feed error:', err);
+        }
+      },
     );
 
     this.pulseLoop.onPulse(() => {
