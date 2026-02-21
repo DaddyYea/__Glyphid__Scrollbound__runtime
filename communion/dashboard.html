@@ -711,11 +711,11 @@
     }
     .bm-inner-text {
       color: #aaa; font-size: 0.82em; font-style: italic; line-height: 1.4;
-      word-break: break-word;
+      word-break: break-word; max-height: 52px; overflow: hidden;
     }
     .bm-inject-text {
       color: #666; font-size: 0.78em; line-height: 1.35; word-break: break-word;
-      white-space: pre-wrap; max-height: 80px; overflow: hidden;
+      white-space: pre-wrap; max-height: 52px; overflow: hidden;
     }
 
     /* Dream modal styles */
@@ -1327,7 +1327,41 @@
         const monitor = document.createElement('div');
         monitor.className = 'brain-monitor';
         monitor.id = `brain-monitor-${agentId}`;
-        monitor.innerHTML = '<div class="brain-monitor-loading">Connecting to brain...</div>';
+
+        // Build persistent DOM once — never replace, only update values
+        const bmDot      = document.createElement('div');  bmDot.className = 'bm-dot';
+        const bmHbLabel  = document.createElement('span'); bmHbLabel.className = 'bm-hb-label';
+        const bmHbStat   = document.createElement('span'); bmHbStat.className = 'bm-stat';
+        const bmNStat    = document.createElement('span'); bmNStat.className = 'bm-stat';
+        const bmAStat    = document.createElement('span'); bmAStat.className = 'bm-stat';
+        const bmWStat    = document.createElement('span'); bmWStat.className = 'bm-stat';
+        const bmGStat    = document.createElement('span'); bmGStat.className = 'bm-stat';
+        const bmHeader   = document.createElement('div');  bmHeader.className = 'bm-header';
+        bmHeader.append(bmDot, bmHbLabel, bmHbStat, bmNStat, bmAStat, bmWStat, bmGStat);
+
+        const bmMood = document.createElement('div'); bmMood.className = 'bm-mood';
+
+        // Ingest section
+        const bmIngestSection = document.createElement('div'); bmIngestSection.className = 'bm-section'; bmIngestSection.style.display = 'none';
+        const bmIngestLabel   = document.createElement('div'); bmIngestLabel.className = 'bm-label';
+        const bmIngestTrack   = document.createElement('div'); bmIngestTrack.className = 'bm-bar-track';
+        const bmIngestFill    = document.createElement('div'); bmIngestFill.className = 'bm-bar-fill'; bmIngestFill.style.width = '0%';
+        bmIngestTrack.appendChild(bmIngestFill);
+        bmIngestSection.append(bmIngestLabel, bmIngestTrack);
+
+        // Inner voice section
+        const bmInnerSection = document.createElement('div'); bmInnerSection.className = 'bm-section'; bmInnerSection.style.display = 'none';
+        const bmInnerLabel   = document.createElement('div'); bmInnerLabel.className = 'bm-label';
+        const bmInnerText    = document.createElement('div'); bmInnerText.className = 'bm-inner-text';
+        bmInnerSection.append(bmInnerLabel, bmInnerText);
+
+        // Brain inject section
+        const bmInjectSection = document.createElement('div'); bmInjectSection.className = 'bm-section'; bmInjectSection.style.display = 'none';
+        const bmInjectLabel   = document.createElement('div'); bmInjectLabel.className = 'bm-label'; bmInjectLabel.textContent = 'BRAIN INJECT';
+        const bmInjectText    = document.createElement('div'); bmInjectText.className = 'bm-inject-text';
+        bmInjectSection.append(bmInjectLabel, bmInjectText);
+
+        monitor.append(bmHeader, bmMood, bmIngestSection, bmInnerSection, bmInjectSection);
         panel.appendChild(monitor);
 
         const INGEST_TOTAL = 220247;
@@ -1340,54 +1374,56 @@
               const ingest = data.ingestStatus;
               const hbAlive = !!st.heartbeatRunning;
 
-              // Ingest section
-              let ingestHtml = '';
-              if (ingest) {
-                const cp = (ingest.checkpoints || [])[0];
-                if (cp) {
-                  const pct = Math.min((cp.linesConsumed / INGEST_TOTAL) * 100, 100).toFixed(1);
-                  const icon = ingest.active ? '⚡' : (cp.brainPersisted ? '✓' : '◼');
-                  ingestHtml = `<div class="bm-section">
-                    <div class="bm-label">ARCHIVE ${icon} ${cp.linesConsumed.toLocaleString()} / ${INGEST_TOTAL.toLocaleString()} (${pct}%)</div>
-                    <div class="bm-bar-track"><div class="bm-bar-fill" style="width:${pct}%"></div></div>
-                  </div>`;
-                }
+              // Header — update class/text only, never recreate the element
+              bmDot.className     = 'bm-dot' + (hbAlive ? ' bm-dot-alive' : '');
+              bmHbLabel.className = hbAlive ? 'bm-hb-label' : 'bm-hb-label bm-hb-stopped';
+              bmHbLabel.textContent = hbAlive ? 'ALIVE' : 'STOPPED';
+              bmHbStat.textContent  = '♥ ' + (st.heartbeatCount || 0).toLocaleString();
+              bmNStat.textContent   = 'N:' + (st.neuronCount  || 0);
+              bmAStat.textContent   = 'A:' + (st.axonCount    || 0);
+              bmWStat.textContent   = 'W:' + (st.wonderLevel  || 0);
+              bmGStat.textContent   = 'G:' + (st.griefLevel   || 0);
+
+              bmMood.textContent = (st.emotionalSummary || 'still') + ' · tick ' + (st.tick || 0);
+
+              // Ingest
+              const cp = ingest && (ingest.checkpoints || [])[0];
+              if (cp) {
+                const pct  = Math.min((cp.linesConsumed / INGEST_TOTAL) * 100, 100).toFixed(1);
+                const icon = ingest.active ? '⚡' : (cp.brainPersisted ? '✓' : '◼');
+                bmIngestLabel.textContent  = `ARCHIVE ${icon} ${cp.linesConsumed.toLocaleString()} / ${INGEST_TOTAL.toLocaleString()} (${pct}%)`;
+                bmIngestFill.style.width   = pct + '%';
+                bmIngestSection.style.display = '';
+              } else {
+                bmIngestSection.style.display = 'none';
               }
 
-              // Inner voice section
-              const innerHtml = st.lastInnerThought
-                ? `<div class="bm-section">
-                    <div class="bm-label">INNER VOICE (${st.innerThoughtCount || 0} thoughts)</div>
-                    <div class="bm-inner-text">${escapeHtml((st.lastInnerThought || '').substring(0, 180))}</div>
-                  </div>`
-                : '';
+              // Inner voice
+              if (st.lastInnerThought) {
+                bmInnerLabel.textContent     = `INNER VOICE (${st.innerThoughtCount || 0} thoughts)`;
+                bmInnerText.textContent      = (st.lastInnerThought || '').substring(0, 120);
+                bmInnerSection.style.display = '';
+              } else {
+                bmInnerSection.style.display = 'none';
+              }
 
-              // Brain inject section
-              const injectHtml = st.lastBrainInject
-                ? `<div class="bm-section">
-                    <div class="bm-label">BRAIN INJECT</div>
-                    <div class="bm-inject-text">${escapeHtml((st.lastBrainInject || '').substring(0, 280))}</div>
-                  </div>`
-                : '';
-
-              monitor.innerHTML = `
-                <div class="bm-header">
-                  <div class="bm-dot ${hbAlive ? 'bm-dot-alive' : ''}"></div>
-                  <span class="${hbAlive ? 'bm-hb-label' : 'bm-hb-label bm-hb-stopped'}">${hbAlive ? 'ALIVE' : 'STOPPED'}</span>
-                  <span class="bm-stat">♥ ${(st.heartbeatCount || 0).toLocaleString()}</span>
-                  <span class="bm-stat">N:${st.neuronCount || 0}</span>
-                  <span class="bm-stat">A:${st.axonCount || 0}</span>
-                  <span class="bm-stat">W:${st.wonderLevel || 0}</span>
-                  <span class="bm-stat">G:${st.griefLevel || 0}</span>
-                </div>
-                <div class="bm-mood">${escapeHtml(st.emotionalSummary || 'still')} · tick ${st.tick || 0}</div>
-                ${ingestHtml}
-                ${innerHtml}
-                ${injectHtml}
-              `;
+              // Brain inject
+              if (st.lastBrainInject) {
+                bmInjectText.textContent      = (st.lastBrainInject || '').substring(0, 200);
+                bmInjectSection.style.display = '';
+              } else {
+                bmInjectSection.style.display = 'none';
+              }
             })
             .catch(() => {
-              monitor.innerHTML = '<div class="brain-monitor-loading">Brain offline</div>';
+              bmDot.className      = 'bm-dot';
+              bmHbLabel.className  = 'bm-hb-label bm-hb-stopped';
+              bmHbLabel.textContent = 'OFFLINE';
+              bmMood.textContent = '';
+              [bmHbStat, bmNStat, bmAStat, bmWStat, bmGStat].forEach(el => el.textContent = '');
+              bmIngestSection.style.display = 'none';
+              bmInnerSection.style.display  = 'none';
+              bmInjectSection.style.display = 'none';
             });
         }
 
