@@ -28,6 +28,8 @@ export interface AloisConfig extends AgentConfig {
   seedPath?: string;
   /** 0.0 = pure LLM, 1.0 = full tissue/retrieval (default 0.1 — starts mostly LLM) */
   tissueWeight?: number;
+  /** Data directory for brain-tissue.json and inner journal (default: data/communion) */
+  dataDir?: string;
 }
 
 export class AloisBackend implements AgentBackend {
@@ -61,6 +63,14 @@ export class AloisBackend implements AgentBackend {
 
     // Initialize the dendritic tissue
     this.chamber = new CommunionChamber(config.seedPath);
+
+    // Point the chamber to the append-only inner thought journal
+    // Lives alongside brain-tissue.json in the data dir
+    const dataDir = config.dataDir || 'data/communion';
+    const path = require('path');
+    this.chamber.setInnerJournalPath(
+      path.join(dataDir, 'alois-inner-journal.txt')
+    );
 
     // Start 333ms heartbeat — propagates affect through axon network continuously
     this.pulseLoop = new PulseLoop();
