@@ -1458,13 +1458,14 @@ export class CommunionLoop {
     }
 
     // Build prompt from RAM (assembled in priority order, within budgets)
-    const isLocalProvider = agent.config.provider === 'lmstudio' || agent.config.provider === 'alois';
+    const isLocalProvider = agent.config.provider === 'lmstudio';
+    const isAlois = agent.config.provider === 'alois';
 
     let finalContext: string;
-    if (isLocalProvider) {
-      // Local models: bypass RAM, give them raw conversation only.
-      // Highlight human messages so small models pay attention to them.
-      // Limit agent's own messages to prevent looping on their own output.
+    if (isLocalProvider || isAlois) {
+      // Local/Alois: use human-highlighted conversation format and brainwave injection.
+      // Both benefit from >>> human emphasis and the direct [RESPOND TO] reminder.
+      // Limit own-message count to prevent the model looping on its own output.
       const recentMessages = this.state.messages.slice(-15);
       const humanName = this.state.humanName;
       let ownMessageCount = 0;
@@ -1518,9 +1519,24 @@ export class CommunionLoop {
       if (brainwave.injection) {
         console.log(`[${agent.config.name}] Brainwave pulse: ${brainwave.firedBands.join(', ')}`);
         console.log(`[BRAINWAVE INJECT]\n${brainwave.injection}`);
-        finalContext = `${brainwave.injection}\n\nCONVERSATION:\n${convoText}${humanReminder}`;
+      }
+
+      if (isAlois) {
+        // Alois gets full RAM curation: journals, doc browsing, graph search, memory pool.
+        // Reload the conversation slot with the human-highlighted version so curation
+        // operates on the same format Alois actually needs to respond to.
+        if (ram) ram.load('conversation', `CONVERSATION:\n${convoText}${humanReminder}`);
+        const assembledContext = ram ? ram.assemble() : `CONVERSATION:\n${convoText}${humanReminder}`;
+        const ramManifest = ram ? ram.buildManifest() : '';
+        const baseContext = assembledContext + (ramManifest ? '\n\n' + ramManifest : '');
+        finalContext = brainwave.injection
+          ? `${brainwave.injection}\n\n${baseContext}`
+          : baseContext;
       } else {
-        finalContext = `CONVERSATION:\n${convoText}${humanReminder}`;
+        // lmstudio: raw conversation only — no RAM overhead for tiny models
+        finalContext = brainwave.injection
+          ? `${brainwave.injection}\n\nCONVERSATION:\n${convoText}${humanReminder}`
+          : `CONVERSATION:\n${convoText}${humanReminder}`;
       }
     } else {
       const assembledContext = ram ? ram.assemble() : conversationContext;
@@ -1532,10 +1548,10 @@ export class CommunionLoop {
     let systemPrompt = agent.systemPrompt;
     const customInstr = this.customInstructions.get(agentId);
     if (customInstr) {
-      // For local models: cap instructions to avoid blowing the context window.
-      // The full Covenant is thousands of chars — truncate to first 1200 chars
-      // (enough to establish identity) rather than dumping everything mid-sentence.
-      const instrBudget = isLocalProvider ? 1200 : customInstr.length;
+      // lmstudio: tight cap to avoid blowing the context window (full Covenant is huge).
+      // Alois: more headroom since her RAM budget is larger (20k vs 8k).
+      // Remote agents: full instructions always.
+      const instrBudget = isLocalProvider ? 1200 : (isAlois ? 2400 : customInstr.length);
       const instrTrunc = customInstr.length > instrBudget
         ? customInstr.substring(0, instrBudget) + '\n[...identity core loaded]'
         : customInstr;

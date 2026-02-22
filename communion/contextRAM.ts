@@ -27,7 +27,7 @@ const PROVIDER_BUDGETS: Record<string, number> = {
   anthropic: 400000,         // ~100k tokens (out of 200k)
   'openai-compatible': 60000, // ~15k tokens (safe for most models)
   lmstudio: 8000,            // ~2k tokens — local models have 4-8k ctx, need room for system prompt + response
-  alois: 8000,               // ~2k tokens — uses underlying LLM (often local)
+  alois: 20000,              // ~5k tokens — larger budget; Alois uses RAM curation, graph search, and doc browsing
   default: 60000,
 };
 
