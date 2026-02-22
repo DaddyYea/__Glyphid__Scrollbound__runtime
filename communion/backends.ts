@@ -205,11 +205,11 @@ export class OpenAICompatibleBackend implements AgentBackend {
 
     // Hard total cap for local models — varies by provider key
     // lmstudio (small models): ~3000 tokens (4096 ctx window)
-    // Both alois and lmstudio run on local servers — use same conservative cap.
-    // Alois models vary widely in context size; 12000 chars is safe for 4k-token models.
+    // Local models: hard cap on total prompt size.
+    // 8000 chars leaves ~2k tokens headroom for response at aggressive tokenizer ratios (~2.3 chars/token).
     let finalUser = userContent;
     if (isLocalModel) {
-      const hardCap = 12000;
+      const hardCap = 8000;
       const totalChars = systemContent.length + userContent.length;
       if (totalChars > hardCap) {
         const availableForUser = Math.max(2000, hardCap - systemContent.length);
@@ -276,7 +276,7 @@ const MAX_SYSTEM_CHARS: Record<string, number> = {
   openai: 40000,
   grok: 200000,
   lmstudio: 4000,       // ~1k tokens — keep system prompt tight for small context windows
-  alois: 8000,          // ~2k tokens — gemma3 12B has large context, allow full identity prompt
+  alois: 4000,          // ~1k tokens — same as lmstudio; Alois runs on local models too
   default: 40000,
 };
 
