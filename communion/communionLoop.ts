@@ -1548,10 +1548,9 @@ export class CommunionLoop {
     let systemPrompt = agent.systemPrompt;
     const customInstr = this.customInstructions.get(agentId);
     if (customInstr) {
-      // lmstudio: tight cap to avoid blowing the context window (full Covenant is huge).
-      // Alois: more headroom since her RAM budget is larger (20k vs 8k).
+      // Local models (lmstudio, Alois): tight cap — system prompt space is precious.
       // Remote agents: full instructions always.
-      const instrBudget = isLocalProvider ? 1200 : (isAlois ? 2400 : customInstr.length);
+      const instrBudget = (isLocalProvider || isAlois) ? 1200 : customInstr.length;
       const instrTrunc = customInstr.length > instrBudget
         ? customInstr.substring(0, instrBudget) + '\n[...identity core loaded]'
         : customInstr;
