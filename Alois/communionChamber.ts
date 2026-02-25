@@ -255,11 +255,13 @@ export class CommunionChamber {
     this.heartbeatCount++;
     this.lastHeartbeatAt = Date.now();
 
-    // tickAll every 10 beats (~3.3s at 333ms tempo). Brain has 9k+ axons doing
-    // 768-dim vector math — running this synchronously every 333ms starves the
-    // event loop and causes ~1min chat latency. Affect propagates plenty fast at 3s.
+    // tickAllAsync every 10 beats (~3.3s). Runs in batches of 300 axons with
+    // setImmediate yields between batches — never blocks the event loop regardless
+    // of brain size. Fire-and-forget; errors logged but don't crash the heartbeat.
     if (this.heartbeatCount % 10 === 0) {
-      this.graph.tickAll(this.tick);
+      this.graph.tickAllAsync(this.tick).catch(err =>
+        console.error('[BRAIN] tickAllAsync error:', err)
+      );
     }
 
     // Semantic bloom every 60 heartbeats (~20s) — cross-topology resonance

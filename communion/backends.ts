@@ -228,22 +228,42 @@ export class OpenAICompatibleBackend implements AgentBackend {
       console.log(`[${this.agentName}] Prompt: system=${systemContent.length} chars, user=${finalUser.length} chars, total=${systemContent.length + finalUser.length} chars (~${Math.round((systemContent.length + finalUser.length) / 4)} tokens)`);
     }
 
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: this.model,
-        messages: [
-          { role: 'system', content: systemContent },
-          { role: 'user', content: finalUser },
-        ],
-        max_tokens: this.maxTokens,
-        temperature: this.temperature,
-      }),
-    });
+    // Retry up to 3 times on socket errors — LM Studio intermittently drops connections
+    // (UND_ERR_SOCKET / "other side closed") especially under VRAM pressure
+    let response: Response | null = null;
+    let lastFetchErr: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        const delay = attempt * 2000;
+        console.warn(`[${this.agentName}] Socket error (attempt ${attempt}/3), retrying in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+      try {
+        response = await fetch(`${this.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: this.model,
+            messages: [
+              { role: 'system', content: systemContent },
+              { role: 'user', content: finalUser },
+            ],
+            max_tokens: this.maxTokens,
+            temperature: this.temperature,
+          }),
+        });
+        break; // got a response — exit retry loop
+      } catch (err: any) {
+        lastFetchErr = err;
+        const isSocket = err?.cause?.code === 'UND_ERR_SOCKET' || err?.message === 'fetch failed';
+        if (!isSocket) throw err; // non-retryable (bad URL, DNS, etc.)
+        // socket error — loop to retry
+      }
+    }
+    if (!response) throw lastFetchErr;
 
     if (!response.ok) {
       const err = await response.text();

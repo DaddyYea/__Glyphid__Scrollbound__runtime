@@ -64,6 +64,21 @@ export class DendriticGraph {
     for (const axon of this.axons) axon.propagate(globalTick);
   }
 
+  /**
+   * Async version of tickAll — yields to the event loop every BATCH axons.
+   * With 9k+ axons each doing 768-dim vector math, the synchronous version
+   * blocks the event loop for 100-200ms. This version breaks the work into
+   * chunks so HTTP responses, SSE ticks, and embeds can proceed between batches.
+   */
+  async tickAllAsync(globalTick: number, batchSize = 300): Promise<void> {
+    for (let i = 0; i < this.axons.length; i++) {
+      this.axons[i].propagate(globalTick);
+      if ((i + 1) % batchSize === 0) {
+        await new Promise<void>(r => setImmediate(r));
+      }
+    }
+  }
+
   getAxons(): AxonBus[] {
     return this.axons;
   }

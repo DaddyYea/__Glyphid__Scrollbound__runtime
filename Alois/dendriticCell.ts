@@ -36,10 +36,11 @@ export class DendriticCell {
     if (spikes.length > 0) {
       const mean = this.meanVector(spikes);
       this.resonanceMemory.push(mean);
-      // Grow a new spine when ≥ half of current spines fire simultaneously.
-      // Seed it immediately with the current input so it isn't flagged dormant
-      // and pruned before it ever gets a chance to activate.
-      if (spikes.length >= Math.ceil(this.spines.length / 2)) {
+      // Grow a new spine when ≥ half of current spines fire simultaneously,
+      // up to a cap of 16 spines per neuron. Without the cap the brain grows
+      // without bound — 21k+ spines causes compounding event-loop lag.
+      const MAX_SPINES = 16;
+      if (spikes.length >= Math.ceil(this.spines.length / 2) && this.spines.length < MAX_SPINES) {
         const newSpine = new Spine(this.dim);
         newSpine.update(input);
         this.spines.push(newSpine);
