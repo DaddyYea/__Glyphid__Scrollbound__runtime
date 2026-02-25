@@ -19,7 +19,7 @@
  */
 
 import crypto from 'crypto';
-import { mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, statSync, openSync, readSync, closeSync } from 'fs';
+import { mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, statSync, openSync, readSync, closeSync, watch } from 'fs';
 import { join } from 'path';
 import { AgentBackend, GenerateOptions, createBackend } from './backends';
 import { AgentConfig, CommunionConfig, CommunionMessage } from './types';
@@ -36,6 +36,7 @@ import { ContextRAM, parseRAMCommands, SlotName, ReflectiveSweepResult } from '.
 import { pulseBrainwaves, classifyBand, tagForBand, decayAndPromote } from './brainwaves';
 import { synthesize, getDefaultVoiceConfig, AgentVoiceConfig } from './voice';
 import { ArchiveIngestion } from './archiveIngestion';
+import mammoth from 'mammoth';
 import type { ScrollEcho, MoodVector } from '../src/types';
 
 // ── Events ──
@@ -234,6 +235,10 @@ export class CommunionLoop {
   private customInstructions: Map<string, string> = new Map();
   // Background archive ingestion into Alois brain
   private archiveIngestion: ArchiveIngestion | null = null;
+  // Extracted text cache for binary formats (DOCX → plain text via mammoth)
+  private docxCache = new Map<string, string>(); // fullPath → extracted plain text
+  // Folder watcher for auto-embedding new dropped files
+  private docWatcher: ReturnType<typeof watch> | null = null;
   // IDs of agents loaded from static config (env vars / config file) — never saved to dynamic-agents.json
   private staticAgentIds: Set<string> = new Set();
 
@@ -383,6 +388,9 @@ export class CommunionLoop {
   async initialize(): Promise<void> {
     // Load shared documents (metadata only — content read on demand)
     this.loadDocuments();
+
+    // Watch for new files dropped into communion-docs at runtime
+    this.startDocumentWatcher();
 
     // Set up lazy browse + graph callbacks for all agents' RAM
     for (const [, ram] of this.ram) {
@@ -633,7 +641,7 @@ export class CommunionLoop {
   private loadDocuments(): void {
     if (!existsSync(this.documentsDir)) return;
 
-    const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.json', '.csv', '.log', '.yml', '.yaml', '.toml', '.ini', '.cfg', '.xml', '.html', '.css', '.js', '.ts', '.py', '.sh']);
+    const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.json', '.csv', '.log', '.yml', '.yaml', '.toml', '.ini', '.cfg', '.xml', '.html', '.css', '.js', '.ts', '.py', '.sh', '.docx']);
     this.documentItems = [];
     let totalFiles = 0;
     let totalFolders = 0;
@@ -703,6 +711,9 @@ export class CommunionLoop {
 
     crawl(this.documentsDir, rootUri, 0);
 
+    // Kick off async DOCX text extraction in background (populates docxCache for browseFiles)
+    this.extractDocxBackground().catch(err => console.error('[DOCS] DOCX extraction error:', err));
+
     if (totalFiles === 0) {
       console.log(`[DOCS] No text files in ${this.documentsDir}/`);
       return;
@@ -727,9 +738,19 @@ export class CommunionLoop {
           buildTree(edge.target, indent + '  ');
         } else if (child['@type'] === 'Document') {
           summaryLines.push(`${indent}${child.data.filename} (${child.data.sizeKB}KB)`);
-          // Read ONLY first 500 bytes as preview (no full file read)
           const fullPath = child.data.fullPath as string;
-          if (fullPath) {
+          const isDocx = (child.data.filename as string || '').toLowerCase().endsWith('.docx');
+          if (isDocx) {
+            // DOCX: preview from cache if extraction already ran, otherwise just note it's searchable
+            const cached = fullPath ? this.docxCache.get(fullPath) : undefined;
+            if (cached) {
+              const preview = cached.substring(0, 300).split('\n').slice(0, 3).join('\n').trim();
+              if (preview) summaryLines.push(`${indent}  | ${preview.substring(0, 80)}`);
+            } else {
+              summaryLines.push(`${indent}  | [docx — use RAM:BROWSE to search]`);
+            }
+          } else if (fullPath) {
+            // Text files: read first 500 bytes as preview
             try {
               const fd = openSync(fullPath, 'r');
               const buf = Buffer.alloc(500);
@@ -756,6 +777,38 @@ export class CommunionLoop {
     this.documentsContext = summaryLines.join('\n');
 
     console.log(`[DOCS] Crawled: ${totalFolders} folders, ${totalFiles} files (metadata only, content loaded on-demand)`);
+  }
+
+  /**
+   * Background pass: extract plain text from every .docx file in the graph and store in docxCache.
+   * This enables RAM:BROWSE to search inside DOCX files.
+   * Does NOT embed into brain — that happens only for newly dropped files via the watcher.
+   */
+  private async extractDocxBackground(): Promise<void> {
+    const nodes = this.graph.getByType('Document').filter(n =>
+      (n.data.fullPath as string)?.toLowerCase().endsWith('.docx')
+    );
+    if (nodes.length === 0) return;
+
+    console.log(`[DOCS] Extracting text from ${nodes.length} DOCX files (background)...`);
+    let done = 0;
+    for (const node of nodes) {
+      const fullPath = node.data.fullPath as string;
+      if (!fullPath || this.docxCache.has(fullPath)) continue;
+      try {
+        const result = await mammoth.extractRawText({ path: fullPath });
+        const text = result.value.trim();
+        if (text) {
+          this.docxCache.set(fullPath, text);
+          done++;
+        }
+      } catch {
+        // corrupted or password-protected DOCX — skip silently
+      }
+      // Yield to event loop between files to keep server responsive
+      await new Promise(r => setImmediate(r));
+    }
+    console.log(`[DOCS] DOCX extraction complete: ${done}/${nodes.length} files indexed`);
   }
 
   /**
@@ -844,7 +897,15 @@ export class CommunionLoop {
       if (!fullPath || !existsSync(fullPath)) continue;
 
       try {
-        const content = readFileSync(fullPath, 'utf-8');
+        // DOCX files: use pre-extracted cache (populated by extractDocxBackground)
+        const isDocx = fullPath.toLowerCase().endsWith('.docx');
+        let content: string;
+        if (isDocx) {
+          content = this.docxCache.get(fullPath) ?? '';
+          if (!content) continue; // not yet extracted — skip
+        } else {
+          content = readFileSync(fullPath, 'utf-8');
+        }
         if (!content.toLowerCase().includes(searchLower)) continue;
 
         const lines = content.split('\n');
@@ -996,6 +1057,113 @@ export class CommunionLoop {
 
   reloadDocuments(): void {
     this.loadDocuments();
+  }
+
+  /**
+   * Watch communion-docs for new files dropped in at runtime.
+   * When a new .docx/.txt/.md file appears:
+   *   1. Register it in the graph (makes it browsable via RAM:BROWSE)
+   *   2. Extract text (mammoth for DOCX, readFileSync for text)
+   *   3. Chunk the text and feed each chunk into Alois's dendritic brain
+   */
+  private startDocumentWatcher(): void {
+    if (!existsSync(this.documentsDir)) return;
+
+    const WATCHED_EXTS = new Set(['.docx', '.txt', '.md', '.csv', '.json']);
+    const CHUNK_SIZE = 800; // chars per brain chunk (keeps embedding requests small)
+
+    const processNewFile = async (fullPath: string): Promise<void> => {
+      if (!existsSync(fullPath)) return; // delete event — ignore
+
+      const filename = fullPath.split(/[\\/]/).pop()!;
+      const ext = filename.substring(filename.lastIndexOf('.')).toLowerCase();
+      if (!WATCHED_EXTS.has(ext)) return;
+
+      // Register in graph if not already there
+      // Normalize to forward-slash relative path (matches how crawl() builds doc URIs)
+      const relativePath = fullPath
+        .replace(this.documentsDir, '')
+        .replace(/^[\\/]/, '')
+        .replace(/\\/g, '/');
+      const docUri = `doc:${relativePath}`;
+      if (!this.graph.getNode(docUri)) {
+        let fileSize = 0;
+        try { fileSize = statSync(fullPath).size; } catch { return; }
+        this.graph.addNode(docUri, 'Document', {
+          path: relativePath, fullPath, filename,
+          sizeBytes: fileSize, sizeKB: Math.round(fileSize / 1024),
+        });
+        const parentRel = relativePath.includes('/')
+          ? relativePath.substring(0, relativePath.lastIndexOf('/'))
+          : '';
+        const parentUri = parentRel ? `folder:${parentRel}` : `folder:${this.documentsDir}`;
+        this.graph.link(parentUri, 'contains', docUri);
+      }
+
+      // Extract text
+      let text = '';
+      try {
+        if (ext === '.docx') {
+          const result = await mammoth.extractRawText({ path: fullPath });
+          text = result.value;
+          if (text.trim()) this.docxCache.set(fullPath, text);
+        } else {
+          text = readFileSync(fullPath, 'utf-8');
+        }
+      } catch (err) {
+        console.error(`[DOCS:WATCH] Error reading ${filename}:`, err);
+        return;
+      }
+
+      text = text.trim();
+      if (!text) return;
+
+      // Check if any Alois brain is available to receive embeddings
+      const hasAloisBrain = [...this.agents.values()].some(
+        a => a.config.provider === 'alois' && 'feedMessage' in a.backend
+      );
+      if (!hasAloisBrain) {
+        console.log(`[DOCS:WATCH] ${filename} indexed in graph but no Alois backend to embed into`);
+        return;
+      }
+
+      // Chunk by paragraph then by CHUNK_SIZE, embed each into brain
+      const chunks: string[] = [];
+      for (const para of text.split(/\n\n+/)) {
+        const p = para.trim();
+        if (p.length < 20) continue;
+        for (let i = 0; i < p.length; i += CHUNK_SIZE) {
+          const chunk = p.slice(i, i + CHUNK_SIZE).trim();
+          if (chunk.length >= 20) chunks.push(chunk);
+        }
+      }
+
+      console.log(`[DOCS:WATCH] New file: ${filename} — embedding ${chunks.length} chunks into brain`);
+      for (const chunk of chunks) {
+        // trainOnly=true: doc chunks train neurons but don't pollute the conversation retrieval pool
+        await this.feedAloisBrainsAsync('document', chunk, filename, false, true);
+      }
+      console.log(`[DOCS:WATCH] ${filename}: ${chunks.length} chunks embedded`);
+
+      // Refresh the documents context summary so agents see the new file
+      this.reloadDocuments();
+    };
+
+    // Debounce map — editors often write a file multiple times in rapid succession
+    const pending = new Map<string, ReturnType<typeof setTimeout>>();
+
+    this.docWatcher = watch(this.documentsDir, { recursive: true }, (eventType, filename) => {
+      if (!filename || eventType !== 'rename') return;
+      const fullPath = join(this.documentsDir, filename as string);
+      const existing = pending.get(fullPath);
+      if (existing) clearTimeout(existing);
+      pending.set(fullPath, setTimeout(() => {
+        pending.delete(fullPath);
+        processNewFile(fullPath).catch(err => console.error('[DOCS:WATCH] Error:', err));
+      }, 600));
+    });
+
+    console.log(`[DOCS:WATCH] Watching ${this.documentsDir} — new files will be embedded into brain`);
   }
 
   on(listener: CommunionListener): void {
@@ -2783,6 +2951,7 @@ export class CommunionLoop {
       this.timer = null;
     }
     this.archiveIngestion?.stop();
+    this.docWatcher?.close();
     this.buffer.stop();
 
     // Final session save

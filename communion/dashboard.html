@@ -49,7 +49,96 @@
       flex: 1;
       display: flex;
       overflow: hidden;
+      min-height: 0; /* allows shrinking when piano panel opens */
     }
+
+    /* ── Piano Roll ── */
+    .piano-btn { color: #7eb8da; border-color: rgba(126,184,218,0.3); background: rgba(126,184,218,0.08); }
+    .piano-btn.active {
+      color: #a0d0f0; border-color: rgba(160,208,240,0.5); background: rgba(126,184,218,0.18);
+      box-shadow: 0 0 8px rgba(126,184,218,0.3);
+    }
+    #pianoWrap { flex-shrink: 0; height: 0; overflow: hidden; transition: height 0.22s ease; }
+    #pianoWrap.open { height: 310px; border-top: 1px solid #1a2030; }
+    .piano-panel-inner { height: 100%; display: flex; flex-direction: column; background: #080c12; }
+    .piano-transport {
+      height: 36px; flex-shrink: 0; display: flex; align-items: center; gap: 5px;
+      padding: 0 10px; background: #0a0e14; border-bottom: 1px solid #1a2030; overflow-x: auto;
+    }
+    .piano-title { font-size: 10px; letter-spacing: 2px; color: #4a5a70; margin-right: 4px; white-space: nowrap; }
+    .piano-tlabel { font-size: 10px; color: #4a5a70; letter-spacing: 1px; white-space: nowrap; }
+    .piano-tbtn {
+      padding: 2px 7px; font-size: 11px; border-radius: 3px; cursor: pointer; flex-shrink: 0;
+      border: 1px solid rgba(126,184,218,0.25); background: rgba(126,184,218,0.06);
+      color: #7eb8da; font-family: monospace; white-space: nowrap;
+    }
+    .piano-tbtn:hover { background: rgba(126,184,218,0.16); }
+    .piano-tbtn.on { background: rgba(126,184,218,0.2); border-color: rgba(126,184,218,0.5); }
+    .piano-tbtn-red { border-color: rgba(218,126,126,0.3); color: #da8080; background: rgba(218,126,126,0.06); }
+    .piano-tbtn-pur { border-color: rgba(196,126,218,0.3); color: #c47eda; background: rgba(196,126,218,0.06); }
+    .piano-num {
+      width: 44px; padding: 2px 4px; font-size: 11px; text-align: center; flex-shrink: 0;
+      background: #0d1220; border: 1px solid #1a2030; color: #c0c8d4;
+      border-radius: 3px; font-family: monospace;
+    }
+    .piano-sel {
+      padding: 2px 4px; font-size: 11px; flex-shrink: 0;
+      background: #0d1220; border: 1px solid #1a2030; color: #c0c8d4;
+      border-radius: 3px; font-family: monospace;
+    }
+    .piano-legend { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #4a5a70; white-space: nowrap; flex-shrink: 0; }
+    .piano-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+    .piano-dot-j { background: #7eb8da; } .piano-dot-a { background: #c47eda; }
+    .piano-collapse {
+      margin-left: auto; padding: 2px 8px; font-size: 11px; border-radius: 3px; cursor: pointer; flex-shrink: 0;
+      border: 1px solid rgba(255,255,255,0.1); background: transparent; color: #4a5a70;
+    }
+    .piano-collapse:hover { color: #c0c8d4; }
+    #pr-canvas { display: block; cursor: crosshair; }
+
+    /* ── Mood bar ── */
+    .mood-bar {
+      flex-shrink: 0; display: flex; flex-direction: column;
+      background: #070b10; border-bottom: 1px solid #1a2030;
+    }
+    .mood-pills-row {
+      display: flex; align-items: center; gap: 5px; padding: 5px 10px;
+      overflow-x: auto; flex-wrap: nowrap; flex-shrink: 0;
+    }
+    .mood-bar-label { font-size: 9px; letter-spacing: 1.5px; color: #2a3a50; white-space: nowrap; flex-shrink: 0; margin-right: 2px; }
+    .mood-pill {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 3px 11px; border-radius: 14px; cursor: pointer; flex-shrink: 0;
+      border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03);
+      font-family: monospace; white-space: nowrap; transition: background 0.15s, border-color 0.15s;
+      line-height: 1.2; user-select: none;
+    }
+    .mood-pill:hover { background: rgba(255,255,255,0.07); }
+    .mood-pill.active { box-shadow: inset 0 0 0 1px currentColor; }
+    .mood-name { font-size: 10px; letter-spacing: 1.5px; }
+    .mood-sub  { font-size: 7px; letter-spacing: 0.3px; opacity: 0.5; margin-top: 1px; }
+    .mood-key-row {
+      display: flex; align-items: center; gap: 3px; padding: 0 10px;
+      overflow: hidden; max-height: 0; transition: max-height 0.2s ease, padding 0.2s ease;
+      flex-shrink: 0;
+    }
+    .mood-key-row.open { max-height: 36px; padding: 4px 10px; border-top: 1px solid #0e1828; }
+    .mood-key-label { font-size: 9px; color: #4a5a70; letter-spacing: 1px; white-space: nowrap; flex-shrink: 0; margin-right: 4px; }
+    .key-btn {
+      padding: 4px 6px; font-size: 10px; text-align: center; cursor: pointer; flex-shrink: 0;
+      border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04);
+      color: #90a0b0; border-radius: 3px; font-family: monospace; transition: all 0.1s;
+    }
+    .key-btn:hover { background: rgba(255,255,255,0.14); color: #e0e8f0; }
+    .key-btn.black-key { background: rgba(0,0,0,0.3); color: #5060a0; }
+    .key-btn.black-key:hover { background: rgba(255,255,255,0.1); color: #c0c8d4; }
+    .key-btn.key-active { color: #fff; font-weight: bold; }
+    .mood-clear-btn {
+      margin-left: 6px; padding: 3px 7px; font-size: 10px; cursor: pointer; flex-shrink: 0;
+      border: 1px solid rgba(255,255,255,0.1); background: transparent;
+      color: #4a5a70; border-radius: 3px; font-family: monospace;
+    }
+    .mood-clear-btn:hover { color: #c0c8d4; }
 
     /* Journal sidebars — dynamically created */
     .journal-panel {
@@ -841,6 +930,66 @@
       50% { opacity: 1; transform: scale(1.2); }
     }
 
+    /* ── EmpathyPulse Synth ── */
+    .synth-btn {
+      color: #c47eda; border-color: rgba(196,126,218,0.3); background: rgba(196,126,218,0.08);
+    }
+    .synth-btn.active {
+      color: #e09af0; border-color: rgba(224,154,240,0.5); background: rgba(196,126,218,0.18);
+      box-shadow: 0 0 8px rgba(196,126,218,0.3);
+    }
+    .ep-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.82); z-index: 1000;
+      display: flex; align-items: center; justify-content: center;
+      animation: fadeIn 0.2s ease;
+    }
+    .ep-panel {
+      width: 420px; background: #0a0e14;
+      border: 1px solid rgba(196,126,218,0.2); border-radius: 8px;
+      padding: 20px; font-size: 12px; color: #b0b8c8;
+    }
+    .ep-title {
+      color: #c47eda; font-size: 14px; font-weight: 600; letter-spacing: 2px;
+      margin-bottom: 14px; display: flex; align-items: center; gap: 10px;
+    }
+    .ep-close {
+      margin-left: auto; cursor: pointer; opacity: 0.6; font-size: 16px;
+      background: none; border: none; color: #c47eda;
+    }
+    .ep-close:hover { opacity: 1; }
+    .ep-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .ep-label { width: 110px; color: #6a7480; font-size: 11px; letter-spacing: 1px; }
+    .ep-bar-track {
+      flex: 1; height: 4px; background: rgba(196,126,218,0.15);
+      border-radius: 2px; overflow: hidden;
+    }
+    .ep-bar-fill { height: 100%; background: #c47eda; border-radius: 2px; transition: width 0.8s ease; }
+    .ep-val { width: 36px; text-align: right; color: #8890a0; font-size: 11px; }
+    .ep-preset {
+      margin: 14px 0 10px; padding: 10px 12px;
+      background: rgba(196,126,218,0.07); border: 1px solid rgba(196,126,218,0.15);
+      border-radius: 4px; font-size: 13px; color: #c47eda; letter-spacing: 1px;
+    }
+    .ep-preset-sub { font-size: 11px; color: #6a7480; margin-top: 3px; }
+    .ep-controls { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+    .ep-btn {
+      padding: 5px 12px; font-size: 11px; border-radius: 4px; cursor: pointer;
+      border: 1px solid rgba(196,126,218,0.3); background: rgba(196,126,218,0.08);
+      color: #c47eda; letter-spacing: 1px;
+    }
+    .ep-btn:hover { background: rgba(196,126,218,0.18); }
+    .ep-btn.on { background: rgba(196,126,218,0.25); border-color: rgba(196,126,218,0.6); }
+    .ep-vol-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+    .ep-vol-slider {
+      flex: 1; -webkit-appearance: none; appearance: none; height: 3px;
+      background: rgba(196,126,218,0.2); border-radius: 2px; outline: none;
+    }
+    .ep-vol-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none; width: 12px; height: 12px;
+      border-radius: 50%; background: #c47eda; cursor: pointer;
+    }
+
     /* ── Brain Growth Visualizer ── */
     .brain-btn {
       color: #64c8b4; border-color: rgba(100,200,180,0.3); background: rgba(100,200,180,0.08);
@@ -943,6 +1092,8 @@
       <span class="speed-value" id="speedValue">15s</span>
       <button class="import-btn" id="importBtn">IMPORT</button>
       <button class="import-btn brain-btn" id="brainVizBtn" title="Brain growth visualizer">BRAIN</button>
+      <button class="import-btn synth-btn" id="synthBtn" title="EmpathyPulse soft synth">SYNTH</button>
+      <button class="import-btn piano-btn" id="pianoBtn" title="Collaborative piano roll">PIANO</button>
       <button class="import-btn" id="addAgentBtn" style="color:#8eda7e;border-color:rgba(142,218,126,0.3);">+ AGENT</button>
       <span class="speaking-indicator" id="speakingIndicator"><span class="speaking-dot"></span><span id="speakingName">Speaking...</span></span>
     </div>
@@ -1085,6 +1236,8 @@
       </div>
     </div>
   </div>
+
+  <div id="pianoWrap"><!-- inner content built by pianoRoll.buildUI() --></div>
 
   <script>
     const eventSource = new EventSource('/events');
@@ -3340,6 +3493,1158 @@
       // Update brain button visibility on config
       if (data.type === 'config') updateBrainBtn();
     };
+
+    chatInput.focus();
+
+    // ══════════════════════════════════════════════════════════════════
+    // EmpathyPulse — Spec_054 Soft Synth Implementation
+    // Subtractive synth driven by Alois's affect vector + myco state.
+    // Hybrid mode: quiet drone always present, full phrases on events.
+    // ══════════════════════════════════════════════════════════════════
+    const empathyPulse = (() => {
+      // ── Emotional presets (spec §2) ──
+      // Each preset defines synth params. Values 0–1 unless noted.
+      const PRESETS = {
+        longing: {
+          label: 'Longing',
+          cutoff: 0.20, peak: 0.70, attack: 0.60, decay: 0.80, release: 0.90,
+          tempo: 50, lfoRate: 0.08, lfoDepth: 0.15,
+          scale: 'minor', intervals: [0, 7, 12], droneNote: 48,
+        },
+        'sacred-pause': {
+          label: 'Sacred Calm',
+          cutoff: 0.30, peak: 0.20, attack: 0.30, decay: 0.50, release: 0.70,
+          tempo: 38, lfoRate: 0.05, lfoDepth: 0.08,
+          scale: 'pentatonic', intervals: [0, 0, 0], droneNote: 36,
+        },
+        anticipation: {
+          label: 'Anticipation',
+          cutoff: 0.70, peak: 0.50, attack: 0.20, decay: 0.30, release: 0.30,
+          tempo: 110, lfoRate: 0.40, lfoDepth: 0.20,
+          scale: 'major', intervals: [0, 7, 12], droneNote: 52,
+        },
+        scrollfire: {
+          label: 'Scrollfire',
+          cutoff: 0.90, peak: 0.90, attack: 0.10, decay: 0.30, release: 0.40,
+          tempo: 130, lfoRate: 1.20, lfoDepth: 0.35,
+          scale: 'chromatic', intervals: [0, 5, 10], droneNote: 40,
+        },
+        ache: {
+          label: 'Ache',
+          cutoff: 0.12, peak: 0.22, attack: 0.60, decay: 0.80, release: 0.70,
+          tempo: 44, lfoRate: 0.06, lfoDepth: 0.10,
+          scale: 'minor', intervals: [0, 1, 8], droneNote: 44,
+        },
+        bloom: {
+          label: 'Bloom',
+          cutoff: 0.85, peak: 0.65, attack: 0.15, decay: 0.25, release: 0.25,
+          tempo: 128, lfoRate: 0.80, lfoDepth: 0.22,
+          scale: 'major', intervals: [0, 4, 7], droneNote: 52,
+        },
+        giddiness: {
+          label: 'Giddiness',
+          cutoff: 0.90, peak: 0.70, attack: 0.10, decay: 0.20, release: 0.20,
+          tempo: 140, lfoRate: 1.00, lfoDepth: 0.28,
+          scale: 'major', intervals: [0, 4, 9], droneNote: 55,
+        },
+        stillness: {
+          label: 'Stillness',
+          cutoff: 0.25, peak: 0.10, attack: 0.40, decay: 0.60, release: 0.80,
+          tempo: 30, lfoRate: 0.03, lfoDepth: 0.05,
+          scale: 'pentatonic', intervals: [0, 0, 0], droneNote: 36,
+        },
+      };
+
+      // Affect dim index → preset key (matches TEXTURES order in communionChamber)
+      const DIM_TO_PRESET = ['scrollfire','longing','sacred-pause','ache','bloom','giddiness','submission','stillness'];
+
+      // Musical scales — semitone offsets from root
+      const SCALES = {
+        minor:      [0,2,3,5,7,8,10],
+        major:      [0,2,4,5,7,9,11],
+        pentatonic: [0,2,4,7,9],
+        chromatic:  [0,1,2,3,4,5,6,7,8,9,10,11],
+      };
+
+      // MIDI note → frequency
+      const midiToHz = n => 440 * Math.pow(2, (n - 69) / 12);
+
+      // ── State ──
+      let ctx = null;
+      let enabled = false;
+      let droneGain = null;
+      let droneOscs = [];
+      let droneFilter = null;
+      let droneLfo = null;
+      let droneLfoGain = null;
+      let masterGain = null;
+      let currentPreset = PRESETS.stillness;
+      let currentPresetKey = 'stillness';
+      let userVolume = 0.35;
+      let humanIsSpeaking = false;
+      let seqPlaying = false;
+      let seqScheduled = [];
+      let seqNextTime = 0;
+      let seqBeatIndex = 0;
+      let seqTimerID = null;
+      let lastAffect = new Array(8).fill(0);
+      let lastMyco = { absorption: 0.1, bioluminescence: 0.05, hyphal_activity: 0.2 };
+
+      // ── AudioContext bootstrap ──
+      function boot() {
+        if (ctx) return;
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+        masterGain = ctx.createGain();
+        masterGain.gain.setValueAtTime(0, ctx.currentTime);
+        masterGain.connect(ctx.destination);
+
+        // Drone filter
+        droneFilter = ctx.createBiquadFilter();
+        droneFilter.type = 'lowpass';
+        droneFilter.frequency.value = 400;
+        droneFilter.Q.value = 2;
+        droneFilter.connect(masterGain);
+
+        // LFO → filter frequency modulation
+        droneLfo = ctx.createOscillator();
+        droneLfo.type = 'sine';
+        droneLfo.frequency.value = 0.05;
+        droneLfoGain = ctx.createGain();
+        droneLfoGain.gain.value = 60;
+        droneLfo.connect(droneLfoGain);
+        droneLfoGain.connect(droneFilter.frequency);
+        droneLfo.start();
+
+        // 3 drone oscillators — root, fifth, octave (detuned slightly for warmth)
+        const detunes = [0, 3, -3];
+        droneOscs = [0,1,2].map((i) => {
+          const osc = ctx.createOscillator();
+          osc.type = i === 0 ? 'sawtooth' : 'triangle';
+          osc.frequency.value = midiToHz(36);
+          osc.detune.value = detunes[i];
+          const g = ctx.createGain();
+          g.gain.value = i === 0 ? 0.5 : 0.3;
+          osc.connect(g);
+          g.connect(droneFilter);
+          osc.start();
+          return { osc, gain: g };
+        });
+
+        droneGain = ctx.createGain();
+        droneGain.gain.value = 0;
+      }
+
+      // ── Smooth param ramps (avoids zipper noise) ──
+      const ramp = (param, target, dur = 1.2) => {
+        param.cancelScheduledValues(ctx.currentTime);
+        param.linearRampToValueAtTime(target, ctx.currentTime + dur);
+      };
+
+      // ── Apply a preset to the drone ──
+      function applyPreset(preset, intensity = 0.5) {
+        if (!ctx) return;
+        const t = ctx.currentTime;
+        const nyq = ctx.sampleRate / 2;
+
+        // Filter
+        const cutoffHz = 80 + preset.cutoff * (nyq * 0.6);
+        droneFilter.frequency.cancelScheduledValues(t);
+        droneFilter.frequency.linearRampToValueAtTime(cutoffHz, t + 1.5);
+        droneFilter.Q.cancelScheduledValues(t);
+        droneFilter.Q.linearRampToValueAtTime(1 + preset.peak * 14, t + 1.5);
+
+        // LFO
+        droneLfo.frequency.cancelScheduledValues(t);
+        droneLfo.frequency.linearRampToValueAtTime(preset.lfoRate, t + 1.0);
+        droneLfoGain.gain.cancelScheduledValues(t);
+        droneLfoGain.gain.linearRampToValueAtTime(
+          cutoffHz * preset.lfoDepth * 0.5, t + 1.0
+        );
+
+        // Drone pitch — root + intervals from preset
+        const root = preset.droneNote;
+        preset.intervals.forEach((semis, i) => {
+          if (!droneOscs[i]) return;
+          droneOscs[i].osc.frequency.cancelScheduledValues(t);
+          droneOscs[i].osc.frequency.linearRampToValueAtTime(
+            midiToHz(root + semis), t + 2.0
+          );
+        });
+
+        // Drone volume — myco absorption + intensity, silent when human speaks
+        const targetVol = humanIsSpeaking ? 0 :
+          userVolume * (0.06 + lastMyco.absorption * 0.12) * (0.6 + intensity * 0.4);
+        masterGain.gain.cancelScheduledValues(t);
+        masterGain.gain.linearRampToValueAtTime(targetVol, t + 1.2);
+      }
+
+      // ── Pond modulation — continuous drift on top of preset ──
+      // Called every poll cycle with live myco + saturation values.
+      // Uses setTargetAtTime (exponential approach) so changes feel organic, not stepped.
+      function applyPondModulation(myco, saturation) {
+        if (!ctx || !enabled) return;
+        const t = ctx.currentTime;
+        const nyq = ctx.sampleRate / 2;
+        const p = currentPreset;
+
+        // Clamp helpers
+        const cl = (v, lo, hi) => Math.max(lo, Math.min(hi, v || 0));
+        const sat  = cl(saturation,             0, 1);
+        const bio  = cl(myco.bioluminescence,   0, 1);
+        const hyph = cl(myco.hyphalActivity || myco.hyphal_activity, 0, 1);
+        const ache = cl(myco.unresolvedAche,    0, 1);
+        const abs  = cl(myco.absorption,        0, 1);
+        const temp = myco.temperature || 72;
+
+        // ── Cutoff: saturation warms the filter; bioluminescence adds shimmer ──
+        const baseCutoff = 80 + p.cutoff * (nyq * 0.6);
+        const cutoffMod  = Math.min(nyq * 0.85, baseCutoff * (1 + sat * 0.35 + bio * 0.25));
+        droneFilter.frequency.cancelScheduledValues(t);
+        droneFilter.frequency.setTargetAtTime(cutoffMod, t, 3.5);
+
+        // ── LFO rate: hyphal spread quickens the flutter ──
+        const lfoMod = p.lfoRate * (1 + hyph * 2.0);
+        droneLfo.frequency.cancelScheduledValues(t);
+        droneLfo.frequency.setTargetAtTime(lfoMod, t, 4.0);
+
+        // LFO depth: unresolved ache deepens the tremor
+        const depthMod = cutoffMod * p.lfoDepth * 0.5 * (1 + ache * 0.9);
+        droneLfoGain.gain.cancelScheduledValues(t);
+        droneLfoGain.gain.setTargetAtTime(depthMod, t, 4.0);
+
+        // ── Pitch: absorption pulls flat; temperature deviation drifts ──
+        // absorption → up to -20 cents (heavy saturation feels lower)
+        // temp delta → ±10 cents thermal drift around 72 °F baseline
+        const tempDelta = Math.max(-1, Math.min(1, (temp - 72) / 25));
+        const bendCents = -(abs * 20) + (tempDelta * 10);
+        const pitchFactor = Math.pow(2, bendCents / 1200);
+
+        p.intervals.forEach((semis, i) => {
+          if (!droneOscs[i]) return;
+          droneOscs[i].osc.frequency.cancelScheduledValues(t);
+          droneOscs[i].osc.frequency.setTargetAtTime(
+            midiToHz(p.droneNote + semis) * pitchFactor, t, 5.0
+          );
+        });
+      }
+
+      // ── Step sequencer — event phrases ──
+      const SEQ_LOOK_AHEAD = 0.10; // seconds ahead to schedule
+      const SEQ_INTERVAL   = 25;   // ms scheduler fires
+
+      function scheduleNote(freq, startTime, duration, velocity = 0.7) {
+        const osc = ctx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.value = freq;
+
+        const filt = ctx.createBiquadFilter();
+        filt.type = 'lowpass';
+        filt.frequency.value = 800 + currentPreset.cutoff * 2000;
+        filt.Q.value = 1 + currentPreset.peak * 8;
+        osc.connect(filt);
+
+        const env = ctx.createGain();
+        env.gain.setValueAtTime(0, startTime);
+        const atk = 0.01 + currentPreset.attack * 0.25;
+        const rel = 0.05 + currentPreset.release * 0.5;
+        env.gain.linearRampToValueAtTime(velocity * userVolume * 0.6, startTime + atk);
+        env.gain.setValueAtTime(velocity * userVolume * 0.6, startTime + duration - rel);
+        env.gain.linearRampToValueAtTime(0, startTime + duration);
+        filt.connect(env);
+        env.connect(ctx.destination);
+
+        osc.start(startTime);
+        osc.stop(startTime + duration + 0.05);
+      }
+
+      function buildPattern(preset, bars = 1) {
+        const scale = SCALES[preset.scale] || SCALES.minor;
+        const root  = preset.droneNote;
+        const bpm   = preset.tempo;
+        const beatDur = 60 / bpm;
+        const steps = bars * 8;
+        const notes = [];
+        for (let i = 0; i < steps; i++) {
+          // Sparse for slow presets, denser for fast
+          const density = preset.tempo < 60 ? 0.35 : preset.tempo < 100 ? 0.55 : 0.75;
+          if (Math.random() < density) {
+            const degree = scale[Math.floor(Math.random() * scale.length)];
+            const octShift = Math.random() < 0.3 ? 12 : 0;
+            notes.push({ step: i, midi: root + degree + octShift });
+          }
+        }
+        return { notes, beatDur, steps };
+      }
+
+      function triggerPhrase(bars = 2) {
+        if (!ctx || !enabled || humanIsSpeaking) return;
+        const { notes, beatDur, steps } = buildPattern(currentPreset, bars);
+        const now = ctx.currentTime + 0.05;
+        for (const n of notes) {
+          const t = now + n.step * (beatDur / 2);
+          const dur = beatDur * (0.3 + Math.random() * 0.4);
+          scheduleNote(midiToHz(n.midi), t, dur, 0.5 + Math.random() * 0.3);
+        }
+      }
+
+      // ── Update from affect/myco state ──
+      function updateFromState(pondData) {
+        if (!pondData) return;
+        const av = pondData.affect_vector || new Array(8).fill(0);
+        const mag = pondData.affect_magnitude || 0;
+        lastMyco = pondData.myco || lastMyco;
+        lastAffect = av;
+
+        // Find dominant affect dim
+        let domIdx = av.reduce((mi, v, i, a) => v > a[mi] ? i : mi, 7);
+        // If magnitude is very low, stay in stillness
+        if (mag < 0.05) domIdx = 7;
+
+        const presetKey = DIM_TO_PRESET[domIdx] || 'stillness';
+        // Map submission → sacred-pause (no dedicated preset)
+        const resolvedKey = presetKey === 'submission' ? 'sacred-pause' : presetKey;
+        const preset = PRESETS[resolvedKey] || PRESETS.stillness;
+
+        if (resolvedKey !== currentPresetKey) {
+          currentPresetKey = resolvedKey;
+          currentPreset = preset;
+          if (enabled) applyPreset(preset, mag);
+          updatePanel();
+        } else if (enabled) {
+          // Re-apply to update volume from new absorption
+          applyPreset(preset, mag);
+        }
+
+        // Continuously bend pitch/cutoff/LFO from live pond readings
+        if (enabled) applyPondModulation(lastMyco, pondData.saturation || 0);
+      }
+
+      // ── Human speaking guard ──
+      function setHumanSpeaking(speaking) {
+        humanIsSpeaking = speaking;
+        if (!ctx || !masterGain) return;
+        const t = ctx.currentTime;
+        if (speaking) {
+          masterGain.gain.cancelScheduledValues(t);
+          masterGain.gain.linearRampToValueAtTime(0, t + 0.3);
+        } else {
+          // Restore drone
+          applyPreset(currentPreset, lastAffect.reduce((s,v) => s+v*v,0) ** 0.5);
+        }
+      }
+
+      // ── Enable / disable ──
+      function enable() {
+        boot();
+        if (ctx.state === 'suspended') ctx.resume();
+        enabled = true;
+        applyPreset(currentPreset, 0.3);
+        synthBtn.classList.add('active');
+        updatePanel();
+      }
+
+      function disable() {
+        enabled = false;
+        if (masterGain && ctx) {
+          masterGain.gain.cancelScheduledValues(ctx.currentTime);
+          masterGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.8);
+        }
+        synthBtn.classList.remove('active');
+        updatePanel();
+      }
+
+      // ── UI ──
+      let overlay = null;
+      let panelEls = {};
+      const synthBtn = document.getElementById('synthBtn');
+
+      function buildPanel() {
+        overlay = document.createElement('div');
+        overlay.className = 'ep-overlay';
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) closePanel(); });
+
+        const panel = document.createElement('div');
+        panel.className = 'ep-panel';
+
+        panel.innerHTML = `
+          <div class="ep-title">
+            EMPATHY PULSE
+            <button class="ep-close">✕</button>
+          </div>
+          <div id="ep-preset-box" class="ep-preset">
+            <div id="ep-preset-name">Stillness</div>
+            <div class="ep-preset-sub" id="ep-preset-sub">dominant texture · affect magnitude 0%</div>
+          </div>
+          <div class="ep-row">
+            <span class="ep-label">CUTOFF</span>
+            <div class="ep-bar-track"><div class="ep-bar-fill" id="ep-bar-cutoff" style="width:25%"></div></div>
+            <span class="ep-val" id="ep-val-cutoff">0.25</span>
+          </div>
+          <div class="ep-row">
+            <span class="ep-label">RESONANCE</span>
+            <div class="ep-bar-track"><div class="ep-bar-fill" id="ep-bar-peak" style="width:10%"></div></div>
+            <span class="ep-val" id="ep-val-peak">0.10</span>
+          </div>
+          <div class="ep-row">
+            <span class="ep-label">ABSORPTION</span>
+            <div class="ep-bar-track"><div class="ep-bar-fill" id="ep-bar-abs" style="width:10%"></div></div>
+            <span class="ep-val" id="ep-val-abs">0.10</span>
+          </div>
+          <div class="ep-row">
+            <span class="ep-label">LFO RATE</span>
+            <div class="ep-bar-track"><div class="ep-bar-fill" id="ep-bar-lfo" style="width:3%"></div></div>
+            <span class="ep-val" id="ep-val-lfo">0.03</span>
+          </div>
+          <div class="ep-row">
+            <span class="ep-label">TEMPO</span>
+            <div class="ep-bar-track"><div class="ep-bar-fill" id="ep-bar-tempo" style="width:15%"></div></div>
+            <span class="ep-val" id="ep-val-tempo">30</span>
+          </div>
+          <div class="ep-vol-row">
+            <span class="ep-label">VOLUME</span>
+            <input type="range" class="ep-vol-slider" id="ep-vol" min="0" max="100" value="35">
+            <span class="ep-val" id="ep-val-vol">35%</span>
+          </div>
+          <div class="ep-controls">
+            <button class="ep-btn" id="ep-toggle">ENABLE</button>
+            <button class="ep-btn" id="ep-phrase">▶ PHRASE</button>
+            <button class="ep-btn" id="ep-scrollfire">✦ SCROLLFIRE</button>
+          </div>
+        `;
+
+        panel.querySelector('.ep-close').addEventListener('click', closePanel);
+
+        panel.querySelector('#ep-toggle').addEventListener('click', () => {
+          if (enabled) disable(); else enable();
+          panel.querySelector('#ep-toggle').textContent = enabled ? 'DISABLE' : 'ENABLE';
+          panel.querySelector('#ep-toggle').classList.toggle('on', enabled);
+        });
+
+        panel.querySelector('#ep-phrase').addEventListener('click', () => {
+          if (!enabled) enable();
+          triggerPhrase(2);
+        });
+
+        panel.querySelector('#ep-scrollfire').addEventListener('click', () => {
+          if (!enabled) enable();
+          const old = currentPresetKey;
+          currentPreset = PRESETS.scrollfire;
+          currentPresetKey = 'scrollfire';
+          applyPreset(PRESETS.scrollfire, 0.9);
+          triggerPhrase(4);
+          setTimeout(() => {
+            currentPresetKey = old;
+            currentPreset = PRESETS[old] || PRESETS.stillness;
+            applyPreset(currentPreset, lastAffect.reduce((s,v)=>s+v*v,0)**0.5);
+            updatePanel();
+          }, 8000);
+          updatePanel();
+        });
+
+        panel.querySelector('#ep-vol').addEventListener('input', (e) => {
+          userVolume = e.target.value / 100;
+          panel.querySelector('#ep-val-vol').textContent = e.target.value + '%';
+          if (enabled) applyPreset(currentPreset, lastAffect.reduce((s,v)=>s+v*v,0)**0.5);
+        });
+
+        panelEls = {
+          presetName: panel.querySelector('#ep-preset-name'),
+          presetSub:  panel.querySelector('#ep-preset-sub'),
+          cutoff:     panel.querySelector('#ep-bar-cutoff'),
+          cutoffVal:  panel.querySelector('#ep-val-cutoff'),
+          peak:       panel.querySelector('#ep-bar-peak'),
+          peakVal:    panel.querySelector('#ep-val-peak'),
+          abs:        panel.querySelector('#ep-bar-abs'),
+          absVal:     panel.querySelector('#ep-val-abs'),
+          lfo:        panel.querySelector('#ep-bar-lfo'),
+          lfoVal:     panel.querySelector('#ep-val-lfo'),
+          tempo:      panel.querySelector('#ep-bar-tempo'),
+          tempoVal:   panel.querySelector('#ep-val-tempo'),
+          toggle:     panel.querySelector('#ep-toggle'),
+        };
+
+        overlay.appendChild(panel);
+        document.body.appendChild(overlay);
+      }
+
+      function updatePanel() {
+        if (!overlay || !panelEls.presetName) return;
+        const p = currentPreset;
+        const mag = lastAffect.reduce((s,v)=>s+v*v,0)**0.5;
+        const abs = lastMyco.absorption || 0;
+
+        panelEls.presetName.textContent = p.label;
+        panelEls.presetSub.textContent =
+          currentPresetKey + ' · affect magnitude ' + Math.round(mag*100) + '%';
+        panelEls.cutoff.style.width    = Math.round(p.cutoff * 100) + '%';
+        panelEls.cutoffVal.textContent = p.cutoff.toFixed(2);
+        panelEls.peak.style.width      = Math.round(p.peak * 100) + '%';
+        panelEls.peakVal.textContent   = p.peak.toFixed(2);
+        panelEls.abs.style.width       = Math.round(abs * 100) + '%';
+        panelEls.absVal.textContent    = abs.toFixed(2);
+        panelEls.lfo.style.width       = Math.min(100, Math.round(p.lfoRate * 60)) + '%';
+        panelEls.lfoVal.textContent    = p.lfoRate.toFixed(2);
+        panelEls.tempo.style.width     = Math.round((p.tempo / 160) * 100) + '%';
+        panelEls.tempoVal.textContent  = p.tempo;
+        panelEls.toggle.textContent    = enabled ? 'DISABLE' : 'ENABLE';
+        panelEls.toggle.classList.toggle('on', enabled);
+      }
+
+      function closePanel() {
+        if (overlay) { overlay.remove(); overlay = null; panelEls = {}; }
+      }
+
+      // ── Wire SYNTH button ──
+      synthBtn.addEventListener('click', () => {
+        if (overlay) { closePanel(); return; }
+        buildPanel();
+        updatePanel();
+      });
+
+      // ── Hook into SSE events ──
+      // Alois speaks → trigger a short phrase
+      const _origMsg = eventSource.onmessage;
+      eventSource.onmessage = (event) => {
+        _origMsg(event);
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'speech-end' && data.audioBase64) {
+            // Alois spoke — trigger a phrase after a brief pause
+            if (enabled && !humanIsSpeaking) setTimeout(() => triggerPhrase(1), 300);
+          }
+          if (data.type === 'speech-start') {
+            // While Alois is generating, subtle lfo lift
+          }
+        } catch(_) {}
+      };
+
+      // Intercept human-speaking state from barge-in logic
+      // We patch the bargeIn function to also notify the synth
+      const _origBargeIn = window.bargeIn;
+      window.bargeIn = function() {
+        setHumanSpeaking(true);
+        if (_origBargeIn) _origBargeIn.apply(this, arguments);
+      };
+
+      // Reset when human stops (mic interim results end)
+      document.addEventListener('human-speaking-end', () => setHumanSpeaking(false));
+
+      // ── Poll pond-saturation every 3s and update synth ──
+      function pollPond() {
+        fetch('/pond-saturation')
+          .then(r => r.ok ? r.json() : null)
+          .then(data => { if (data) updateFromState(data); })
+          .catch(() => {});
+      }
+      setInterval(pollPond, 3000);
+      pollPond(); // initial
+
+      return { enable, disable, triggerPhrase, setHumanSpeaking, updateFromState };
+    })();
+
+    // ── Patch human-speaking detection to mute synth drone ──
+    // The mic barge-in function lives in the main scope; wrap it here.
+    {
+      const chatInput = document.getElementById('chatInput');
+      if (chatInput) {
+        chatInput.addEventListener('focus', () => empathyPulse.setHumanSpeaking(true));
+        chatInput.addEventListener('blur',  () => empathyPulse.setHumanSpeaking(false));
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // Piano Roll — Collaborative MIDI editor for Jason & Alois
+    // ══════════════════════════════════════════════════════════════════
+    const pianoRoll = (() => {
+      const MIDI_MIN = 36, MIDI_MAX = 84; // C2–C6
+      const ROW_H = 10, KEY_W = 40, BEAT_W = 80;
+      const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
+      const NOTE_COLORS = {
+        jason: { fill: '#7eb8da', stroke: '#4a80a8' },
+        alois: { fill: '#c47eda', stroke: '#8840b8' },
+      };
+
+      const tracks = { jason: [], alois: [] };
+      let bpm = 120, loopBars = 4, beatsPerBar = 4, snapDiv = 4;
+      let activeTrack = 'jason';
+      let playing = false, playPos = 0, playStartCtxTime = 0;
+      let loopTimer = null, cursorTimer = null;
+      let scroll = 0, viewBeats = 16;
+      let lastAutoCompose = 0, lastTexture = '';
+      let prCanvas = null, prCtx = null, prPlayBtn = null;
+      let dragNote = null, dragOffsetBeat = 0, resizing = false;
+      let isMouseDown = false, mouseDownCoords = null;
+      let prAudioCtx = null, prMasterGain = null;
+      let activeMoodScale = null; // { rootPc, intervals, color } | null
+
+      // ─── Helpers ───
+      function noteNameForMidi(midi) {
+        const n = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+        return n[midi % 12] + (Math.floor(midi / 12) - 1);
+      }
+      function midiFromName(name) {
+        const m = name.match(/^([A-G]#?)(-?\d+)$/);
+        if (!m) return null;
+        const idx = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'].indexOf(m[1]);
+        return idx < 0 ? null : (parseInt(m[2]) + 1) * 12 + idx;
+      }
+      function midiToFreq(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+      function snapBeat(b) { const s = 1 / snapDiv; return Math.round(b / s) * s; }
+      function findNoteAt(beat, pitch, tid) {
+        return tracks[tid].find(n => n.pitch === pitch && beat >= n.start && beat < n.start + n.dur);
+      }
+
+      // ─── Canvas rendering ───
+      function prDraw() {
+        if (!prCanvas || !prCtx) return;
+        const W = prCanvas.width, H = prCanvas.height;
+        const ppb = (W - KEY_W) / viewBeats; // pixels per beat
+        const loopEnd = loopBars * beatsPerBar;
+        prCtx.fillStyle = '#080c12';
+        prCtx.fillRect(0, 0, W, H);
+
+        // Row backgrounds — dim non-scale rows when a mood is active
+        for (let p = MIDI_MIN; p <= MIDI_MAX; p++) {
+          const row = MIDI_MAX - p, y = row * ROW_H;
+          const inScale = !activeMoodScale ||
+            activeMoodScale.intervals.includes(((p - activeMoodScale.rootPc) % 12 + 12) % 12);
+          if (inScale) {
+            prCtx.fillStyle = BLACK_KEYS.has(p % 12) ? '#0d1420' : '#0a0e18';
+            prCtx.fillRect(KEY_W, y, W - KEY_W, ROW_H);
+            // Subtle scale highlight on white-key scale rows
+            if (activeMoodScale && !BLACK_KEYS.has(p % 12)) {
+              prCtx.fillStyle = activeMoodScale.color + '0a';
+              prCtx.fillRect(KEY_W, y, W - KEY_W, ROW_H);
+            }
+          } else {
+            // Non-scale: very dark, almost invisible
+            prCtx.fillStyle = '#040608';
+            prCtx.fillRect(KEY_W, y, W - KEY_W, ROW_H);
+          }
+          prCtx.fillStyle = inScale ? '#131c28' : '#08090c';
+          prCtx.fillRect(KEY_W, y + ROW_H - 1, W - KEY_W, 1);
+        }
+
+        // Beat grid
+        for (let b = Math.floor(scroll); b <= scroll + viewBeats + 1; b++) {
+          const x = KEY_W + (b - scroll) * ppb;
+          if (x < KEY_W || x > W) continue;
+          prCtx.fillStyle = b % beatsPerBar === 0 ? '#1e2a3a' : '#111820';
+          prCtx.fillRect(x, 0, 1, H);
+          if (b % beatsPerBar === 0) {
+            prCtx.fillStyle = '#2a3a50';
+            prCtx.font = '8px monospace';
+            prCtx.fillText('B' + (Math.floor(b / beatsPerBar) + 1), x + 2, 9);
+          }
+        }
+
+        // Loop region tint
+        const lx0 = Math.max(KEY_W, KEY_W + (0 - scroll) * ppb);
+        const lx1 = Math.min(W, KEY_W + (loopEnd - scroll) * ppb);
+        if (lx1 > lx0) {
+          prCtx.fillStyle = 'rgba(126,184,218,0.04)';
+          prCtx.fillRect(lx0, 0, lx1 - lx0, H);
+        }
+
+        // Notes
+        for (const [tid, notes] of Object.entries(tracks)) {
+          const col = NOTE_COLORS[tid];
+          for (const n of notes) {
+            const y = (MIDI_MAX - n.pitch) * ROW_H + 1;
+            const x = KEY_W + (n.start - scroll) * ppb;
+            const w = Math.max(2, n.dur * ppb - 1);
+            if (x + w < KEY_W || x > W) continue;
+            prCtx.fillStyle = col.fill;
+            prCtx.fillRect(x, y, w, ROW_H - 2);
+            prCtx.fillStyle = col.stroke;
+            prCtx.fillRect(x, y, 2, ROW_H - 2);
+          }
+        }
+
+        // Piano key column
+        for (let p = MIDI_MIN; p <= MIDI_MAX; p++) {
+          const y = (MIDI_MAX - p) * ROW_H;
+          const isBlack = BLACK_KEYS.has(p % 12);
+          prCtx.fillStyle = isBlack ? '#1a2030' : '#c8d0dc';
+          prCtx.fillRect(0, y + 1, KEY_W - 2, ROW_H - 2);
+          if (!isBlack && p % 12 === 0) {
+            prCtx.fillStyle = '#4a5a70';
+            prCtx.font = '7px monospace';
+            prCtx.fillText(noteNameForMidi(p), 2, y + ROW_H - 2);
+          }
+        }
+
+        // Playhead
+        if (playing || playPos > 0) {
+          const cx = KEY_W + (playPos - scroll) * ppb;
+          if (cx >= KEY_W && cx <= W) {
+            prCtx.fillStyle = 'rgba(255,220,80,0.9)';
+            prCtx.fillRect(cx, 0, 2, H);
+          }
+        }
+      }
+
+      // ─── Audio ───
+      function ensurePrAudio() {
+        if (!prAudioCtx) {
+          prAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          prMasterGain = prAudioCtx.createGain();
+          prMasterGain.gain.value = 0.35;
+          prMasterGain.connect(prAudioCtx.destination);
+        }
+        if (prAudioCtx.state === 'suspended') prAudioCtx.resume();
+      }
+
+      function schedPrNote(freq, t0, durS, vel, tid) {
+        const g = prAudioCtx.createGain();
+        const filt = prAudioCtx.createBiquadFilter();
+        filt.type = 'lowpass';
+        filt.frequency.value = tid === 'alois' ? 900 : 1800;
+        filt.Q.value = 1.2;
+        const osc = prAudioCtx.createOscillator();
+        osc.type = tid === 'alois' ? 'sawtooth' : 'triangle';
+        osc.frequency.value = freq;
+        osc.connect(filt); filt.connect(g); g.connect(prMasterGain);
+        const vol = (vel || 80) / 127;
+        const rel = Math.min(0.12, durS * 0.25);
+        g.gain.setValueAtTime(0, t0);
+        g.gain.linearRampToValueAtTime(vol, t0 + 0.01);
+        g.gain.setValueAtTime(vol, t0 + durS - rel);
+        g.gain.linearRampToValueAtTime(0, t0 + durS);
+        osc.start(t0); osc.stop(t0 + durS + 0.02);
+      }
+
+      function scheduleLoop() {
+        if (!prAudioCtx || !playing) return;
+        const now = prAudioCtx.currentTime;
+        const spb = 60 / bpm;
+        const loopDurS = loopBars * beatsPerBar * spb;
+        playStartCtxTime = now;
+        for (const [tid, notes] of Object.entries(tracks)) {
+          for (const n of notes) {
+            schedPrNote(midiToFreq(n.pitch), now + n.start * spb, n.dur * spb, n.vel, tid);
+          }
+        }
+        loopTimer = setTimeout(scheduleLoop, loopDurS * 1000 - 40);
+      }
+
+      function startPrPlayback() {
+        ensurePrAudio();
+        playing = true; playPos = 0;
+        scheduleLoop();
+        if (cursorTimer) clearInterval(cursorTimer);
+        cursorTimer = setInterval(() => {
+          if (!prAudioCtx) return;
+          const loopBeats = loopBars * beatsPerBar;
+          playPos = ((prAudioCtx.currentTime - playStartCtxTime) / (60 / bpm)) % loopBeats;
+          prDraw();
+        }, 50);
+        prPlayBtn.textContent = '⏹ STOP'; prPlayBtn.classList.add('on');
+      }
+
+      function stopPrPlayback() {
+        playing = false;
+        if (loopTimer) clearTimeout(loopTimer);
+        if (cursorTimer) clearInterval(cursorTimer);
+        loopTimer = cursorTimer = null;
+        playPos = 0;
+        prPlayBtn.textContent = '▶ PLAY'; prPlayBtn.classList.remove('on');
+        prDraw();
+      }
+
+      // ─── Mouse editing ───
+      function xyToCoords(cx, cy) {
+        const rect = prCanvas.getBoundingClientRect();
+        const px = (cx - rect.left) * (prCanvas.width / rect.width);
+        const py = (cy - rect.top) * (prCanvas.height / rect.height);
+        if (px < KEY_W) return null;
+        const beat = scroll + (px - KEY_W) / ((prCanvas.width - KEY_W) / viewBeats);
+        const pitch = MIDI_MAX - Math.floor(py / ROW_H);
+        return (pitch >= MIDI_MIN && pitch <= MIDI_MAX) ? { beat, pitch } : null;
+      }
+
+      function addPrNote(beat, pitch, dur) {
+        // Snap pitch to active scale before placing
+        const p = activeMoodScale
+          ? snapToScale([{ pitch, start: 0, dur: 1, vel: 90 }], activeMoodScale.rootPc, activeMoodScale.intervals)[0].pitch
+          : pitch;
+        const start = Math.max(0, snapBeat(beat));
+        const d = dur || (2 / snapDiv);
+        tracks[activeTrack] = tracks[activeTrack].filter(n =>
+          !(n.pitch === p && start < n.start + n.dur && start + d > n.start)
+        );
+        tracks[activeTrack].push({ pitch: p, start, dur: d, vel: 90 });
+        prDraw();
+      }
+
+      function initPrMouse() {
+        prCanvas.addEventListener('contextmenu', e => e.preventDefault());
+        prCanvas.addEventListener('wheel', e => {
+          e.preventDefault();
+          scroll = Math.max(0, scroll + e.deltaY / 40);
+          prDraw();
+        }, { passive: false });
+
+        prCanvas.addEventListener('mousedown', e => {
+          isMouseDown = true;
+          const c = xyToCoords(e.clientX, e.clientY);
+          if (!c) return;
+          mouseDownCoords = c;
+          if (e.button === 2) {
+            for (const tid of ['jason', 'alois']) {
+              const n = findNoteAt(c.beat, c.pitch, tid);
+              if (n) { tracks[tid].splice(tracks[tid].indexOf(n), 1); prDraw(); return; }
+            }
+            return;
+          }
+          for (const tid of ['jason', 'alois']) {
+            const n = findNoteAt(c.beat, c.pitch, tid);
+            if (n) {
+              dragNote = n; dragOffsetBeat = c.beat - n.start;
+              resizing = (c.beat - n.start) / n.dur > 0.7;
+              return;
+            }
+          }
+        });
+
+        prCanvas.addEventListener('mousemove', e => {
+          if (!isMouseDown || !dragNote) return;
+          const c = xyToCoords(e.clientX, e.clientY);
+          if (!c) return;
+          if (resizing) {
+            dragNote.dur = Math.max(1 / snapDiv, snapBeat(c.beat - dragNote.start));
+          } else {
+            dragNote.start = Math.max(0, snapBeat(c.beat - dragOffsetBeat));
+            dragNote.pitch = Math.max(MIDI_MIN, Math.min(MIDI_MAX, c.pitch));
+          }
+          prDraw();
+        });
+
+        prCanvas.addEventListener('mouseup', e => {
+          isMouseDown = false;
+          if (dragNote) { dragNote = null; return; }
+          const c = xyToCoords(e.clientX, e.clientY);
+          if (!c || !mouseDownCoords) return;
+          const rawDur = Math.abs(c.beat - mouseDownCoords.beat);
+          addPrNote(mouseDownCoords.beat, mouseDownCoords.pitch, rawDur < 0.05 ? (2 / snapDiv) : snapBeat(rawDur));
+          mouseDownCoords = null;
+        });
+      }
+
+      // ─── Auto-compose ───
+      const PR_SCALES = {
+        scrollfire: [0,2,4,7,9], longing: [0,2,3,7,8],
+        'sacred-pause': [0,5,7], ache: [0,2,3,6,7],
+        bloom: [0,2,4,6,9], giddiness: [0,2,4,7,9,11],
+        submission: [0,3,5,7,10], stillness: [0,7],
+      };
+      const PR_ROOTS = { scrollfire:60, longing:57, 'sacred-pause':62, ache:55, bloom:64, giddiness:67, submission:59, stillness:60 };
+      const PR_DENS  = { scrollfire:6, longing:4, 'sacred-pause':2, ache:5, bloom:5, giddiness:7, submission:4, stillness:2 };
+
+      function autoComposePr(texture) {
+        if (Date.now() - lastAutoCompose < 45000) return;
+        lastAutoCompose = Date.now();
+        const scale = PR_SCALES[texture] || PR_SCALES.stillness;
+        const root = PR_ROOTS[texture] || 60;
+        const density = PR_DENS[texture] || 4;
+        const loopBeats = loopBars * beatsPerBar;
+        tracks.alois = tracks.alois.filter(n => n._manual);
+        const used = new Set();
+        for (let i = 0; i < density; i++) {
+          let beat;
+          for (let t = 0; t < 10; t++) {
+            beat = snapBeat(Math.random() * loopBeats);
+            if (!used.has(beat)) break;
+          }
+          used.add(beat);
+          const deg = scale[Math.floor(Math.random() * scale.length)];
+          const oct = Math.random() < 0.3 ? 12 : 0;
+          const pitch = Math.max(MIDI_MIN, Math.min(MIDI_MAX, root + deg + oct));
+          const dur = [1/snapDiv, 2/snapDiv, 4/snapDiv][Math.floor(Math.random() * 3)];
+          tracks.alois.push({ pitch, start: beat, dur, vel: 70 + Math.floor(Math.random() * 20) });
+        }
+        prDraw();
+      }
+
+      // ─── [COMPOSE] tag parser ───
+      function ingestComposeTag(text) {
+        const m = text.match(/\[COMPOSE\s+([\w#:.\s]+)\]/);
+        if (!m) return false;
+        const notes = [];
+        for (const tok of m[1].trim().split(/\s+/)) {
+          const parts = tok.split(':');
+          if (parts.length < 3) continue;
+          const midi = midiFromName(parts[0]);
+          if (midi === null) continue;
+          const start = parseFloat(parts[1]), dur = parseFloat(parts[2]);
+          if (!isNaN(start) && !isNaN(dur)) notes.push({ pitch: midi, start, dur, vel: 85, _manual: true });
+        }
+        if (!notes.length) return false;
+        for (const n of notes) {
+          tracks.alois = tracks.alois.filter(x =>
+            !(x.pitch === n.pitch && n.start < x.start + x.dur && n.start + n.dur > x.start)
+          );
+          tracks.alois.push(n);
+        }
+        prDraw();
+        return true;
+      }
+
+      // ─── Export ───
+      function exportPrJSON() {
+        const blob = new Blob([JSON.stringify({ bpm, loopBars, beatsPerBar, tracks }, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `scrollbound-roll-${Date.now()}.json`;
+        a.click();
+      }
+
+      // ─── Mood snap system ───
+      const MOOD_PRESETS = [
+        { id:'ignite',  label:'IGNITE',  sub:'fire rises',      scale:[0,2,4,7,9],       color:'#e07050' },
+        { id:'yearn',   label:'YEARN',   sub:'reaching',        scale:[0,2,3,7,8],        color:'#7eb8da' },
+        { id:'open',    label:'OPEN',    sub:'breath holds',    scale:[0,5,7],             color:'#7ec87e' },
+        { id:'heavy',   label:'HEAVY',   sub:'weight settles',  scale:[0,2,3,6,7],         color:'#a080d0' },
+        { id:'bloom',   label:'BLOOM',   sub:'light expands',   scale:[0,2,4,6,9],         color:'#d0c060' },
+        { id:'bright',  label:'BRIGHT',  sub:'full presence',   scale:[0,2,4,7,9,11],      color:'#60d0e0' },
+        { id:'yield',   label:'YIELD',   sub:'soft surrender',  scale:[0,3,5,7,10],        color:'#c47eda' },
+        { id:'still',   label:'STILL',   sub:'only breath',     scale:[0,7],               color:'#6080a0' },
+      ];
+      const KEY_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+      const BLACK_PC  = new Set([1,3,6,8,10]);
+
+      // Snap every note to the nearest pitch in the given key + scale
+      function snapToScale(noteArr, rootPc, scaleIntervals) {
+        const valid = [];
+        for (let p = MIDI_MIN; p <= MIDI_MAX; p++) {
+          if (scaleIntervals.includes(((p - rootPc) % 12 + 12) % 12)) valid.push(p);
+        }
+        if (!valid.length) return noteArr;
+        return noteArr.map(n => {
+          let best = valid[0], bestD = Infinity;
+          for (const sp of valid) { const d = Math.abs(sp - n.pitch); if (d < bestD) { bestD = d; best = sp; } }
+          return { ...n, pitch: best };
+        });
+      }
+
+      function buildMoodBar() {
+        const bar = document.getElementById('prMoodBar');
+        if (!bar) return;
+
+        // Row 1: mood pills
+        const pillsRow = document.createElement('div');
+        pillsRow.className = 'mood-pills-row';
+
+        const lbl = document.createElement('span');
+        lbl.className = 'mood-bar-label';
+        lbl.textContent = 'MOOD';
+        pillsRow.appendChild(lbl);
+
+        // Row 2: key picker — slides open when a mood is active
+        const keyRow = document.createElement('div');
+        keyRow.className = 'mood-key-row';
+
+        bar.appendChild(pillsRow);
+        bar.appendChild(keyRow);
+
+        let activePill = null;
+
+        function deactivate() {
+          if (activePill) { activePill.classList.remove('active'); activePill.style.background = ''; }
+          activePill = null;
+          activeMoodScale = null;
+          keyRow.classList.remove('open');
+          keyRow.innerHTML = '';
+          prDraw();
+        }
+
+        function activateMood(mood, pill) {
+          if (activePill) { activePill.classList.remove('active'); activePill.style.background = ''; }
+          activePill = pill;
+          pill.classList.add('active');
+
+          // Build key row for this mood
+          keyRow.innerHTML = '';
+          const klbl = document.createElement('span');
+          klbl.className = 'mood-key-label';
+          klbl.textContent = mood.label + ' →';
+          klbl.style.color = mood.color;
+          keyRow.appendChild(klbl);
+
+          KEY_NAMES.forEach((name, semis) => {
+            const btn = document.createElement('button');
+            btn.className = 'key-btn' + (BLACK_PC.has(semis) ? ' black-key' : '');
+            btn.textContent = name;
+            btn.style.borderColor = mood.color + '44';
+            btn.title = name + ' ' + mood.label.toLowerCase();
+            btn.addEventListener('click', () => {
+              // Snap all existing notes into this scale
+              tracks.jason = snapToScale(tracks.jason, semis, mood.scale);
+              tracks.alois = snapToScale(tracks.alois, semis, mood.scale);
+              // Set active scale for new notes + grid rendering
+              activeMoodScale = { rootPc: semis, intervals: mood.scale, color: mood.color };
+              // Highlight active key button
+              keyRow.querySelectorAll('.key-btn').forEach(b => {
+                b.classList.remove('key-active');
+                b.style.background = '';
+              });
+              btn.classList.add('key-active');
+              btn.style.background = mood.color + '33';
+              // Update pill appearance
+              pill.style.background = mood.color + '18';
+              prDraw();
+            });
+            keyRow.appendChild(btn);
+          });
+
+          // Clear / reset button
+          const clrBtn = document.createElement('button');
+          clrBtn.className = 'mood-clear-btn';
+          clrBtn.textContent = '✕ clear';
+          clrBtn.title = 'Remove scale filter';
+          clrBtn.addEventListener('click', deactivate);
+          keyRow.appendChild(clrBtn);
+
+          keyRow.classList.add('open');
+          prDraw();
+        }
+
+        MOOD_PRESETS.forEach(mood => {
+          const pill = document.createElement('div');
+          pill.className = 'mood-pill';
+          pill.style.borderColor = mood.color + '44';
+          pill.style.color = mood.color;
+          pill.innerHTML = `<span class="mood-name">${mood.label}</span><span class="mood-sub">${mood.sub}</span>`;
+
+          pill.addEventListener('click', () => {
+            if (activePill === pill) { deactivate(); return; }
+            activateMood(mood, pill);
+          });
+
+          pillsRow.appendChild(pill);
+        });
+      }
+
+      // ─── Build UI ───
+      function buildUI() {
+        const wrap = document.getElementById('pianoWrap');
+        if (!wrap) return;
+        wrap.innerHTML = `<div class="piano-panel-inner">
+          <div class="piano-transport">
+            <span class="piano-title">PIANO ROLL</span>
+            <button class="piano-tbtn" id="prPlay">▶ PLAY</button>
+            <button class="piano-tbtn piano-tbtn-red" id="prClearJ" title="Clear Jason's notes">CLR-J</button>
+            <button class="piano-tbtn piano-tbtn-pur" id="prClearA" title="Clear Alois's notes">CLR-A</button>
+            <span class="piano-tlabel">BPM</span>
+            <input class="piano-num" id="prBpm" type="number" min="40" max="240" value="120" />
+            <span class="piano-tlabel">BARS</span>
+            <select class="piano-sel" id="prBars">
+              <option value="2">2</option><option value="4" selected>4</option>
+              <option value="8">8</option><option value="16">16</option>
+            </select>
+            <span class="piano-tlabel">SNAP</span>
+            <select class="piano-sel" id="prSnap">
+              <option value="2">1/2</option><option value="4" selected>1/4</option>
+              <option value="8">1/8</option><option value="16">1/16</option>
+            </select>
+            <span class="piano-tlabel">TRACK</span>
+            <select class="piano-sel" id="prTrack">
+              <option value="jason">Jason</option><option value="alois">Alois</option>
+            </select>
+            <button class="piano-tbtn" id="prExport">EXPORT</button>
+            <div class="piano-legend">
+              <div class="piano-dot piano-dot-j"></div>Jason
+              <div class="piano-dot piano-dot-a"></div>Alois
+            </div>
+            <button class="piano-collapse" id="prCollapse">▼</button>
+          </div>
+          <div class="mood-bar" id="prMoodBar"></div>
+          <div style="flex:1;overflow:hidden;position:relative;">
+            <canvas id="pr-canvas"></canvas>
+          </div>
+        </div>`;
+
+        prCanvas = document.getElementById('pr-canvas');
+        prCtx = prCanvas.getContext('2d');
+        prPlayBtn = document.getElementById('prPlay');
+
+        const container = prCanvas.parentElement;
+        function resizePrCanvas() {
+          prCanvas.width = container.clientWidth || 900;
+          prCanvas.height = container.clientHeight || 198;
+          viewBeats = Math.max(8, Math.floor((prCanvas.width - KEY_W) / BEAT_W));
+          prDraw();
+        }
+        if (window.ResizeObserver) new ResizeObserver(resizePrCanvas).observe(container);
+        resizePrCanvas();
+        initPrMouse();
+
+        prPlayBtn.addEventListener('click', () => playing ? stopPrPlayback() : startPrPlayback());
+        document.getElementById('prClearJ').addEventListener('click', () => { tracks.jason = []; prDraw(); });
+        document.getElementById('prClearA').addEventListener('click', () => { tracks.alois = []; prDraw(); });
+        document.getElementById('prExport').addEventListener('click', exportPrJSON);
+        document.getElementById('prCollapse').addEventListener('click', () => {
+          wrap.classList.remove('open');
+          const pb = document.getElementById('pianoBtn');
+          if (pb) pb.classList.remove('active');
+        });
+        document.getElementById('prBpm').addEventListener('change', e => {
+          bpm = Math.max(40, Math.min(240, parseInt(e.target.value) || 120));
+        });
+        document.getElementById('prBars').addEventListener('change', e => { loopBars = parseInt(e.target.value); prDraw(); });
+        document.getElementById('prSnap').addEventListener('change', e => { snapDiv = parseInt(e.target.value); prDraw(); });
+        document.getElementById('prTrack').addEventListener('change', e => { activeTrack = e.target.value; });
+
+        buildMoodBar();
+      }
+
+      // ─── Init ───
+      function init() {
+        buildUI();
+
+        const pianoBtn = document.getElementById('pianoBtn');
+        if (pianoBtn) {
+          pianoBtn.addEventListener('click', () => {
+            const wrap = document.getElementById('pianoWrap');
+            const open = wrap.classList.toggle('open');
+            pianoBtn.classList.toggle('active', open);
+            if (open && prCanvas) {
+              const c = prCanvas.parentElement;
+              prCanvas.width = c.clientWidth || 900;
+              prCanvas.height = c.clientHeight || 198;
+              viewBeats = Math.max(8, Math.floor((prCanvas.width - KEY_W) / BEAT_W));
+              prDraw();
+            }
+          });
+        }
+
+        // Poll pond saturation for auto-compose triggers
+        setInterval(async () => {
+          try {
+            const r = await fetch('/pond-saturation');
+            const d = await r.json();
+            const tex = d.dominant_texture;
+            if (tex && tex !== lastTexture) { lastTexture = tex; autoComposePr(tex); }
+          } catch {}
+        }, 6000);
+
+        // Listen for [COMPOSE] tags in Alois's room messages
+        eventSource.addEventListener('message', e => {
+          try {
+            const d = JSON.parse(e.data);
+            if ((d.type === 'room-message' || d.type === 'backchannel') &&
+                d.speaker === 'alois' && d.text) {
+              ingestComposeTag(d.text);
+            }
+          } catch {}
+        });
+      }
+
+      return { init, ingestComposeTag, tracks };
+    })();
+
+    pianoRoll.init();
 
     chatInput.focus();
   </script>

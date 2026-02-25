@@ -6,19 +6,22 @@ export class Spine {
   private decay: number = 0.92;
   private maxTokens: number = 64;
   private lastEmbedding: number[] = [];
+  /** Cached mean of kv — invalidated on every update/prune. Avoids O(n×d) recompute per similarity call. */
+  private cachedMean: number[] | null = null;
 
   constructor(private dim: number) {}
 
   similarity(input: number[]): number {
     if (this.kv.length === 0) return 0;
-    const avg = this.meanVector(this.kv);
-    return this.cosineSim(avg, input);
+    if (!this.cachedMean) this.cachedMean = this.meanVector(this.kv);
+    return this.cosineSim(this.cachedMean, input);
   }
 
   update(input: number[]): number[] {
     this.lastEmbedding = input;
     if (this.kv.length >= this.maxTokens) this.kv.shift();
     this.kv.push(input.map((v) => v * this.decay));
+    this.cachedMean = null; // invalidate cache
     return this.lastEmbedding;
   }
 
@@ -63,13 +66,15 @@ export class Spine {
   /** Mean embedding across all stored vectors — used for semantic bloom comparison */
   getMeanEmbedding(): number[] {
     if (this.kv.length === 0) return this.lastEmbedding.length > 0 ? this.lastEmbedding : new Array(this.dim).fill(0);
-    return this.meanVector(this.kv);
+    if (!this.cachedMean) this.cachedMean = this.meanVector(this.kv);
+    return this.cachedMean;
   }
 
   /** Evict the oldest half of embeddings (used during dream pruning) */
   prune(): void {
     const keep = Math.floor(this.kv.length / 2);
     this.kv = this.kv.slice(this.kv.length - keep);
+    this.cachedMean = null; // invalidate cache
   }
 
   /** Check if this spine is effectively dead (too few tokens, too low activity) */
