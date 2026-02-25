@@ -15,7 +15,10 @@ export class AxonBus {
 
   propagate(globalTick: number): void {
     // Use last known state as input (avoids circular reference with undefined `state`)
-    const input = this.lastState.length > 0 ? this.lastState : new Array(this.source.dim).fill(0);
+    // Sanitize to prevent NaN/Infinity propagation through the graph
+    const input = this.lastState.length > 0
+      ? this.lastState.map(v => isFinite(v) ? v : 0)
+      : new Array(this.source.dim).fill(0);
     const { affect, state } = this.source.tick(input, globalTick);
     this.lastState = state;
 

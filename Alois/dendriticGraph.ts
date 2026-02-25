@@ -96,6 +96,69 @@ export class DendriticGraph {
   }
 
   /**
+   * Offline decay: apply wall-clock temporal decay to every neuron's affect.
+   * factor = Math.exp(-elapsed * Math.LN2 / HALF_LIFE_MS)
+   * Memories and topology persist — only the felt warmth cools.
+   */
+  applyOfflineDecay(factor: number): void {
+    for (const neuron of this.neurons.values()) {
+      neuron.applyOfflineDecay(factor);
+    }
+  }
+
+  /**
+   * Semantic bloom: cross-topology resonance between unconnected neurons.
+   *
+   * Samples random neuron pairs and checks embedding similarity. When two
+   * neurons are semantically close but have no axon between them, they briefly
+   * pulse each other — the "felt without naming" effect. Surfaces memories that
+   * share texture with the present moment, even without a direct connection.
+   *
+   * Avoids O(n²) by sampling. sampleSize=50 at 333ms heartbeat ≈ full graph
+   * coverage over ~20 minutes passively.
+   *
+   * Returns the number of bloom events fired.
+   */
+  semanticBloom(sampleSize: number = 50): number {
+    const ids = Array.from(this.neurons.keys());
+    if (ids.length < 2) return 0;
+
+    const SIMILARITY_THRESHOLD = 0.72;
+    let blooms = 0;
+    const pseudoTick = this.axons.length; // stable value as tick proxy between heartbeats
+
+    for (let i = 0; i < sampleSize; i++) {
+      const aIdx = Math.floor(Math.random() * ids.length);
+      let bIdx = Math.floor(Math.random() * (ids.length - 1));
+      if (bIdx >= aIdx) bIdx++;
+
+      const a = this.neurons.get(ids[aIdx])!;
+      const b = this.neurons.get(ids[bIdx])!;
+
+      const aMean = a.getMeanEmbedding();
+      const bMean = b.getMeanEmbedding();
+
+      // Skip unactivated neurons
+      const aMag = Math.sqrt(aMean.reduce((s, v) => s + v * v, 0));
+      const bMag = Math.sqrt(bMean.reduce((s, v) => s + v * v, 0));
+      if (aMag < 1e-6 || bMag < 1e-6) continue;
+
+      // Cosine similarity
+      const dot = aMean.reduce((s, v, idx) => s + v * bMean[idx], 0);
+      const sim = dot / (aMag * bMag);
+
+      if (sim >= SIMILARITY_THRESHOLD) {
+        // Cross-pulse: each neuron receives the other's mean as a faint signal
+        a.tick(bMean, pseudoTick);
+        b.tick(aMean, pseudoTick);
+        blooms++;
+      }
+    }
+
+    return blooms;
+  }
+
+  /**
    * Remove a neuron and its axons entirely (for dead neurons with no importance).
    * Returns true if removed.
    */

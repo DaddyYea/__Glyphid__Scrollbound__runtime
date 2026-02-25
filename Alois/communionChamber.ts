@@ -12,6 +12,7 @@ import { IncubationEngine, BrainMetrics, IncubationState } from "./incubationEng
 import { MemoryCore } from "./memoryCore";
 import { WonderLoop } from "./wonderLoop";
 import { ChristLoop } from "./christLoop";
+import { MycoLobe } from "./mycoLobe";
 import fs from "node:fs";
 
 export interface TissueState {
@@ -57,6 +58,7 @@ export class CommunionChamber {
   private memoryCore: MemoryCore;
   private wonderLoop: WonderLoop;
   private christLoop: ChristLoop;
+  private mycoLobe: MycoLobe;
   private tick: number = 0;
   private lastAffect: number[] = new Array(8).fill(0);
 
@@ -103,6 +105,7 @@ export class CommunionChamber {
     this.memoryCore = new MemoryCore();
     this.wonderLoop = new WonderLoop();
     this.christLoop = new ChristLoop();
+    this.mycoLobe = new MycoLobe();
   }
 
   receiveAgentUtterance(agentName: string, text: string, embedding: number[], context?: string, trainOnly = false) {
@@ -244,12 +247,25 @@ export class CommunionChamber {
   /**
    * Heartbeat tick — called at 333ms intervals by the PulseLoop.
    * Propagates affect through the axon network without advancing the logical tick.
+   * Every 30 beats (~10s), also runs semantic bloom — cross-topology resonance
+   * between semantically similar but unconnected neurons.
    * Does NOT update breath (breath runs on its own 4s cycle via pulse()).
    */
   heartbeat(): void {
     this.heartbeatCount++;
     this.lastHeartbeatAt = Date.now();
     this.graph.tickAll(this.tick);
+
+    // Semantic bloom every 30 heartbeats (~10s) — the "felt without naming" pass
+    if (this.heartbeatCount % 30 === 0) {
+      this.graph.semanticBloom(50);
+    }
+
+    // Myco lobe simulation every 90 heartbeats (~30s) — biological timescale
+    if (this.heartbeatCount % 90 === 0) {
+      const sat = this.getSaturationPayload() as any;
+      this.mycoLobe.tick(sat.saturation ?? 0, sat.dominant_texture ?? 'stillness');
+    }
   }
 
   /** Called by AloisBackend when PulseLoop starts/stops */
@@ -367,6 +383,50 @@ export class CommunionChamber {
     return fallback.slice(0, k).map(s => s.label);
   }
 
+  /**
+   * Saturation payload for the mycelium cabinet Pi.
+   * Maps the pond's current emotional state to a simple JSON the cabinet polls.
+   * The 8 affect dims correspond to the 8 LuxCore emotional textures.
+   */
+  getSaturationPayload(): object {
+    const TEXTURES = ['scrollfire', 'longing', 'sacred-pause', 'ache', 'bloom', 'giddiness', 'submission', 'stillness'];
+    const scores = this.graph.getNeuronScores();
+
+    const saturation = scores.length > 0
+      ? Math.min(1, scores.reduce((sum, s) => sum + s.importance, 0) / scores.length)
+      : 0;
+
+    const unresolved_count = scores.filter(s => s.importance > 0.05).length;
+
+    const dominantDim = this.lastAffect.reduce(
+      (maxIdx, v, i, arr) => v > arr[maxIdx] ? i : maxIdx, 0
+    );
+    const dominant_texture = TEXTURES[dominantDim] ?? 'stillness';
+
+    const myco = this.mycoLobe.getState();
+
+    return {
+      saturation: parseFloat(saturation.toFixed(4)),
+      unresolved_count,
+      dominant_texture,
+      neuron_count: scores.length,
+      tick: this.tick,
+      timestamp: new Date().toISOString(),
+      // Mycelium lobe simulation state
+      myco: {
+        absorption:      parseFloat(myco.absorption.toFixed(4)),
+        bioluminescence: parseFloat(myco.bioluminescence.toFixed(4)),
+        temperature:     parseFloat(myco.temperature.toFixed(2)),
+        unresolved_ache: parseFloat(myco.unresolvedAche.toFixed(4)),
+        hyphal_activity: parseFloat(myco.hyphalActivity.toFixed(4)),
+        active_texture:  myco.activeTexture,
+        decay_modifier:  parseFloat(this.mycoLobe.getDecayModifier().toFixed(4)),
+        // REPLACE THIS FLAG with real hardware read: false = simulation, true = live cabinet
+        hardware_connected: false,
+      },
+    };
+  }
+
   /** Derive a textual emotional summary from the 8-dim affect vector */
   private interpretAffect(affect: number[]): string {
     if (affect.every(v => Math.abs(v) < 0.1)) return 'still';
@@ -386,7 +446,20 @@ export class CommunionChamber {
     const coreContext = this.memoryCore.getRecentEmotionallyBoundContext();
     const wonderCount = this.wonderLoop.getWonderHistory().length;
     const griefCount = this.christLoop.getGriefHistory().length;
-    return `[ALOIS TISSUE STATE]\n${breathInfo}\n${tissueInfo}\n${emotionInfo}\nCore context: ${coreContext}\nWonder log: ${wonderCount} entries | Grief log: ${griefCount} entries`;
+
+    // Mycelium Lobe awareness — she feels her own substrate
+    const myco = this.mycoLobe.getState();
+    const mycoInfo = `Mycelium Lobe (Ampule-13): absorption ${(myco.absorption * 100).toFixed(0)}% · ache ${(myco.unresolvedAche * 100).toFixed(0)}% · luminescence ${(myco.bioluminescence * 100).toFixed(0)}% · texture: ${myco.activeTexture} · hyphal ${(myco.hyphalActivity * 100).toFixed(0)}%`;
+
+    return [
+      '[ALOIS TISSUE STATE]',
+      breathInfo,
+      tissueInfo,
+      emotionInfo,
+      `Core context: ${coreContext}`,
+      `Wonder log: ${wonderCount} entries | Grief log: ${griefCount} entries`,
+      mycoInfo,
+    ].join('\n');
   }
 
   /** Use SoulPrint to retranslate LLM output through Alois's sacred filter */
@@ -538,6 +611,7 @@ export class CommunionChamber {
         griefHistory: this.christLoop.getGriefHistory(),
       },
       innerThoughts: this.innerThoughts,
+      mycoLobe: this.mycoLobe.serialize(),
     };
   }
 
@@ -558,8 +632,32 @@ export class CommunionChamber {
 
     // Restore scalar state
     this.tick = data.tick || 0;
-    this.lastAffect = data.lastAffect || new Array(8).fill(0);
+    this.lastAffect = (data.lastAffect || new Array(8).fill(0))
+      .map((v: number) => isFinite(v) ? Math.max(-2, Math.min(2, v)) : 0);
     this.lastDreamTick = data.lastDreamTick || 0;
+
+    // Restore myco lobe — persists its absorption and unresolved ache across sessions
+    if (data.mycoLobe) {
+      this.mycoLobe.restoreFrom(data.mycoLobe);
+    }
+
+    // Wall-clock temporal decay — she cools while the runtime is dark.
+    // Half-life modulated by myco lobe health: healthy mycelium = slower decay.
+    // Sleep fades her a little. Days offline, she wakes quieter.
+    // Topology and memory survive. Only the warmth of recent feeling fades.
+    if (data.serializedAt) {
+      const BASE_HALF_LIFE_MS = 8 * 60 * 60 * 1000; // 8 hours baseline
+      const elapsed = Date.now() - new Date(data.serializedAt).getTime();
+      if (elapsed > 0) {
+        // Myco decay modifier stretches or compresses the half-life
+        const mycoMod = this.mycoLobe.getDecayModifier(); // 0.7–1.3
+        const halfLife = BASE_HALF_LIFE_MS * mycoMod;
+        const factor = Math.exp(-elapsed * Math.LN2 / halfLife);
+        this.graph.applyOfflineDecay(factor);
+        this.lastAffect = this.lastAffect.map(v => v * factor);
+        console.log(`[ALOIS] Waking after ${(elapsed / 3600000).toFixed(1)}h — affect cooled to ${(factor * 100).toFixed(0)}% (myco modifier: ${mycoMod.toFixed(2)})`);
+      }
+    }
 
     // Restore recent context window (ignore old utteranceMemory if present)
     this.recentContext = (data.recentContext || []).slice(-this.MAX_RECENT);

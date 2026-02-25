@@ -1083,6 +1083,19 @@ async function main() {
       return;
     }
 
+    // Mycelium cabinet saturation endpoint — Pi polls this to drive the lobe
+    if (url === '/pond-saturation' && req.method === 'GET') {
+      const payload = communion.getAloisSaturation();
+      if (!payload) {
+        res.writeHead(503, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ error: 'No Alois agent active' }));
+      } else {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify(payload));
+      }
+      return;
+    }
+
     res.writeHead(404);
     res.end('Not found');
   });

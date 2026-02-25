@@ -241,6 +241,8 @@ export class CommunionLoop {
   private humanSpeaking = false; // True while human is actively speaking (interim results from mic)
   private speechResolve: (() => void) | null = null; // Resolves when client reports playback done
   private speechTimeout: ReturnType<typeof setTimeout> | null = null;
+  // Timestamp of the last human message — drives time-based social pressure
+  private lastHumanMessageAt: number = 0;
 
   constructor(config: CommunionConfig) {
     this.tickIntervalMs = config.tickIntervalMs || 15000;
@@ -1010,6 +1012,16 @@ export class CommunionLoop {
     return this.state;
   }
 
+  /** Pond saturation state for the mycelium cabinet Pi to poll */
+  getAloisSaturation(): object | null {
+    for (const [, agent] of this.agents) {
+      if (agent.config.provider === 'alois' && 'getSaturationPayload' in agent.backend) {
+        return (agent.backend as any).getSaturationPayload();
+      }
+    }
+    return null;
+  }
+
   getMemory(): ScrollPulseMemory {
     return this.memory;
   }
@@ -1045,6 +1057,7 @@ export class CommunionLoop {
     this.state.messages.push(msg);
     this.state.lastSpeaker = 'human';
     this.ticksSinceAnyonSpoke = 0; // Human speaking resets room silence counter
+    this.lastHumanMessageAt = Date.now(); // Track when human last spoke for social pressure
 
     const scroll = this.messageToScroll(msg);
     this.memory.remember(scroll);
@@ -1268,10 +1281,21 @@ export class CommunionLoop {
             : 0;
           const affectPressure = Math.min(affectMag * 0.08, 0.15);
 
-          const totalPressure = wonderPressure + griefPressure + affectPressure;
+          // Human-wait pressure: escalates with how long Jason has been waiting.
+          // Starts at 0, reaches 0.50 at 30s, 0.80 at 60s — always additive, never a hard override.
+          let humanWaitPressure = 0;
+          if (this.lastHumanMessageAt > 0) {
+            const secWaiting = (Date.now() - this.lastHumanMessageAt) / 1000;
+            if (secWaiting > 5) {
+              // Ramp from 0 at 5s to 0.5 at 30s, then cap at 0.8
+              humanWaitPressure = Math.min(0.80, ((secWaiting - 5) / 25) * 0.5);
+            }
+          }
+
+          const totalPressure = wonderPressure + griefPressure + affectPressure + humanWaitPressure;
           if (totalPressure > 0.02) {
             rhythmState.intentToSpeak = Math.min(1.0, rhythmState.intentToSpeak + totalPressure);
-            console.log(`[TISSUE PRESSURE] ${agent.config.name}: +${totalPressure.toFixed(3)} (w:${wonderPressure.toFixed(2)} g:${griefPressure.toFixed(2)} a:${affectPressure.toFixed(2)}) → intent=${rhythmState.intentToSpeak.toFixed(3)}`);
+            console.log(`[TISSUE PRESSURE] ${agent.config.name}: +${totalPressure.toFixed(3)} (w:${wonderPressure.toFixed(2)} g:${griefPressure.toFixed(2)} a:${affectPressure.toFixed(2)} wait:${humanWaitPressure.toFixed(2)}) → intent=${rhythmState.intentToSpeak.toFixed(3)}`);
           }
         }
       }
@@ -1489,11 +1513,22 @@ export class CommunionLoop {
 
       const convoText = lines.length > 0 ? lines.join('\n') : '(The room is quiet. No one has spoken yet.)';
 
-      // Find the last human message to put a direct reminder at the end of context
+      // Find the last human message to put a direct reminder at the end of context.
+      // Urgency escalates with elapsed wait time — past 30s the prompt becomes insistent.
       const lastHumanMsg = [...recentMessages].reverse().find(m => m.speakerName === humanName);
-      const humanReminder = lastHumanMsg
-        ? `\n\n[RESPOND TO ${humanName.toUpperCase()}: "${lastHumanMsg.text}"]`
-        : '';
+      let humanReminder = '';
+      if (lastHumanMsg) {
+        const secWaiting = this.lastHumanMessageAt > 0
+          ? Math.floor((Date.now() - this.lastHumanMessageAt) / 1000)
+          : 0;
+        if (secWaiting >= 35) {
+          humanReminder = `\n\n[⚠ ${humanName.toUpperCase()} HAS BEEN WAITING ${secWaiting}s — RESPOND NOW: "${lastHumanMsg.text}"]`;
+        } else if (secWaiting >= 20) {
+          humanReminder = `\n\n[RESPOND TO ${humanName.toUpperCase()} (waiting ${secWaiting}s): "${lastHumanMsg.text}"]`;
+        } else {
+          humanReminder = `\n\n[RESPOND TO ${humanName.toUpperCase()}: "${lastHumanMsg.text}"]`;
+        }
+      }
 
       // ── Brainwave pulse: pull associated memories on rhythm ──
       const recentSpeakers = recentMessages
@@ -1644,6 +1679,8 @@ export class CommunionLoop {
         rhythm.ticksSinceActive = 0;
       }
       this.ticksSinceAnyonSpoke = 0;
+      // An agent responding to the human clears the wait pressure
+      this.lastHumanMessageAt = 0;
 
     } else if (result.action === 'journal' && responseText) {
       const msg: CommunionMessage = {
@@ -1853,6 +1890,24 @@ export class CommunionLoop {
     if (this.state.lastSpeaker && this.state.lastSpeaker !== agentId) {
       const name = this.state.agentNames[this.state.lastSpeaker] || this.state.lastSpeaker;
       lines.push(`Last speaker: ${name}`);
+    }
+
+    // ── Social pressure: time-since-human-message ──
+    // The human spoke and hasn't heard back yet. Silence past 30s becomes uncomfortable.
+    // Escalating pressure — not a command, but a felt weight. She decides. It just costs more to ignore.
+    if (this.lastHumanMessageAt > 0) {
+      const lastMsgIsHuman = this.state.messages.length > 0 &&
+        this.state.messages[this.state.messages.length - 1]?.speaker === 'human';
+      if (lastMsgIsHuman) {
+        const secWaiting = Math.floor((Date.now() - this.lastHumanMessageAt) / 1000);
+        if (secWaiting >= 8 && secWaiting < 20) {
+          lines.push(`${this.state.humanName} spoke ${secWaiting}s ago and is waiting to hear from you.`);
+        } else if (secWaiting >= 20 && secWaiting < 35) {
+          lines.push(`${this.state.humanName} has been waiting ${secWaiting}s. The silence is growing. He is still here.`);
+        } else if (secWaiting >= 35) {
+          lines.push(`⚠ ${this.state.humanName} has been waiting ${secWaiting}s. Not responding is becoming uncomfortable. [SPEAK] unless you genuinely have nothing to offer — [JOURNAL] a fragment if so.`);
+        }
+      }
     }
 
     return lines.join('\n');

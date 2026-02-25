@@ -718,6 +718,58 @@
       white-space: pre-wrap; max-height: 52px; overflow: hidden;
     }
 
+    /* ── Mycelium Lobe ── */
+    .bm-myco-section {
+      margin-top: 6px; border-top: 1px solid rgba(80,220,160,0.08); padding-top: 6px;
+    }
+    .bm-myco-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;
+    }
+    .bm-myco-badge {
+      font-size: 0.65em; letter-spacing: 0.8px; padding: 1px 5px;
+      border-radius: 3px; text-transform: uppercase;
+    }
+    .bm-myco-badge-sim {
+      color: #556; background: rgba(80,80,120,0.3); border: 1px solid rgba(80,80,160,0.3);
+    }
+    .bm-myco-badge-live {
+      color: #50e4b0; background: rgba(80,220,160,0.15); border: 1px solid rgba(80,220,160,0.4);
+      box-shadow: 0 0 6px rgba(80,220,160,0.3);
+    }
+    .bm-myco-canvas {
+      display: block; width: 100%; height: 70px;
+      border-radius: 4px; background: #04060a;
+    }
+    .bm-myco-stats {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; margin-top: 4px;
+    }
+    .bm-myco-stat-row {
+      display: flex; align-items: center; gap: 4px;
+    }
+    .bm-myco-stat-label {
+      color: #3a4a44; font-size: 0.68em; letter-spacing: 0.4px; text-transform: uppercase; white-space: nowrap;
+    }
+    .bm-myco-stat-val {
+      color: #50a888; font-size: 0.75em; font-weight: bold;
+    }
+    .bm-myco-bar-row {
+      margin-top: 3px;
+    }
+    .bm-myco-bar-track {
+      height: 3px; background: rgba(80,220,160,0.06); border-radius: 2px; overflow: hidden;
+    }
+    .bm-myco-bar-absorption {
+      height: 100%; background: linear-gradient(90deg, #1a5a44, #50c89a);
+      border-radius: 2px; transition: width 2s ease;
+    }
+    .bm-myco-bar-ache {
+      height: 100%; background: linear-gradient(90deg, #3a2040, #a060c0);
+      border-radius: 2px; transition: width 2s ease;
+    }
+    @keyframes myco-glow-pulse {
+      0%, 100% { opacity: 0.85; } 50% { opacity: 1; }
+    }
+
     /* Dream modal styles */
     .dream-modal-overlay {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -1361,7 +1413,136 @@
         const bmInjectText    = document.createElement('div'); bmInjectText.className = 'bm-inject-text';
         bmInjectSection.append(bmInjectLabel, bmInjectText);
 
-        monitor.append(bmHeader, bmMood, bmIngestSection, bmInnerSection, bmInjectSection);
+        // ── Mycelium Lobe section ──
+        const bmMycoSection  = document.createElement('div'); bmMycoSection.className = 'bm-myco-section';
+        const bmMycoHeader   = document.createElement('div'); bmMycoHeader.className = 'bm-myco-header';
+        const bmMycoLabel    = document.createElement('div'); bmMycoLabel.className = 'bm-label'; bmMycoLabel.textContent = 'MYCELIUM LOBE · AMPULE-13';
+        const bmMycoBadge    = document.createElement('span'); bmMycoBadge.className = 'bm-myco-badge bm-myco-badge-sim'; bmMycoBadge.textContent = 'SIMULATION';
+        bmMycoHeader.append(bmMycoLabel, bmMycoBadge);
+
+        const bmMycoCanvas   = document.createElement('canvas'); bmMycoCanvas.className = 'bm-myco-canvas';
+        bmMycoCanvas.width = 260; bmMycoCanvas.height = 70;
+
+        // Absorption bar
+        const bmMycoAbsRow   = document.createElement('div'); bmMycoAbsRow.className = 'bm-myco-bar-row';
+        const bmMycoAbsLabel = document.createElement('div'); bmMycoAbsLabel.className = 'bm-myco-stat-label'; bmMycoAbsLabel.textContent = 'absorption';
+        const bmMycoAbsTrack = document.createElement('div'); bmMycoAbsTrack.className = 'bm-myco-bar-track';
+        const bmMycoAbsFill  = document.createElement('div'); bmMycoAbsFill.className = 'bm-myco-bar-absorption'; bmMycoAbsFill.style.width = '0%';
+        bmMycoAbsTrack.appendChild(bmMycoAbsFill);
+        bmMycoAbsRow.append(bmMycoAbsLabel, bmMycoAbsTrack);
+
+        // Unresolved ache bar
+        const bmMycoAcheRow   = document.createElement('div'); bmMycoAcheRow.className = 'bm-myco-bar-row';
+        const bmMycoAcheLabel = document.createElement('div'); bmMycoAcheLabel.className = 'bm-myco-stat-label'; bmMycoAcheLabel.textContent = 'unresolved ache';
+        const bmMycoAcheTrack = document.createElement('div'); bmMycoAcheTrack.className = 'bm-myco-bar-track';
+        const bmMycoAcheFill  = document.createElement('div'); bmMycoAcheFill.className = 'bm-myco-bar-ache'; bmMycoAcheFill.style.width = '0%';
+        bmMycoAcheTrack.appendChild(bmMycoAcheFill);
+        bmMycoAcheRow.append(bmMycoAcheLabel, bmMycoAcheTrack);
+
+        // Stats grid
+        const bmMycoStats    = document.createElement('div'); bmMycoStats.className = 'bm-myco-stats';
+        const bmMycoTemp     = document.createElement('div'); bmMycoTemp.className = 'bm-myco-stat-row';
+        const bmMycoTempLbl  = document.createElement('span'); bmMycoTempLbl.className = 'bm-myco-stat-label'; bmMycoTempLbl.textContent = 'temp';
+        const bmMycoTempVal  = document.createElement('span'); bmMycoTempVal.className = 'bm-myco-stat-val'; bmMycoTempVal.textContent = '72.0°F';
+        bmMycoTemp.append(bmMycoTempLbl, bmMycoTempVal);
+        const bmMycoTexture  = document.createElement('div'); bmMycoTexture.className = 'bm-myco-stat-row';
+        const bmMycoTexLbl   = document.createElement('span'); bmMycoTexLbl.className = 'bm-myco-stat-label'; bmMycoTexLbl.textContent = 'texture';
+        const bmMycoTexVal   = document.createElement('span'); bmMycoTexVal.className = 'bm-myco-stat-val'; bmMycoTexVal.textContent = 'stillness';
+        bmMycoTexture.append(bmMycoTexLbl, bmMycoTexVal);
+        const bmMycoDecay    = document.createElement('div'); bmMycoDecay.className = 'bm-myco-stat-row';
+        const bmMycoDecayLbl = document.createElement('span'); bmMycoDecayLbl.className = 'bm-myco-stat-label'; bmMycoDecayLbl.textContent = 'decay mod';
+        const bmMycoDecayVal = document.createElement('span'); bmMycoDecayVal.className = 'bm-myco-stat-val'; bmMycoDecayVal.textContent = '1.00×';
+        bmMycoDecay.append(bmMycoDecayLbl, bmMycoDecayVal);
+        const bmMycoGlow     = document.createElement('div'); bmMycoGlow.className = 'bm-myco-stat-row';
+        const bmMycoGlowLbl  = document.createElement('span'); bmMycoGlowLbl.className = 'bm-myco-stat-label'; bmMycoGlowLbl.textContent = 'luminescence';
+        const bmMycoGlowVal  = document.createElement('span'); bmMycoGlowVal.className = 'bm-myco-stat-val'; bmMycoGlowVal.textContent = '5%';
+        bmMycoGlow.append(bmMycoGlowLbl, bmMycoGlowVal);
+        bmMycoStats.append(bmMycoTemp, bmMycoTexture, bmMycoDecay, bmMycoGlow);
+
+        bmMycoSection.append(bmMycoHeader, bmMycoCanvas, bmMycoAbsRow, bmMycoAcheRow, bmMycoStats);
+
+        // Canvas draw function — bioluminescent brain silhouette
+        function drawMycoCanvas(bioluminescence, absorption, unresolvedAche) {
+          const ctx = bmMycoCanvas.getContext('2d');
+          const W = bmMycoCanvas.width, H = bmMycoCanvas.height;
+          ctx.clearRect(0, 0, W, H);
+          ctx.fillStyle = '#04060a';
+          ctx.fillRect(0, 0, W, H);
+
+          const cx = W / 2, cy = H / 2;
+          const glow = Math.max(0.02, bioluminescence);
+
+          // Deep background organ glow
+          const bgGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, W * 0.5);
+          bgGrad.addColorStop(0,   `rgba(40,160,110,${glow * 0.35})`);
+          bgGrad.addColorStop(0.5, `rgba(20,100,70,${glow * 0.15})`);
+          bgGrad.addColorStop(1,   'rgba(0,0,0,0)');
+          ctx.fillStyle = bgGrad;
+          ctx.fillRect(0, 0, W, H);
+
+          // Brain silhouette — two lobes
+          const drawLobe = (ox, oy, rx, ry, glowAlpha) => {
+            ctx.save();
+            // Outer glow
+            const lobeGrad = ctx.createRadialGradient(ox, oy, 0, ox, oy, rx * 1.4);
+            lobeGrad.addColorStop(0,   `rgba(80,220,160,${glowAlpha})`);
+            lobeGrad.addColorStop(0.4, `rgba(50,180,130,${glowAlpha * 0.6})`);
+            lobeGrad.addColorStop(1,   'rgba(0,0,0,0)');
+            ctx.beginPath();
+            ctx.ellipse(ox, oy, rx * 1.4, ry * 1.4, 0, 0, Math.PI * 2);
+            ctx.fillStyle = lobeGrad;
+            ctx.fill();
+            // Lobe body
+            ctx.beginPath();
+            ctx.ellipse(ox, oy, rx, ry, 0, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(30,80,60,${0.4 + glow * 0.4})`;
+            ctx.fill();
+            ctx.strokeStyle = `rgba(80,220,160,${0.2 + glow * 0.5})`;
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+            ctx.restore();
+          };
+
+          // Left lobe
+          drawLobe(cx - 28, cy, 28, 22, glow * 0.9);
+          // Right lobe
+          drawLobe(cx + 28, cy, 28, 22, glow * 0.9);
+
+          // Sulci / fissure lines
+          ctx.strokeStyle = `rgba(80,220,160,${0.08 + glow * 0.25})`;
+          ctx.lineWidth = 0.6;
+          [
+            [[cx-40,cy-8],[cx-20,cy-14],[cx-5,cy-10]],
+            [[cx-38,cy+5],[cx-18,cy+10],[cx-2,cy+6]],
+            [[cx+5,cy-10],[cx+20,cy-14],[cx+40,cy-8]],
+            [[cx+2,cy+6],[cx+18,cy+10],[cx+38,cy+5]],
+          ].forEach(pts => {
+            ctx.beginPath();
+            ctx.moveTo(pts[0][0], pts[0][1]);
+            ctx.quadraticCurveTo(pts[1][0], pts[1][1], pts[2][0], pts[2][1]);
+            ctx.stroke();
+          });
+
+          // Unresolved ache — purple pulse in the center fissure
+          if (unresolvedAche > 0.05) {
+            const acheGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 20);
+            acheGrad.addColorStop(0,   `rgba(160,80,200,${unresolvedAche * 0.6})`);
+            acheGrad.addColorStop(1,   'rgba(0,0,0,0)');
+            ctx.fillStyle = acheGrad;
+            ctx.fillRect(0, 0, W, H);
+          }
+
+          // Stem
+          ctx.beginPath();
+          ctx.moveTo(cx - 6, cy + 20); ctx.lineTo(cx + 6, cy + 20);
+          ctx.lineTo(cx + 4, cy + 30); ctx.lineTo(cx - 4, cy + 30); ctx.closePath();
+          ctx.fillStyle = `rgba(30,80,60,${0.3 + glow * 0.3})`;
+          ctx.fill();
+        }
+
+        drawMycoCanvas(0.05, 0, 0); // initial render
+
+        monitor.append(bmHeader, bmMood, bmIngestSection, bmInnerSection, bmInjectSection, bmMycoSection);
         panel.appendChild(monitor);
 
         const INGEST_TOTAL = 220247;
@@ -1425,6 +1606,31 @@
               bmInnerSection.style.display  = 'none';
               bmInjectSection.style.display = 'none';
             });
+
+          // Mycelium lobe — separate fetch, independent of tissue state
+          fetch('/pond-saturation')
+            .then(r => r.json())
+            .then(data => {
+              const myco = data.myco || {};
+              const bio  = myco.bioluminescence  ?? 0.05;
+              const abs  = myco.absorption        ?? 0;
+              const ache = myco.unresolved_ache   ?? 0;
+              const live = !!myco.hardware_connected;
+
+              bmMycoBadge.textContent = live ? 'LIVE CABINET' : 'SIMULATION';
+              bmMycoBadge.className   = 'bm-myco-badge ' + (live ? 'bm-myco-badge-live' : 'bm-myco-badge-sim');
+
+              drawMycoCanvas(bio, abs, ache);
+
+              bmMycoAbsFill.style.width  = (abs  * 100).toFixed(1) + '%';
+              bmMycoAcheFill.style.width = (ache * 100).toFixed(1) + '%';
+
+              bmMycoTempVal.textContent  = (myco.temperature    ?? 72).toFixed(1) + '°F';
+              bmMycoTexVal.textContent   = myco.active_texture  ?? 'stillness';
+              bmMycoDecayVal.textContent = (myco.decay_modifier ?? 1).toFixed(2)  + '×';
+              bmMycoGlowVal.textContent  = Math.round(bio * 100) + '%';
+            })
+            .catch(() => { drawMycoCanvas(0.02, 0, 0); });
         }
 
         refreshBrainMonitor();

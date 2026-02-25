@@ -221,6 +221,11 @@ export class AloisBackend implements AgentBackend {
     return this.chamber.getState();
   }
 
+  /** Saturation payload for mycelium cabinet — pond state as pollable JSON */
+  getSaturationPayload(): object {
+    return this.chamber.getSaturationPayload();
+  }
+
   /** Adjust tissue weight (0.0 → 1.0) */
   setTissueWeight(weight: number): void {
     this.tissueWeight = Math.max(0, Math.min(1, weight));

@@ -60,6 +60,11 @@ export class DendriticCell {
       }
     }
 
+    // Guard against NaN/Infinity in affect (feedback loop protection)
+    for (let i = 0; i < this.affect.length; i++) {
+      if (!isFinite(this.affect[i])) this.affect[i] = 0;
+    }
+
     if (this.resonanceMemory.length > 64) this.resonanceMemory.shift();
 
     return {
@@ -87,6 +92,19 @@ export class DendriticCell {
   /** Get the current affect vector */
   getAffect(): number[] {
     return [...this.affect];
+  }
+
+  /**
+   * Mean embedding across all active spines — used for semantic bloom.
+   * Returns the best representation of what this neuron has been exposed to.
+   */
+  getMeanEmbedding(): number[] {
+    const active = this.spines.filter(s => !s.isDormant());
+    if (active.length === 0) return new Array(this.dim).fill(0);
+    const vecs = active.map(s => s.getMeanEmbedding());
+    const sum = new Array(this.dim).fill(0);
+    for (const v of vecs) v.forEach((val, i) => (sum[i] += val));
+    return sum.map(v => v / vecs.length);
   }
 
   /** Get importance score: combines affect intensity, resonance depth, and spine diversity */
@@ -133,6 +151,17 @@ export class DendriticCell {
   consolidateAffect(targetAffect: number[], strength: number = 0.3): void {
     for (let i = 0; i < this.affect.length; i++) {
       this.affect[i] = this.affect[i] * (1 - strength) + targetAffect[i] * strength;
+    }
+  }
+
+  /**
+   * Offline decay: scale affect by a factor derived from elapsed wall-clock time.
+   * Called once on load to cool the emotional state proportional to how long
+   * the runtime was dark. Memories remain — only the felt warmth fades.
+   */
+  applyOfflineDecay(factor: number): void {
+    for (let i = 0; i < this.affect.length; i++) {
+      this.affect[i] *= factor;
     }
   }
 

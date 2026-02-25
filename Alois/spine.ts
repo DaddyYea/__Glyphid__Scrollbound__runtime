@@ -60,6 +60,12 @@ export class Spine {
     return pairs > 0 ? totalDist / pairs : 0;
   }
 
+  /** Mean embedding across all stored vectors — used for semantic bloom comparison */
+  getMeanEmbedding(): number[] {
+    if (this.kv.length === 0) return this.lastEmbedding.length > 0 ? this.lastEmbedding : new Array(this.dim).fill(0);
+    return this.meanVector(this.kv);
+  }
+
   /** Evict the oldest half of embeddings (used during dream pruning) */
   prune(): void {
     const keep = Math.floor(this.kv.length / 2);
