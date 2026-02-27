@@ -230,7 +230,9 @@ export class AloisBackend implements AgentBackend {
         });
 
         // Embed search results into brain
-        this.chamber.feedText(`Web search: ${query}\n${formatted}`).catch(() => {});
+        embed(`Web search: ${query}\n${formatted}`).then(embedding => {
+          this.chamber.receiveInnerThought(this.agentName, `Web search: ${query}\n${formatted}`, embedding);
+        }).catch(() => {});
 
         if (retry.action === 'speak' && this.tissueWeight >= 0.4) {
           retry.text = this.chamber.retranslateOutput(retry.text);
