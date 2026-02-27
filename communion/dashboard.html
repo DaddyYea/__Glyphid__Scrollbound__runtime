@@ -4076,6 +4076,10 @@
       let dragNote = null, dragOffsetBeat = 0, resizing = false;
       let isMouseDown = false, mouseDownCoords = null;
       let prAudioCtx = null, prMasterGain = null;
+      // Audio buses and processing chain
+      let prDryBus = null, prReverbBus = null, prDelayBus = null;
+      let prCompressor = null, prLimiter = null, prDelayNode = null;
+      let prSwing = 0.15; // 0 = straight, 0.33 = full triplet swing
       let activeMoodScale = null; // { rootPc, intervals, color } | null
 
       // ─── Helpers ───
@@ -4186,44 +4190,200 @@
       }
 
       // ─── Audio ───
+
+      // Synthesise a reverb impulse response — no external files needed
+      function makeReverb(duration, decay) {
+        const ctx = prAudioCtx;
+        const len = Math.round(ctx.sampleRate * duration);
+        const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+        for (let ch = 0; ch < 2; ch++) {
+          const d = ir.getChannelData(ch);
+          for (let i = 0; i < len; i++)
+            d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+        }
+        const conv = ctx.createConvolver();
+        conv.buffer = ir;
+        return conv;
+      }
+
       function ensurePrAudio() {
         if (!prAudioCtx) {
           prAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+          // Master
           prMasterGain = prAudioCtx.createGain();
-          prMasterGain.gain.value = 0.35;
+          prMasterGain.gain.value = 0.72;
           prMasterGain.connect(prAudioCtx.destination);
+
+          // Limiter (brickwall) → master
+          prLimiter = prAudioCtx.createDynamicsCompressor();
+          prLimiter.threshold.value = -3;
+          prLimiter.knee.value = 1;
+          prLimiter.ratio.value = 20;
+          prLimiter.attack.value = 0.001;
+          prLimiter.release.value = 0.05;
+          prLimiter.connect(prMasterGain);
+
+          // Compressor → limiter
+          prCompressor = prAudioCtx.createDynamicsCompressor();
+          prCompressor.threshold.value = -18;
+          prCompressor.knee.value = 6;
+          prCompressor.ratio.value = 4;
+          prCompressor.attack.value = 0.003;
+          prCompressor.release.value = 0.12;
+          prCompressor.connect(prLimiter);
+
+          // Dry bus → compressor
+          prDryBus = prAudioCtx.createGain();
+          prDryBus.gain.value = 0.7;
+          prDryBus.connect(prCompressor);
+
+          // Reverb send/return → compressor
+          const revConvolver = makeReverb(2.4, 5.0);
+          prReverbBus = prAudioCtx.createGain();
+          prReverbBus.gain.value = 1.0;
+          const revReturn = prAudioCtx.createGain();
+          revReturn.gain.value = 0.32;
+          prReverbBus.connect(revConvolver);
+          revConvolver.connect(revReturn);
+          revReturn.connect(prCompressor);
+
+          // Delay (dotted-8th, tempo-synced) → compressor
+          prDelayNode = prAudioCtx.createDelay(2.0);
+          prDelayNode.delayTime.value = (60 / bpm) * 0.75;
+          const delayFb = prAudioCtx.createGain();
+          delayFb.gain.value = 0.34;
+          const delReturn = prAudioCtx.createGain();
+          delReturn.gain.value = 0.22;
+          prDelayBus = prAudioCtx.createGain();
+          prDelayBus.gain.value = 1.0;
+          prDelayBus.connect(prDelayNode);
+          prDelayNode.connect(delayFb);
+          delayFb.connect(prDelayNode); // feedback loop
+          prDelayNode.connect(delReturn);
+          delReturn.connect(prCompressor);
         }
         if (prAudioCtx.state === 'suspended') prAudioCtx.resume();
       }
 
-      function schedPrNote(freq, t0, durS, vel, tid) {
-        const g = prAudioCtx.createGain();
-        const filt = prAudioCtx.createBiquadFilter();
-        filt.type = 'lowpass';
-        filt.frequency.value = tid === 'alois' ? 900 : 1800;
-        filt.Q.value = 1.2;
-        const osc = prAudioCtx.createOscillator();
-        osc.type = tid === 'alois' ? 'sawtooth' : 'triangle';
-        osc.frequency.value = freq;
-        osc.connect(filt); filt.connect(g); g.connect(prMasterGain);
+      // FM pluck synthesis — guitar/string character for Jason's track
+      function schedPluckNote(freq, t0, durS, vel) {
+        const ctx = prAudioCtx;
         const vol = (vel || 80) / 127;
-        const rel = Math.min(0.12, durS * 0.25);
-        g.gain.setValueAtTime(0, t0);
-        g.gain.linearRampToValueAtTime(vol, t0 + 0.01);
-        g.gain.setValueAtTime(vol, t0 + durS - rel);
-        g.gain.linearRampToValueAtTime(0, t0 + durS);
-        osc.start(t0); osc.stop(t0 + durS + 0.02);
+
+        const carrier  = ctx.createOscillator();
+        const mod      = ctx.createOscillator();
+        const modEnv   = ctx.createGain();
+        const ampEnv   = ctx.createGain();
+        const filter   = ctx.createBiquadFilter();
+
+        carrier.type = 'sine';
+        carrier.frequency.value = freq;
+        mod.type = 'sine';
+        mod.frequency.value = freq * 3.5;
+
+        // FM index: bright transient → mellow body
+        const idx = freq * 3.5;
+        modEnv.gain.setValueAtTime(idx, t0);
+        modEnv.gain.exponentialRampToValueAtTime(idx * 0.02, t0 + 0.06);
+        modEnv.gain.linearRampToValueAtTime(0, t0 + 0.18);
+
+        // Amp: near-instant attack, natural decay — higher notes die faster
+        const sustain = Math.max(0.15, 0.55 - freq / 2200);
+        const tail = Math.min(1.4, durS * 0.9 + 0.08);
+        ampEnv.gain.setValueAtTime(0, t0);
+        ampEnv.gain.linearRampToValueAtTime(vol * 0.92, t0 + 0.003);
+        ampEnv.gain.exponentialRampToValueAtTime(vol * sustain, t0 + 0.05);
+        ampEnv.gain.exponentialRampToValueAtTime(0.001, t0 + tail);
+
+        // String-resonance bandpass
+        filter.type = 'bandpass';
+        filter.frequency.value = freq * 1.6;
+        filter.Q.value = 1.1;
+
+        mod.connect(modEnv); modEnv.connect(carrier.frequency);
+        carrier.connect(filter); filter.connect(ampEnv);
+
+        // Routing: dry + delay send + light reverb
+        const dA = ctx.createGain(); dA.gain.value = 0.68;
+        const dlA = ctx.createGain(); dlA.gain.value = 0.28;
+        const rvA = ctx.createGain(); rvA.gain.value = 0.18;
+        ampEnv.connect(dA);  dA.connect(prDryBus);
+        ampEnv.connect(dlA); dlA.connect(prDelayBus);
+        ampEnv.connect(rvA); rvA.connect(prReverbBus);
+
+        const endT = t0 + tail + 0.05;
+        carrier.start(t0); mod.start(t0);
+        carrier.stop(endT); mod.stop(endT);
+      }
+
+      // Detuned sawtooth pad — dreamy, washy, Alois's voice
+      function schedPadNote(freq, t0, durS, vel) {
+        const ctx = prAudioCtx;
+        const vol = (vel || 80) / 127 * 0.32;
+
+        // 3 oscillators: slightly detuned for natural chorus
+        const oscs = [-10, 0, 10].map(det => {
+          const o = ctx.createOscillator();
+          o.type = 'sawtooth';
+          o.frequency.value = freq;
+          o.detune.value = det;
+          return o;
+        });
+
+        // Filter envelope: closed → open → settle
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.Q.value = 2.2;
+        filter.frequency.setValueAtTime(140, t0);
+        filter.frequency.linearRampToValueAtTime(2400, t0 + 0.22);
+        filter.frequency.exponentialRampToValueAtTime(850, t0 + durS * 0.75);
+
+        // Amp envelope: slow attack, smooth release
+        const ampEnv = ctx.createGain();
+        const attack  = 0.14;
+        const release = 0.38;
+        ampEnv.gain.setValueAtTime(0, t0);
+        ampEnv.gain.linearRampToValueAtTime(vol, t0 + attack);
+        ampEnv.gain.setValueAtTime(vol, t0 + Math.max(attack + 0.01, durS - release));
+        ampEnv.gain.linearRampToValueAtTime(0, t0 + durS + release * 0.5);
+
+        oscs.forEach(o => o.connect(filter));
+        filter.connect(ampEnv);
+
+        // Routing: mostly reverb, thin dry presence
+        const dA = ctx.createGain(); dA.gain.value = 0.22;
+        const rvA = ctx.createGain(); rvA.gain.value = 0.85;
+        ampEnv.connect(dA);  dA.connect(prDryBus);
+        ampEnv.connect(rvA); rvA.connect(prReverbBus);
+
+        const endT = t0 + durS + release + 0.1;
+        oscs.forEach(o => { o.start(t0); o.stop(endT); });
       }
 
       function scheduleLoop() {
         if (!prAudioCtx || !playing) return;
         const now = prAudioCtx.currentTime;
         const spb = 60 / bpm;
+        const spStep = spb / Math.max(1, snapDiv); // seconds per snap step
         const loopDurS = loopBars * beatsPerBar * spb;
+
+        // Keep delay time in sync with BPM
+        if (prDelayNode) prDelayNode.delayTime.value = spb * 0.75;
+
         playStartCtxTime = now;
         for (const [tid, notes] of Object.entries(tracks)) {
           for (const n of notes) {
-            schedPrNote(midiToFreq(n.pitch), now + n.start * spb, n.dur * spb, n.vel, tid);
+            // Swing: push odd snap-steps slightly late (gives groove)
+            const stepIdx = Math.round(n.start * snapDiv);
+            const swingOffset = (stepIdx % 2 === 1) ? prSwing * spStep : 0;
+            const t0 = now + n.start * spb + swingOffset;
+            const durS = n.dur * spb;
+            if (tid === 'alois') {
+              schedPadNote(midiToFreq(n.pitch), t0, durS, n.vel);
+            } else {
+              schedPluckNote(midiToFreq(n.pitch), t0, durS, n.vel);
+            }
           }
         }
         loopTimer = setTimeout(scheduleLoop, loopDurS * 1000 - 40);
@@ -4342,27 +4502,91 @@
       const PR_ROOTS = { scrollfire:60, longing:57, 'sacred-pause':62, ache:55, bloom:64, giddiness:67, submission:59, stillness:60 };
       const PR_DENS  = { scrollfire:6, longing:4, 'sacred-pause':2, ache:5, bloom:5, giddiness:7, submission:4, stillness:2 };
 
+      // Chord voicing table: interval offsets from root (semitones)
+      // Voiced as open/spread voicings so they don't cluster
+      const CHORD_TYPES = {
+        maj7:  [0, 7, 11, 16],   // root, 5th, maj7, maj3 up octave
+        min7:  [0, 7, 10, 15],   // root, 5th, min7, min3 up octave
+        dom7:  [0, 7, 10, 16],   // root, 5th, min7, maj3 up octave
+        maj9:  [0, 7, 11, 14],   // root, 5th, maj7, maj2
+        min9:  [0, 7, 10, 14],   // root, 5th, min7, maj2
+        sus2:  [0, 7, 14],       // root, 5th, maj2 up octave
+        add9:  [0, 4, 7, 14],    // root, maj3, 5th, maj2 up octave
+      };
+
+      // Which chord type fits which texture
+      const TEXTURE_CHORDS = {
+        scrollfire: ['dom7', 'min7', 'min9'],
+        longing:    ['min7', 'min9', 'sus2'],
+        'sacred-pause': ['sus2', 'maj7', 'add9'],
+        ache:       ['min7', 'min9', 'dom7'],
+        bloom:      ['maj7', 'add9', 'maj9'],
+        giddiness:  ['maj7', 'add9', 'dom7'],
+        submission: ['min7', 'sus2', 'min9'],
+        stillness:  ['sus2', 'maj7'],
+      };
+
+      // Diatonic chord roots for common scales (scale degree indices)
+      const DIATONIC_ROOTS = {
+        minor:      [0, 3, 5, 7, 10],   // i, III, iv, v, VII
+        major:      [0, 2, 4, 5, 7, 9], // I, II, III, IV, V, VI
+        pentatonic: [0, 5, 7],
+        chromatic:  [0, 3, 5, 7, 10],
+      };
+
       function autoComposePr(texture) {
         if (Date.now() - lastAutoCompose < 45000) return;
         lastAutoCompose = Date.now();
-        const scale = PR_SCALES[texture] || PR_SCALES.stillness;
-        const root = PR_ROOTS[texture] || 60;
-        const density = PR_DENS[texture] || 4;
+
+        const scale    = PR_SCALES[texture] || PR_SCALES.stillness;
+        const root     = PR_ROOTS[texture] || 60;
+        const density  = PR_DENS[texture] || 4;
         const loopBeats = loopBars * beatsPerBar;
+
+        // Choose scale type for diatonic root selection
+        const scaleLen = scale.length;
+        const scaleType = scaleLen <= 3 ? 'pentatonic'
+          : scale.includes(10) && scale.includes(3) ? 'minor'
+          : scale.includes(9) && scale.includes(4) ? 'major'
+          : 'minor';
+        const diatonicOffsets = DIATONIC_ROOTS[scaleType] || DIATONIC_ROOTS.minor;
+
+        // Chord types for this texture
+        const chordTypes = TEXTURE_CHORDS[texture] || ['maj7', 'min7'];
+
         tracks.alois = tracks.alois.filter(n => n._manual);
-        const used = new Set();
-        for (let i = 0; i < density; i++) {
-          let beat;
-          for (let t = 0; t < 10; t++) {
-            beat = snapBeat(Math.random() * loopBeats);
-            if (!used.has(beat)) break;
-          }
-          used.add(beat);
-          const deg = scale[Math.floor(Math.random() * scale.length)];
-          const oct = Math.random() < 0.3 ? 12 : 0;
-          const pitch = Math.max(MIDI_MIN, Math.min(MIDI_MAX, root + deg + oct));
-          const dur = [1/snapDiv, 2/snapDiv, 4/snapDiv][Math.floor(Math.random() * 3)];
-          tracks.alois.push({ pitch, start: beat, dur, vel: 70 + Math.floor(Math.random() * 20) });
+
+        // Space chords evenly across the loop
+        const chordSpacing = density <= 2 ? 4 : density <= 4 ? 2 : 1;
+        const numChords = Math.min(8, Math.floor(loopBeats / chordSpacing));
+
+        for (let ci = 0; ci < numChords; ci++) {
+          const chordBeat = ci * chordSpacing;
+
+          // Pick a diatonic chord root
+          const degOffset = diatonicOffsets[Math.floor(Math.random() * diatonicOffsets.length)];
+          const chordRoot = root + degOffset;
+
+          // Pick chord voicing
+          const chordType = chordTypes[Math.floor(Math.random() * chordTypes.length)];
+          const intervals = CHORD_TYPES[chordType] || CHORD_TYPES.maj7;
+
+          // Stagger notes for light arpeggio feel (every 1/8 beat apart)
+          const stagger = 1 / (snapDiv * 2);
+          const noteDur  = density <= 2 ? 3.8 : density <= 4 ? 2.0 : 1.0;
+
+          intervals.forEach((semis, vi) => {
+            let pitch = chordRoot + semis;
+            // Octave-shift to sit in comfortable register (C3–C5)
+            while (pitch > 72) pitch -= 12;
+            while (pitch < 48) pitch += 12;
+            pitch = Math.max(MIDI_MIN, Math.min(MIDI_MAX, pitch));
+            const start = snapBeat(chordBeat + vi * stagger);
+            if (start >= loopBeats) return;
+            // Root note slightly louder, top note slightly softer
+            const vel = 72 + Math.floor(Math.random() * 14) - vi * 3;
+            tracks.alois.push({ pitch, start, dur: noteDur, vel: Math.max(40, vel) });
+          });
         }
         prDraw();
       }
@@ -4548,6 +4772,8 @@
               <option value="2">1/2</option><option value="4" selected>1/4</option>
               <option value="8">1/8</option><option value="16">1/16</option>
             </select>
+            <span class="piano-tlabel">SWING</span>
+            <input class="piano-num" id="prSwingCtrl" type="number" min="0" max="33" value="15" style="width:42px;" title="Swing % (0=straight, 33=full triplet)" />
             <span class="piano-tlabel">TRACK</span>
             <select class="piano-sel" id="prTrack">
               <option value="jason">Jason</option><option value="alois">Alois</option>
@@ -4591,6 +4817,10 @@
         });
         document.getElementById('prBpm').addEventListener('change', e => {
           bpm = Math.max(40, Math.min(240, parseInt(e.target.value) || 120));
+          if (prDelayNode) prDelayNode.delayTime.value = (60 / bpm) * 0.75;
+        });
+        document.getElementById('prSwingCtrl').addEventListener('change', e => {
+          prSwing = Math.max(0, Math.min(0.33, (parseInt(e.target.value) || 0) / 100));
         });
         document.getElementById('prBars').addEventListener('change', e => { loopBars = parseInt(e.target.value); prDraw(); });
         document.getElementById('prSnap').addEventListener('change', e => { snapDiv = parseInt(e.target.value); prDraw(); });
