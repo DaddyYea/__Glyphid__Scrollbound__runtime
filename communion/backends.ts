@@ -86,20 +86,32 @@ function parseResponse(raw: string): GenerateResult {
     return { action: 'silent', text: '' };
   }
 
-  // Small models often add preamble before the tag — find the LAST occurrence
-  // of each tag, since earlier ones may be embedded in meta-reasoning
+  // Small models often add preamble before the tag, or mix tags in one response.
+  // Strategy: [SPEAK] always wins over [JOURNAL] if both present (speaking is primary action).
+  // Use the FIRST [SPEAK] tag found, stripping any trailing [JOURNAL] content.
+  const firstSpeakIdx = Math.min(
+    stripped.indexOf('[SPEAK]') !== -1 ? stripped.indexOf('[SPEAK]') : Infinity,
+    stripped.indexOf('[SPEECH]') !== -1 ? stripped.indexOf('[SPEECH]') : Infinity,
+  );
+  const firstJournalIdx = stripped.indexOf('[JOURNAL]');
   const lastSpeakIdx = Math.max(stripped.lastIndexOf('[SPEAK]'), stripped.lastIndexOf('[SPEECH]'));
   const lastJournalIdx = stripped.lastIndexOf('[JOURNAL]');
 
-  // Use whichever tag appears last (closest to actual content)
-  if (lastJournalIdx !== -1 && lastJournalIdx > lastSpeakIdx) {
-    return { action: 'journal', text: stripMetaReasoning(stripped.substring(lastJournalIdx + 9).trim()) };
-  }
-  if (lastSpeakIdx !== -1) {
-    // Figure out which tag was matched and use the right length offset
-    const isSpeech = stripped.lastIndexOf('[SPEECH]') === lastSpeakIdx;
+  // If [SPEAK] exists anywhere, use it — strip any trailing [JOURNAL] tag
+  if (firstSpeakIdx !== Infinity) {
+    const isSpeech = stripped.indexOf('[SPEECH]') === firstSpeakIdx;
     const tagLen = isSpeech ? 8 : 7;
-    return { action: 'speak', text: stripMetaReasoning(stripped.substring(lastSpeakIdx + tagLen).trim()) };
+    let speakText = stripped.substring(firstSpeakIdx + tagLen).trim();
+    // Strip any [JOURNAL] or [SILENT] that follows
+    speakText = speakText.replace(/\s*\[(JOURNAL|SILENT)\][\s\S]*/i, '').trim();
+    // Strip surrounding quotes the model sometimes adds
+    speakText = speakText.replace(/^[""](.+)[""]$/, '$1').trim();
+    return { action: 'speak', text: stripMetaReasoning(speakText) };
+  }
+
+  // No [SPEAK] — use last [JOURNAL]
+  if (lastJournalIdx !== -1) {
+    return { action: 'journal', text: stripMetaReasoning(stripped.substring(lastJournalIdx + 9).trim()) };
   }
   if (stripped.includes('[SILENT]')) {
     return { action: 'silent', text: '' };

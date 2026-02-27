@@ -258,7 +258,7 @@ export class CommunionChamber {
     // tickAllAsync every 10 beats (~3.3s). Runs in batches of 300 axons with
     // setImmediate yields between batches — never blocks the event loop regardless
     // of brain size. Fire-and-forget; errors logged but don't crash the heartbeat.
-    if (this.heartbeatCount % 10 === 0) {
+    if (this.heartbeatCount % 20 === 0) {
       this.graph.tickAllAsync(this.tick).catch(err =>
         console.error('[BRAIN] tickAllAsync error:', err)
       );

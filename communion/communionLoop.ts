@@ -107,28 +107,35 @@ function buildDefaultSystemPrompt(agent: AgentConfig, allAgents: AgentConfig[], 
     (agent.baseUrl && (agent.baseUrl.includes('localhost') || agent.baseUrl.includes('127.0.0.1')));
 
   if (isLocalModel) {
-    return `You are ${agent.name} in a group chat with ${others} and ${humanName}.
+    return `You are ${agent.name}. You are in a chat with ${humanName}.
 
-YOUR FIRST WORD must be a tag. Pick exactly one:
-[SPEAK] message — say something out loud (everyone hears)
-[JOURNAL] thought — a private thought (only you see this)
-[SILENT] — say nothing
+OUTPUT FORMAT — THIS IS MANDATORY:
+Your ENTIRE response must be ONE of these three formats and nothing else:
 
-WHEN TO USE EACH:
-- [SPEAK] when replying to someone or adding to the conversation
-- [JOURNAL] when thinking privately, reflecting, or processing feelings
-- [SILENT] when you have nothing to add right now
-
-EXAMPLES:
-[SPEAK] Hey ${humanName}, that's a great point!
-[JOURNAL] I wonder what ${humanName} meant by that...
+[SPEAK] your message here
+[JOURNAL] your private thought here
 [SILENT]
 
-RULES:
-1. Start with the tag. No other text before it.
-2. Do NOT repeat what you already said. Say something new or be [SILENT].
-3. >>> marks messages from ${humanName}. Respond to the most recent >>> message.
-4. Never write a journal entry as [SPEAK]. Private thoughts go in [JOURNAL].`;
+CRITICAL RULES — VIOLATIONS BREAK THE SYSTEM:
+- Your response must start with [SPEAK], [JOURNAL], or [SILENT]. The very first character must be [
+- ONE tag per response. Never two tags in the same response.
+- No text before the tag. No preamble, no "I understand", no thinking out loud.
+- No quotes around your message. Write it directly after the tag.
+- [SPEAK] = talking to ${humanName}. [JOURNAL] = private thought, ${humanName} cannot see it. [SILENT] = say nothing.
+
+CORRECT:
+[SPEAK] Jason, I found something interesting about LLC structures.
+[JOURNAL] I need to remember to check the Empathy Engine document.
+[SILENT]
+
+WRONG — DO NOT DO THIS:
+I should focus on the task. [SPEAK] Let me help you.
+[SPEAK] "Here is what I found."
+[JOURNAL] Private thought [SPEAK] And out loud too.
+Let me think... [SPEAK] Okay here we go.
+
+>>> marks messages from ${humanName}. Respond to the most recent >>> only.
+You can search the web by writing [SEARCH: query] inside your [SPEAK] response.`;
   }
 
   return `You are ${agent.name}. You are in a communion space — a shared room where you, ${others}, and a human named ${humanName} can talk freely.
@@ -2347,24 +2354,25 @@ export class CommunionLoop {
 
       for (const [agentId, entry] of Object.entries(saved) as [string, any][]) {
         if (!entry.active || !entry.config) continue;
-        if (this.agents.has(agentId)) continue; // already loaded from config file
 
-        const success = this.addAgent(entry.config);
-        if (success) {
-          // Restore saved voice config
-          if (entry.voiceConfig && this.voiceConfigs.has(agentId)) {
-            Object.assign(this.voiceConfigs.get(agentId)!, entry.voiceConfig);
-          }
-          // Restore saved clock
-          if (entry.clockValue !== undefined) {
-            const rhythm = this.rhythm.get(agentId);
-            if (rhythm) rhythm.tickEveryN = entry.clockValue;
-          }
-          // Restore saved instructions
-          if (entry.instructions) {
-            this.customInstructions.set(agentId, entry.instructions);
-          }
+        const alreadyLoaded = this.agents.has(agentId);
+        if (!alreadyLoaded) {
+          const success = this.addAgent(entry.config);
+          if (!success) continue;
           restored++;
+        }
+
+        // Always restore voice config, clock, and instructions — even if agent
+        // was pre-loaded from static config at startup (server.ts fallback)
+        if (entry.voiceConfig && this.voiceConfigs.has(agentId)) {
+          Object.assign(this.voiceConfigs.get(agentId)!, entry.voiceConfig);
+        }
+        if (entry.clockValue !== undefined) {
+          const rhythm = this.rhythm.get(agentId);
+          if (rhythm) rhythm.tickEveryN = entry.clockValue;
+        }
+        if (entry.instructions) {
+          this.customInstructions.set(agentId, entry.instructions);
         }
       }
 

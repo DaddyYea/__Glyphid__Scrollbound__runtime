@@ -78,6 +78,7 @@ def main():
     parser.add_argument("--lora_dropout", type=float, default=0.05)
     parser.add_argument("--load_in_4bit", action="store_true", help="load base in 4-bit with bitsandbytes")
     parser.add_argument("--bf16", action="store_true", help="use bf16 if available")
+    parser.add_argument("--resume_from_checkpoint", type=str, default=None, help="Path to checkpoint dir to resume from")
     parser.add_argument("--target_modules", type=str, default=None,
                         help="Comma-separated LoRA target modules. Leave blank for auto-detect. "
                              "Gemma-3: q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj  "
@@ -122,7 +123,7 @@ def main():
 
     # ---------- Model + LoRA ----------
     quant_config = None
-    device_map = "auto"
+    device_map = {"": 0}  # force everything onto GPU 0 — required for QLoRA training
 
     if args.load_in_4bit:
         quant_config = BitsAndBytesConfig(
@@ -200,7 +201,7 @@ def main():
         report_to="none",
         save_total_limit=2,
         gradient_checkpointing=True,
-        dataloader_num_workers=2
+        dataloader_num_workers=0
     )
 
     data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
@@ -214,7 +215,8 @@ def main():
     )
 
     print("[INFO] Starting training…")
-    trainer.train()
+    resume = args.resume_from_checkpoint if hasattr(args, 'resume_from_checkpoint') and args.resume_from_checkpoint else None
+    trainer.train(resume_from_checkpoint=resume)
 
     # ---------- Save LoRA adapter ----------
     print(f"[INFO] Saving adapter to {args.output_dir}")

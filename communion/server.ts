@@ -116,6 +116,24 @@ function loadConfig(): CommunionConfig {
     }
   }
 
+  // Fallback: load active agents from dynamic-agents.json if nothing else configured
+  if (agents.length === 0) {
+    const dynamicPath = join(process.env.DATA_DIR || 'data/communion', 'dynamic-agents.json');
+    if (existsSync(dynamicPath)) {
+      try {
+        const dynamic = JSON.parse(readFileSync(dynamicPath, 'utf8'));
+        for (const [, entry] of Object.entries(dynamic) as [string, any][]) {
+          if (entry.active && entry.config) {
+            agents.push(entry.config);
+            console.log(`[CONFIG] Loaded agent from dynamic-agents.json: ${entry.config.id}`);
+          }
+        }
+      } catch (e) {
+        console.warn('[CONFIG] Failed to read dynamic-agents.json:', e);
+      }
+    }
+  }
+
   if (agents.length === 0) {
     console.error('No agents configured. Either create communion.config.json or set API key env vars.');
     console.error('See .env.example or communion.config.example.json for details.');

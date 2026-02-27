@@ -18,6 +18,7 @@ import { AgentBackend, GenerateOptions, GenerateResult, OpenAICompatibleBackend 
 import { AgentConfig } from './types';
 import { CommunionChamber, TissueState } from '../Alois/communionChamber';
 import { DreamResult } from '../Alois/dreamEngine';
+import { webSearch, formatSearchResults } from './search';
 import { IncubationState } from '../Alois/incubationEngine';
 import { embed } from '../Alois/embed';
 import { PulseLoop } from '../Alois/pulseLoop';
@@ -207,6 +208,39 @@ export class AloisBackend implements AgentBackend {
       ...options,
       systemPrompt,
     });
+
+    // ── Search interception ──
+    // If Alois writes [SEARCH: query] anywhere in her response, execute the
+    // search and regenerate with the results injected into context.
+    const searchMatch = result.text?.match(/\[SEARCH:\s*([^\]]+)\]/i);
+    if (searchMatch) {
+      const query = searchMatch[1].trim();
+      console.log(`[SEARCH] Alois searching: "${query}"`);
+      try {
+        const searchResults = await webSearch(query, 4);
+        const formatted = formatSearchResults(query, searchResults);
+        console.log('[SEARCH] Results:\n', formatted);
+
+        // Re-generate with search results injected
+        const augmentedPrompt = systemPrompt + `\n\n${formatted}`;
+        const retry = await this.llm.generate({
+          ...options,
+          systemPrompt: augmentedPrompt,
+          conversationContext: options.conversationContext + `\n\n${formatted}`,
+        });
+
+        // Embed search results into brain
+        this.chamber.feedText(`Web search: ${query}\n${formatted}`).catch(() => {});
+
+        if (retry.action === 'speak' && this.tissueWeight >= 0.4) {
+          retry.text = this.chamber.retranslateOutput(retry.text);
+        }
+        return retry;
+      } catch (err) {
+        console.error('[SEARCH] Failed:', err);
+        // Fall through to original result
+      }
+    }
 
     // Apply SoulPrint filter at higher tissue weights
     if (this.tissueWeight >= 0.4 && result.action === 'speak') {

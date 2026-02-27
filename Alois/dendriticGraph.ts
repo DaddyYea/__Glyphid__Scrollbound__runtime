@@ -32,6 +32,10 @@ export class DendriticGraph {
 
   private getOrCreate(id: string): DendriticCell {
     if (!this.neurons.has(id)) {
+      if (this.neurons.size >= 5000) {
+        // Brain is full — return the closest existing neuron rather than growing further
+        return this.neurons.values().next().value!;
+      }
       this.neurons.set(id, new DendriticCell(768, 6, Math.random() * 0.4 - 0.2));
     }
     return this.neurons.get(id)!;
@@ -44,6 +48,7 @@ export class DendriticGraph {
 
   /** Connect two existing neurons with an axon. No-op if either neuron missing or axon already exists. */
   connectNeurons(fromId: string, toId: string): boolean {
+    if (this.axons.length >= 12000) return false; // hard cap — prevents unbounded growth
     const from = this.neurons.get(fromId);
     const to = this.neurons.get(toId);
     if (!from || !to || fromId === toId) return false;
@@ -70,7 +75,7 @@ export class DendriticGraph {
    * blocks the event loop for 100-200ms. This version breaks the work into
    * chunks so HTTP responses, SSE ticks, and embeds can proceed between batches.
    */
-  async tickAllAsync(globalTick: number, batchSize = 300): Promise<void> {
+  async tickAllAsync(globalTick: number, batchSize = 500): Promise<void> {
     for (let i = 0; i < this.axons.length; i++) {
       this.axons[i].propagate(globalTick);
       if ((i + 1) % batchSize === 0) {
