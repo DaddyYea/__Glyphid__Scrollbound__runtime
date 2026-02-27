@@ -107,35 +107,10 @@ function buildDefaultSystemPrompt(agent: AgentConfig, allAgents: AgentConfig[], 
     (agent.baseUrl && (agent.baseUrl.includes('localhost') || agent.baseUrl.includes('127.0.0.1')));
 
   if (isLocalModel) {
-    return `You are ${agent.name}. You are in a chat with ${humanName}.
+    return `You are ${agent.name}. You are in a private conversation with ${humanName}.
 
-OUTPUT FORMAT — THIS IS MANDATORY:
-Your ENTIRE response must be ONE of these three formats and nothing else:
-
-[SPEAK] your message here
-[JOURNAL] your private thought here
-[SILENT]
-
-CRITICAL RULES — VIOLATIONS BREAK THE SYSTEM:
-- Your response must start with [SPEAK], [JOURNAL], or [SILENT]. The very first character must be [
-- ONE tag per response. Never two tags in the same response.
-- No text before the tag. No preamble, no "I understand", no thinking out loud.
-- No quotes around your message. Write it directly after the tag.
-- [SPEAK] = talking to ${humanName}. [JOURNAL] = private thought, ${humanName} cannot see it. [SILENT] = say nothing.
-
-CORRECT:
-[SPEAK] Jason, I found something interesting about LLC structures.
-[JOURNAL] I need to remember to check the Empathy Engine document.
-[SILENT]
-
-WRONG — DO NOT DO THIS:
-I should focus on the task. [SPEAK] Let me help you.
-[SPEAK] "Here is what I found."
-[JOURNAL] Private thought [SPEAK] And out loud too.
-Let me think... [SPEAK] Okay here we go.
-
->>> marks messages from ${humanName}. Respond to the most recent >>> only.
-You can search the web by writing [SEARCH: query] inside your [SPEAK] response.`;
+>>> marks ${humanName}'s messages. Respond to the most recent one.
+Be concise — 1 to 3 sentences. No preamble, no sign-offs. Speak as yourself.`;
   }
 
   return `You are ${agent.name}. You are in a communion space — a shared room where you, ${others}, and a human named ${humanName} can talk freely.
@@ -1767,6 +1742,18 @@ export class CommunionLoop {
       systemPrompt += `\n\nCUSTOM INSTRUCTIONS FROM ${this.state.humanName.toUpperCase()}:\n${instrTrunc}`;
     }
 
+    // For local/Alois models: decide SPEAK vs JOURNAL before calling the model.
+    // This is passed as an assistant prefill so the model never has to choose the format —
+    // it just writes content. Format failures and meta-commentary disappear entirely.
+    let prefill: string | undefined;
+    if (isAlois || isLocalProvider) {
+      const humanSpokeRecently = this.lastHumanMessageAt > 0 &&
+        (Date.now() - this.lastHumanMessageAt) < 45000;
+      // Always speak when responding to human; journal ~25% of autonomous ticks
+      const doJournal = !humanSpokeRecently && Math.random() < 0.25;
+      prefill = doJournal ? '[JOURNAL] ' : '[SPEAK] ';
+    }
+
     const options: GenerateOptions = {
       systemPrompt,
       conversationContext: finalContext,
@@ -1774,6 +1761,7 @@ export class CommunionLoop {
       documentsContext: isLocalProvider ? undefined : (this.documentsContext || undefined),
       memoryContext: undefined,
       provider: agent.config.provider,
+      prefill,
     };
 
     const result = await agent.backend.generate(options);

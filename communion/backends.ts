@@ -19,6 +19,13 @@ export interface GenerateOptions {
   memoryContext?: string;
   /** Provider hint for prompt size limiting */
   provider?: string;
+  /**
+   * For local models: pre-fill the assistant turn so the model skips format decisions.
+   * '[SPEAK] ' → model outputs only the spoken content
+   * '[JOURNAL] ' → model outputs only the journal thought
+   * The action is derived from this prefill, not from tag-parsing.
+   */
+  prefill?: string;
 }
 
 export interface GenerateResult {
@@ -262,6 +269,11 @@ export class OpenAICompatibleBackend implements AgentBackend {
             messages: [
               { role: 'system', content: systemContent },
               { role: 'user', content: finalUser },
+              // Prefill forces the model to continue from a given prefix,
+              // bypassing format-decision failures in small models.
+              ...(isLocalModel && options.prefill
+                ? [{ role: 'assistant', content: options.prefill }]
+                : []),
             ],
             max_tokens: this.maxTokens,
             temperature: this.temperature,
@@ -287,6 +299,15 @@ export class OpenAICompatibleBackend implements AgentBackend {
     if (isLocalModel) {
       console.log(`[${this.agentName}] Raw response: "${text.substring(0, 200)}${text.length > 200 ? '...' : ''}"`);
     }
+
+    // Prefill path: action is determined by the prefix we sent, not by tag-parsing
+    if (isLocalModel && options.prefill) {
+      const content = stripMetaReasoning(text.trim());
+      if (options.prefill.includes('[JOURNAL]')) return { action: 'journal', text: content };
+      if (options.prefill.includes('[SILENT]')) return { action: 'silent', text: '' };
+      return { action: 'speak', text: content };
+    }
+
     return parseResponse(text);
   }
 }
