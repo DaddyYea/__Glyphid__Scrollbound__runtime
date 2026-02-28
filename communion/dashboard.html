@@ -3723,6 +3723,7 @@
         // Notes
         for (const [tid, notes] of Object.entries(tracks)) {
           const col = NOTE_COLORS[tid];
+          if (!col) continue; // skip tracks with no color (e.g. arp — auto-generated, not user-editable)
           for (const n of notes) {
             const y = (MIDI_MAX - n.pitch) * ROW_H + 1;
             const x = KEY_W + (n.start - scroll) * ppb;
@@ -4032,7 +4033,11 @@
           // Piano + drums regenerate together every 8 bars (every 2 loops) or on section change.
           // Drums deferred to exact loopStart so they flip at beat-1, locked with piano.
           if (prLoopCount % 2 === 0 || sectionChanged) {
-            scGeneratePianoPattern(scSection);
+            try {
+              scGeneratePianoPattern(scSection);
+            } catch (e) {
+              console.error('[SCORE] scGeneratePianoPattern error:', e);
+            }
             scGenerateDrumPattern(scSection);
             // Anchor drums to the same loopStart as the piano — no setTimeout jitter.
             // The drum scheduler's while-loop won't fire these until currentTime reaches loopStart.
