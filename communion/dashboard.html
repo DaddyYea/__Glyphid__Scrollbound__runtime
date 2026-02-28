@@ -4035,7 +4035,12 @@
             scGeneratePianoPattern(scSection);
             const msToStart = Math.max(0, (loopStart - prAudioCtx.currentTime) * 1000);
             const capturedSection = scSection;
-            setTimeout(() => scGenerateDrumPattern(capturedSection), msToStart);
+            setTimeout(() => {
+              scGenerateDrumPattern(capturedSection);
+              // Re-anchor drum machine to bar 1 so it's phase-locked with the piano loop.
+              drStep = 0;
+              drNextBeat = (prAudioCtx || drAudioCtx).currentTime + 0.005;
+            }, msToStart);
             console.log(`[SCORE] regen @ loop ${prLoopCount} — section: ${scSection}`);
           }
         }
@@ -5816,6 +5821,13 @@
         const rootMidi = 48 + rootPc;  // C3 + root = comfortable bass register
 
         const bassNotes = [];
+        // Shared vars — must be visible to both if/else paths AND the arp layer below.
+        const scalePCs   = scale.map(deg => (rootPc + deg) % 12);
+        let spacing      = { breakdown: 8, verse: 4, chorus: 2, peak: 1.5 }[section] ?? 4;
+        let numChords    = Math.min(12, Math.floor(beats / spacing));
+        const progPool0  = ALT_ROCK_PROGS[scaleType] || ALT_ROCK_PROGS.minor;
+        let prog         = progPool0[Math.floor(Math.random() * progPool0.length)];
+        let intervals    = CHORD_TYPES.min7; // overridden by procedural path
 
         // ── Hybrid pad layer: MIDI fragment (70%) or procedural (30%) ──
         // Fragment library loaded from free-midi-chords (MIT). Falls back to procedural
@@ -5827,26 +5839,39 @@
           // ── Fragment path: real human-written chord progression ──
           const { frag, notes: fragNotes } = fragResult;
           const loopBeats = beats;
-          // Clip/loop fragment to fill loopBeats
           const fragLen = frag.bars * 4; // fragment length in beats
+          // Sort by start time — multi-track MIDI arrives in track order, not time order.
+          // Sorting lets the break statement work correctly and spreads notes evenly.
+          const sortedFrag = [...fragNotes].sort((a, b) => a.start - b.start);
           for (let offset = 0; offset < loopBeats; offset += fragLen) {
-            for (const n of fragNotes) {
+            for (const n of sortedFrag) {
               const start = offset + n.start;
               if (start >= loopBeats) break;
-              // Only include mid-register notes as pad (48–84); low notes go to bass
-              if (n.pitch >= 48 && n.pitch <= 84) {
-                padNotes.push({ pitch: n.pitch, start, dur: Math.min(n.dur, loopBeats - start), vel: n.vel });
-              } else if (n.pitch < 48) {
-                bassNotes.push({ pitch: Math.max(28, n.pitch), start, dur: Math.min(n.dur, loopBeats - start), vel: n.vel });
+              // Scale-snap to active key — keeps fragment in-key regardless of mode/mood
+              let pitch = Math.max(36, Math.min(84, n.pitch));
+              const pc = ((pitch % 12) + 12) % 12;
+              if (!scalePCs.includes(pc)) {
+                let bestPc = scalePCs[0], bestDist = 99;
+                for (const sp of scalePCs) { let d = Math.abs(pc - sp); if (d > 6) d = 12 - d; if (d < bestDist) { bestDist = d; bestPc = sp; } }
+                const diff = ((bestPc - pc + 12) % 12);
+                pitch += diff <= 6 ? diff : diff - 12;
               }
+              padNotes.push({ pitch, start, dur: Math.min(n.dur, loopBeats - start), vel: n.vel });
             }
+          }
+          // Bass uses outer-scope prog — same progression as arp for harmonic coherence
+          for (let ci = 0; ci < numChords; ci++) {
+            const chordBeat = ci * spacing;
+            if (chordBeat >= loopBeats) break;
+            let bassPitch = rootMidi + prog[ci % prog.length] - 12;
+            while (bassPitch > 52) bassPitch -= 12;
+            while (bassPitch < 28) bassPitch += 12;
+            bassNotes.push({ pitch: bassPitch, start: chordBeat, dur: spacing * 0.88, vel: 72 });
           }
           console.log(`[SCORE] fragment: "${frag.label}" [${section}]`);
         } else {
           // ── Procedural path: algorithmic alt-rock progression ──
-          const progPool = ALT_ROCK_PROGS[scaleType] || ALT_ROCK_PROGS.minor;
-          const prog = progPool[Math.floor(Math.random() * progPool.length)];
-
+          // spacing / numChords / prog already set in outer scope; only intervals changes.
           const SECTION_CHORDS = {
             breakdown: ['sus2', 'add9'],
             verse:     ['sus2', 'min7', 'add9'],
@@ -5854,10 +5879,7 @@
             peak:      ['min9', 'add9', 'dom7'],
           };
           const chordType = (SECTION_CHORDS[section] || SECTION_CHORDS.verse)[Math.floor(Math.random() * 3)];
-          const intervals = CHORD_TYPES[chordType] || CHORD_TYPES.min7;
-          const spacing   = { breakdown: 8, verse: 4, chorus: 2, peak: 1.5 }[section] ?? 4;
-          const numChords = Math.min(12, Math.floor(beats / spacing));
-          const scalePCs  = scale.map(deg => (rootPc + deg) % 12);
+          intervals = CHORD_TYPES[chordType] || CHORD_TYPES.min7;
           const STAGGER   = 0.02;
 
           for (let ci = 0; ci < numChords; ci++) {
@@ -6231,14 +6253,15 @@
             if (scEnabled) scApplySectionToDrone(scSection);
           });
         });
+        const drResync = () => { drStep = 0; drNextBeat = (prAudioCtx || drAudioCtx).currentTime + 0.005; };
         panel.querySelector('#sc-gen-now').addEventListener('click', () => {
-          scGenerateDrumPattern(scSection); scGeneratePianoPattern(scSection); scUpdatePanel();
+          scGenerateDrumPattern(scSection); drResync(); scGeneratePianoPattern(scSection); scUpdatePanel();
         });
         panel.querySelector('#sc-force-peak').addEventListener('click', () => {
-          scSection = 'peak'; scApplySectionToDrone('peak'); scGenerateDrumPattern('peak'); scGeneratePianoPattern('peak'); scUpdatePanel();
+          scSection = 'peak'; scApplySectionToDrone('peak'); scGenerateDrumPattern('peak'); drResync(); scGeneratePianoPattern('peak'); scUpdatePanel();
         });
         panel.querySelector('#sc-force-break').addEventListener('click', () => {
-          scSection = 'breakdown'; scApplySectionToDrone('breakdown'); scGenerateDrumPattern('breakdown'); scGeneratePianoPattern('breakdown'); scUpdatePanel();
+          scSection = 'breakdown'; scApplySectionToDrone('breakdown'); scGenerateDrumPattern('breakdown'); drResync(); scGeneratePianoPattern('breakdown'); scUpdatePanel();
         });
         scPanelOverlay.appendChild(panel);
         document.body.appendChild(scPanelOverlay);
