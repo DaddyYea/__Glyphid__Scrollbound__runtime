@@ -5853,6 +5853,15 @@
       }
 
       // ── Piano + lead note generation per section ──
+      // Bass groove patterns — [beat_offset_within_chord, vel_factor]
+      // offset must be < spacing for the note to fall within the chord window
+      const BASS_GROOVES = {
+        breakdown: [[0, 1.00]],
+        verse:     [[0, 1.00], [2.5, 0.70]],
+        chorus:    [[0, 1.00], [0.75, 0.65], [1.5, 0.80]],
+        peak:      [[0, 1.00], [0.5, 0.62], [1.0, 0.72], [2.0, 0.68]],
+      };
+
       // scLeadNotes stores {pitch, start, dur, vel} for scheduling by the loop
       let scLeadNotes = [];
 
@@ -5901,7 +5910,7 @@
               const start = offset + n.start;
               if (start >= loopBeats) break;
               // Scale-snap to active key — keeps fragment in-key regardless of mode/mood
-              let pitch = Math.max(36, Math.min(84, n.pitch));
+              let pitch = Math.max(52, Math.min(84, n.pitch)); // 52=E3 — keep pad out of bass register
               const pc = ((pitch % 12) + 12) % 12;
               if (!scalePCs.includes(pc)) {
                 let bestPc = scalePCs[0], bestDist = 99;
@@ -5912,14 +5921,22 @@
               padNotes.push({ pitch, start, dur: Math.min(n.dur, loopBeats - start), vel: n.vel });
             }
           }
-          // Bass uses outer-scope prog — same progression as arp for harmonic coherence
+          // Bass groove — follows chord roots with per-section rhythmic pattern
+          const bassGroove = BASS_GROOVES[section] || BASS_GROOVES.verse;
+          const bassVelBase = Math.min(108, def.velLo + 18 + Math.floor(Math.random() * 12));
           for (let ci = 0; ci < numChords; ci++) {
             const chordBeat = ci * spacing;
-            if (chordBeat >= loopBeats) break;
-            let bassPitch = rootMidi + prog[ci % prog.length] - 12;
-            while (bassPitch > 52) bassPitch -= 12;
-            while (bassPitch < 28) bassPitch += 12;
-            bassNotes.push({ pitch: bassPitch, start: chordBeat, dur: spacing * 0.88, vel: 72 });
+            if (chordBeat >= beats) break;
+            let rootPitch = rootMidi + prog[ci % prog.length] - 12;
+            while (rootPitch > 52) rootPitch -= 12;
+            while (rootPitch < 28) rootPitch += 12;
+            for (const [offset, velFactor] of bassGroove) {
+              if (offset >= spacing) break;
+              const start = chordBeat + offset;
+              if (start >= beats) break;
+              const dur = Math.min(spacing - offset - 0.08, 0.95);
+              bassNotes.push({ pitch: rootPitch, start, dur, vel: Math.round(bassVelBase * velFactor) });
+            }
           }
           console.log(`[SCORE] fragment: "${frag.label}" [${section}]`);
         } else {
@@ -5967,8 +5984,15 @@
             let bassPitch = chordRoot - 12;
             while (bassPitch > 52) bassPitch -= 12;
             while (bassPitch < 28) bassPitch += 12;
-            const bassVel = Math.min(100, def.velLo + 18 + Math.floor(Math.random() * 15));
-            bassNotes.push({ pitch: bassPitch, start: chordBeat, dur: spacing * 0.88, vel: bassVel });
+            const bassVelBase = Math.min(100, def.velLo + 18 + Math.floor(Math.random() * 15));
+            const bassGrooveP = BASS_GROOVES[section] || BASS_GROOVES.verse;
+            for (const [offset, velFactor] of bassGrooveP) {
+              if (offset >= spacing) break;
+              const start = chordBeat + offset;
+              if (start >= beats) break;
+              const dur = Math.min(spacing - offset - 0.08, 0.95);
+              bassNotes.push({ pitch: bassPitch, start, dur, vel: Math.round(bassVelBase * velFactor) });
+            }
           }
         }
 
