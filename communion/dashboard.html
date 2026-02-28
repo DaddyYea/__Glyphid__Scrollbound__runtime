@@ -5779,7 +5779,6 @@
           const kicks = pick([[0, 24], [0, 20], [0, 28], [0, 16, 24]]);
           kicks.forEach(s => { drPattern[ki][s] = rnd(75, 92); if (s === 0 || s === 16) drPattern[si][s] = rnd(62, 78); });
           for (let s = 0; s < 32; s += 8) drPattern[chhi][s] = rnd(40, 58);
-          if (Math.random() < 0.5) hatFill(15, 3, 62);
           if (Math.random() < 0.4) drPattern[rdi][0] = rnd(55, 72);
 
         } else if (section === 'verse') {
@@ -5814,13 +5813,10 @@
               drPattern[chhi][s] = onBeat ? rnd(80, 95) : onEighth ? rnd(65, 78) : rnd(45, 62);
             }
             [4, 12, 20, 28].forEach(s => { if (Math.random() < 0.5) drPattern[ohhi][s] = rnd(65, 75); });
-            hatFill(15, 4, 88);
-            if (Math.random() < 0.6) hatFill(31, 4, 85);
           } else {
             // Shuffled accent hats — off-beat emphasis, alt-rock feel
             [0, 3, 6, 8, 11, 14, 16, 19, 22, 24, 27, 30].forEach(s => drPattern[chhi][s] = rnd(58, 82));
             [4, 12, 20, 28].forEach(s => { drPattern[ohhi][s] = rnd(72, 88); });
-            if (Math.random() < 0.5) hatFill(15, 3, 82);
           }
 
         } else if (section === 'chorus') {
@@ -5839,8 +5835,6 @@
           }
           [4, 12, 20, 28].forEach(s => drPattern[ohhi][s] = rnd(72, 88));
           if (Math.random() < 0.5) drPattern[ohhi][pick([2, 10, 18, 26])] = rnd(68, 82);
-          if (Math.random() < 0.35) hatFill(15, 6, 95);
-          if (Math.random() < 0.35) hatFill(31, 6, 92);
           if (Math.random() < 0.4) drPattern[perci][rnd(0, 4) * 8 + rnd(2, 6)] = rnd(65, 80);
 
         } else {
@@ -5858,8 +5852,6 @@
           for (let s = 0; s < 32; s++) drPattern[chhi][s] = rnd(70, 100);
           [4, 12, 20, 28].forEach(s => drPattern[ohhi][s] = rnd(80, 95));
           [2, 10, 18, 26].forEach(s => { if (Math.random() < 0.5) drPattern[ohhi][s] = rnd(72, 85); });
-          if (Math.random() < 0.40) hatFill(15, 8, 105);
-          if (Math.random() < 0.40) hatFill(31, 8, 105);
           drPattern[rdi][0] = 80; drPattern[rdi][16] = 80;
           for (let s = 4; s < 32; s += 8) { if (Math.random() < 0.5) drPattern[perci][s] = rnd(70, 90); }
         }
@@ -5881,8 +5873,6 @@
           const ghostStep = pick([18, 20, 22, 26, 28, 30]);
           if (drPattern[ki][ghostStep] === 0) drPattern[ki][ghostStep] = rnd(52, 72);
         }
-        // Anticipation fill: rapid hats before beat 1 of bar 2 (steps 12–15)
-        if (Math.random() < 0.55) hatFill(15, 4, 82);
 
         drRenderGrid();
       }
