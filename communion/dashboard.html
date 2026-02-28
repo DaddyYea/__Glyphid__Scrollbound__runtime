@@ -3641,7 +3641,7 @@
       };
       const padSettings = {
         detune: 10, filterCutoff: 2400, filterQ: 2.2,
-        attack: 0.14, release: 0.38, reverbSend: 0.22,
+        attack: 0.12, release: 0.22, reverbSend: 0.22,
       };
       const fxSettings = {
         revSize: 1.4, revDecay: 1.8, delayFeedback: 0.18,
@@ -4089,7 +4089,6 @@
             drNextBeat = loopStart;
             console.log(`[SCORE] regen @ loop ${prLoopCount} — section: ${scSection}`);
           } else {
-            // Bass plays every other loop — sit out on odd loops
             tracks.jason = [];
           }
         }
@@ -5836,6 +5835,8 @@
           [4, 12, 20, 28].forEach(s => drPattern[ohhi][s] = rnd(72, 88));
           if (Math.random() < 0.5) drPattern[ohhi][pick([2, 10, 18, 26])] = rnd(68, 82);
           if (Math.random() < 0.4) drPattern[perci][rnd(0, 4) * 8 + rnd(2, 6)] = rnd(65, 80);
+          if (Math.random() < 0.35) hatFill(15, 6, 95);
+          if (Math.random() < 0.35) hatFill(31, 6, 92);
 
         } else {
           // Peak — four dense kick patterns
@@ -5854,6 +5855,8 @@
           [2, 10, 18, 26].forEach(s => { if (Math.random() < 0.5) drPattern[ohhi][s] = rnd(72, 85); });
           drPattern[rdi][0] = 80; drPattern[rdi][16] = 80;
           for (let s = 4; s < 32; s += 8) { if (Math.random() < 0.5) drPattern[perci][s] = rnd(70, 90); }
+          if (Math.random() < 0.40) hatFill(15, 8, 105);
+          if (Math.random() < 0.40) hatFill(31, 8, 105);
         }
         // ── Bar-2 micro-variation ──
         // The drum machine loops at 32 steps (2 bars) inside a 4-bar piano loop,
@@ -5942,7 +5945,7 @@
                 const diff = ((bestPc - pc + 12) % 12);
                 pitch += diff <= 6 ? diff : diff - 12;
               }
-              padNotes.push({ pitch, start, dur: Math.min(n.dur, loopBeats - start), vel: n.vel });
+              padNotes.push({ pitch, start, dur: Math.min(n.dur, spacing * 0.88, loopBeats - start - 0.05), vel: n.vel });
             }
           }
           // Bass groove — follows chord roots with per-section rhythmic pattern
@@ -5997,7 +6000,7 @@
               voices.push(pitch);
             });
             voices.sort((a, b) => a - b);
-            const noteDur = spacing * 1.05;
+            const noteDur = spacing * 0.85; // was 1.05 — cap within chord window, no bleed into next loop
             const vel = Math.max(35, def.velLo + Math.floor(Math.random() * (def.velHi - def.velLo)));
             voices.forEach((pitch, vi) => {
               const start = chordBeat + vi * STAGGER;
