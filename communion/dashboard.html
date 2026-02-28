@@ -3641,11 +3641,11 @@
       };
       const padSettings = {
         detune: 10, filterCutoff: 2400, filterQ: 2.2,
-        attack: 0.14, release: 0.38, reverbSend: 0.55,
+        attack: 0.14, release: 0.38, reverbSend: 0.22,
       };
       const fxSettings = {
-        revSize: 1.8, revDecay: 3.2, delayFeedback: 0.35,
-        delayReturn: 0.28, compThreshold: -18, masterVol: 0.72,
+        revSize: 1.4, revDecay: 1.8, delayFeedback: 0.18,
+        delayReturn: 0.18, compThreshold: -18, masterVol: 0.72,
       };
 
       let activeMoodScale = null;    // { rootPc, intervals, color } | null
@@ -3813,7 +3813,7 @@
           prReverbBus = prAudioCtx.createGain();
           prReverbBus.gain.value = 1.0;
           const revReturn = prAudioCtx.createGain();
-          revReturn.gain.value = 0.32;
+          revReturn.gain.value = 0.20;
           prReverbBus.connect(prRevConvolver);
           prRevConvolver.connect(revReturn);
           revReturn.connect(prCompressor);
@@ -4162,14 +4162,20 @@
           const t = prAudioCtx.currentTime;
           prMasterGain.gain.cancelScheduledValues(t);
           prMasterGain.gain.setValueAtTime(prMasterGain.gain.value, t);
-          prMasterGain.gain.linearRampToValueAtTime(0, t + 0.8);
-          // Restore gain after fade so next play starts at the correct level
+          prMasterGain.gain.linearRampToValueAtTime(0, t + 0.5);
+          // Kill delay feedback immediately so the loop doesn't bleed through after restore
+          if (prDelayFb) {
+            prDelayFb.gain.cancelScheduledValues(t);
+            prDelayFb.gain.setValueAtTime(0, t);
+          }
+          // Restore gain + feedback after fade so next play starts clean
           setTimeout(() => {
             if (!playing && prMasterGain && prAudioCtx) {
               prMasterGain.gain.cancelScheduledValues(prAudioCtx.currentTime);
               prMasterGain.gain.setValueAtTime(fxSettings?.masterVol ?? 0.8, prAudioCtx.currentTime);
+              if (prDelayFb) prDelayFb.gain.setValueAtTime(fxSettings.delayFeedback, prAudioCtx.currentTime);
             }
-          }, 900);
+          }, 600);
         }
       }
 
