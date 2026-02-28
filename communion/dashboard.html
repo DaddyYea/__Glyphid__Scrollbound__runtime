@@ -3640,11 +3640,11 @@
       };
       const padSettings = {
         detune: 10, filterCutoff: 2400, filterQ: 2.2,
-        attack: 0.14, release: 0.38, reverbSend: 0.85,
+        attack: 0.14, release: 0.38, reverbSend: 0.55,
       };
       const fxSettings = {
-        revSize: 2.4, revDecay: 5.0, delayFeedback: 0.38,
-        delayReturn: 0.32, compThreshold: -18, masterVol: 0.72,
+        revSize: 1.8, revDecay: 3.2, delayFeedback: 0.35,
+        delayReturn: 0.28, compThreshold: -18, masterVol: 0.72,
       };
 
       let activeMoodScale = null;    // { rootPc, intervals, color } | null
@@ -5545,9 +5545,9 @@
         // Lead routing: dry + delay (dotted-8th shimmer) + reverb
         // Delay lives on lead only — keeps bass/pads clean
         if (prDryBus) {
-          const dA  = ctx.createGain(); dA.gain.value  = 0.55;
-          const dlA = ctx.createGain(); dlA.gain.value = 0.75;
-          const rvA = ctx.createGain(); rvA.gain.value = 0.60;
+          const dA  = ctx.createGain(); dA.gain.value  = 0.65;
+          const dlA = ctx.createGain(); dlA.gain.value = 0.40;
+          const rvA = ctx.createGain(); rvA.gain.value = 0.45;
           env.connect(dA);  dA.connect(prDryBus);
           env.connect(dlA); dlA.connect(prDelayBus);
           env.connect(rvA); rvA.connect(prReverbBus);
@@ -5595,9 +5595,9 @@
       function scChooseSection() {
         const mag = scLastMagnitude;
         let candidate;
-        if (mag < 0.05)      candidate = 'breakdown'; // truly dormant brain
-        else if (mag < 0.35) candidate = 'verse';
-        else if (mag < 0.65) candidate = 'chorus';
+        if (mag < 0.10)      candidate = 'breakdown'; // truly dormant brain
+        else if (mag < 0.45) candidate = 'verse';     // resting state — was 0.35 (exclusive, caused stuck-at-chorus at 0.35)
+        else if (mag < 0.72) candidate = 'chorus';
         else                 candidate = 'peak';
 
         const order = ['breakdown', 'verse', 'chorus', 'peak'];
@@ -5863,10 +5863,10 @@
         prDraw();
       }
 
-      // ── Bar clock — drone / section state only ──
-      // Piano pattern evolution is owned by scheduleLoop (fires before notes are scheduled,
-      // so changes always take effect the same loop they're computed). This clock only
-      // updates the drone filter / LFO params and the UI panel — no audio-node scheduling.
+      // ── Bar clock — section state, drone, and drum evolution ──
+      // Drum evolution lives here (not only in scheduleLoop) so drums change even when
+      // the piano roll isn't playing. Piano pattern evolution stays in scheduleLoop
+      // for tight scheduling timing.
       function scStartBarClock() {
         if (scBarInterval) clearInterval(scBarInterval);
         const msPerBar = (60 / bpm) * beatsPerBar * 1000;
@@ -5876,8 +5876,12 @@
           scBarCount++;
           scSectionBar = (scSectionBar + 1) % 8;
           if (scSectionBar === 0) {
-            // Let scheduleLoop own section transitions for piano; bar clock just syncs drone
+            const next = scChooseSection();
+            if (next !== scSection) { scSection = next; }
             scApplySectionToDrone(scSection);
+            // Drums update every 8 bars regardless of piano roll state
+            scGenerateDrumPattern(scSection);
+            console.log(`[SCORE] 8-bar drum regen — section: ${scSection}`);
           }
           scUpdatePanel();
         }, msPerBar);
