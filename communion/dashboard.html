@@ -4224,6 +4224,23 @@
         chromatic:  [0, 3, 5, 7, 10],
       };
 
+      // Mellow alt-rock chord progressions — semitone offsets from root, cycled in order.
+      // Each sub-array is one 4-chord loop. One is picked per scGeneratePianoPattern call.
+      const ALT_ROCK_PROGS = {
+        minor: [
+          [0, 10, 7, 5],   // i – VII – v – iv    (Am–G–Em–Dm)  Radiohead archetype
+          [0, 10, 8, 5],   // i – VII – VI – iv   (Am–G–F–Dm)   melancholic / Portishead
+          [0, 5, 3, 7],    // i – iv  – III – v   (Am–Dm–C–Em)  hopeful, Muse-ish
+          [0, 7, 5, 3],    // i – v   – iv  – III (Am–Em–Dm–C)  descending, cinematic
+          [0, 3, 10, 7],   // i – III – VII – v   (Am–C–G–Em)   wide, open
+        ],
+        major: [
+          [0, 7, 9, 5],    // I  – V – vi – IV   classic alt/pop
+          [9, 5, 0, 7],    // vi – IV – I – V    same loop, minor start feel
+          [0, 5, 7, 5],    // I  – IV – V – IV   anthemic
+        ],
+      };
+
       function autoComposePr(texture) {
         if (Date.now() - lastAutoCompose < 45000) return;
         lastAutoCompose = Date.now();
@@ -5691,28 +5708,30 @@
         const padNotes = [], leadNotes = [];
         const lp = SC_LEAD_PROFILES[section] || SC_LEAD_PROFILES.verse;
 
-        // ── Genre-driven chord params (cloud hop by default) ──
-        const genre     = SC_GENRES[scGenre] || SC_GENRES.cloudhop;
-        const chordStep = genre.chordStep[section];
-        const chordSize = genre.chordSize[section];
-        // ── Pad layer: real chord types with stagger and sustain ──
-        // Uses CHORD_TYPES (min7/min9/sus2/dom7 etc.) with staggered voice timing so
-        // notes overlap naturally across bar lines — no rigid step-quantization.
+        // ── Pad layer: mellow alt-rock chord progression ──
+        // Chord roots follow a chosen progression (not random) for direction + cohesion.
+        // Voices snap to active scale so every note is in-key.
         const scaleType = scale.includes(4) ? 'major'
           : (scale.includes(10) && scale.includes(3)) ? 'minor' : 'minor';
-        const diatonicOffsets = DIATONIC_ROOTS[scaleType] || DIATONIC_ROOTS.minor;
         const rootMidi = 48 + rootPc;  // C3 + root = comfortable bass register
 
+        // Pick one progression for this whole pattern (cycled, not random per chord)
+        const progPool = ALT_ROCK_PROGS[scaleType] || ALT_ROCK_PROGS.minor;
+        const prog = progPool[Math.floor(Math.random() * progPool.length)];
+
+        // Mellow alt-rock palette: sus2/add9/min7 — open, no jazz dom7 in verse/chorus
         const SECTION_CHORDS = {
-          breakdown: ['sus2', 'min7'],
-          verse:     ['min7', 'min9', 'sus2'],
-          chorus:    ['min9', 'dom7', 'min7'],
-          peak:      ['dom7', 'maj9', 'min9'],
+          breakdown: ['sus2', 'add9'],
+          verse:     ['sus2', 'min7', 'add9'],
+          chorus:    ['add9', 'min7', 'sus2'],
+          peak:      ['min9', 'add9', 'dom7'],
         };
         const chordPalette = SECTION_CHORDS[section] || SECTION_CHORDS.verse;
-        const spacing  = { breakdown: 4, verse: 2, chorus: 2, peak: 1 }[section] ?? 2;
-        const noteDur  = { breakdown: 5.5, verse: 3.8, chorus: 3.0, peak: 2.2 }[section] ?? 3.5;
-        const stagger  = 1 / (snapDiv * 2); // 1/8-beat offset per voice = light arpeggio
+        // Wider spacing = mellow feel (1 chord/bar in verse, 2/bar in chorus)
+        const spacing  = { breakdown: 8, verse: 4, chorus: 2, peak: 1.5 }[section] ?? 4;
+        const noteDur  = { breakdown: 9.0, verse: 5.5, chorus: 4.0, peak: 2.8 }[section] ?? 5;
+        // Larger stagger = audible roll per voice (0.125 beats = 1/8-beat per voice)
+        const stagger  = { breakdown: 0.25, verse: 0.15, chorus: 0.1, peak: 0.05 }[section] ?? 0.15;
         const numChords = Math.min(12, Math.floor(beats / spacing));
         // Pre-compute which pitch classes are in-scale for snapping
         const scalePCs = scale.map(deg => (rootPc + deg) % 12);
@@ -5721,7 +5740,8 @@
           const chordBeat = ci * spacing;
           if (chordBeat >= beats) break;
 
-          const degOffset = diatonicOffsets[Math.floor(Math.random() * diatonicOffsets.length)];
+          // Step through the progression in order — gives harmonic direction
+          const degOffset = prog[ci % prog.length];
           const chordRoot = rootMidi + degOffset;
           const chordType = chordPalette[Math.floor(Math.random() * chordPalette.length)];
           const intervals = CHORD_TYPES[chordType] || CHORD_TYPES.min7;
