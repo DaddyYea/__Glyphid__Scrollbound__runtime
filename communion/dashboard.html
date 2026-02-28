@@ -4085,11 +4085,12 @@
               console.error('[SCORE] scGeneratePianoPattern error:', e);
             }
             scGenerateDrumPattern(scSection);
-            // Anchor drums to the same loopStart as the piano — no setTimeout jitter.
-            // The drum scheduler's while-loop won't fire these until currentTime reaches loopStart.
             drStep = 0;
             drNextBeat = loopStart;
             console.log(`[SCORE] regen @ loop ${prLoopCount} — section: ${scSection}`);
+          } else {
+            // Bass plays every other loop — sit out on odd loops
+            tracks.jason = [];
           }
         }
 
@@ -5724,6 +5725,38 @@
           scLowAffectCount = 0;
         }
         return candidate;
+      }
+
+      // Refresh bass only — new random progression each loop, sparse by design.
+      // 35% chance the bass sits out entirely; chord hits also skip individually (~30%).
+      function scRefreshBass(section) {
+        const def = SECTION_DEFS[section];
+        if (!def) return;
+        // Sit out some loops completely
+        const silenceProb = { breakdown: 0.55, verse: 0.35, chorus: 0.20, peak: 0.10 }[section] ?? 0.35;
+        if (Math.random() < silenceProb) { tracks.jason = []; return; }
+
+        const scale    = activeMoodScale?.intervals || SC_SCALES.minor;
+        const rootPc   = activeMoodScale?.rootPc ?? scRootPc;
+        const beats    = loopBars * beatsPerBar;
+        const rootMidi = 48 + rootPc;
+        const scaleType = scale.includes(4) ? 'major' : 'minor';
+        const spacing   = { breakdown: 8, verse: 4, chorus: 2, peak: 1.5 }[section] ?? 4;
+        const numChords = Math.min(12, Math.floor(beats / spacing));
+        const progPool  = ALT_ROCK_PROGS[scaleType] || ALT_ROCK_PROGS.minor;
+        const prog      = progPool[Math.floor(Math.random() * progPool.length)];
+        const bassVelBase = Math.min(100, def.velLo + 18 + Math.floor(Math.random() * 12));
+        const bassNotes = [];
+        for (let ci = 0; ci < numChords; ci++) {
+          const chordBeat = ci * spacing;
+          if (chordBeat >= beats) break;
+          if (ci > 0 && Math.random() < 0.30) continue; // skip individual chord hits (not first)
+          let pitch = rootMidi + prog[ci % prog.length] - 12;
+          while (pitch > 52) pitch -= 12;
+          while (pitch < 28) pitch += 12;
+          bassNotes.push({ pitch, start: chordBeat, dur: 0.55, vel: bassVelBase });
+        }
+        tracks.jason = bassNotes;
       }
 
       // ── Drum pattern per section (cloud hop: sparse kick+sub, trap-influenced) ──
