@@ -4028,18 +4028,13 @@
         prLoopCount++;
         if (scEnabled && prLoopCount > 1) {
           const next = scChooseSection();
-          if (prLoopCount % 4 === 0) {
-            // Every 16 bars: section check + drum + piano full regen
-            if (next !== scSection) { scSection = next; scApplySectionToDrone(next); }
-            scGenerateDrumPattern(scSection);
+          if (next !== scSection) { scSection = next; scApplySectionToDrone(next); }
+          // Every 4 bars (every loop): fresh drums so groove changes are always audible
+          scGenerateDrumPattern(scSection);
+          // Piano regen every 8 bars — chords need more time to breathe
+          if (prLoopCount % 2 === 0) {
             scGeneratePianoPattern(scSection);
-            console.log(`[SCORE] Full regen @ loop ${prLoopCount} — section: ${scSection}`);
-          } else if (prLoopCount % 2 === 0) {
-            // Every 8 bars: section check + fresh piano + fresh drums (drums change = audible)
-            if (next !== scSection) { scSection = next; scApplySectionToDrone(next); }
-            scGenerateDrumPattern(scSection);
-            scGeneratePianoPattern(scSection);
-            console.log(`[SCORE] 8-bar regen @ loop ${prLoopCount} — section: ${scSection}`);
+            console.log(`[SCORE] regen @ loop ${prLoopCount} — section: ${scSection}`);
           }
         }
 
@@ -5654,32 +5649,45 @@
           if (Math.random() < 0.4) drPattern[rdi][0] = rnd(55, 72);
 
         } else if (section === 'verse') {
-          // Four distinct kick feels — audibly different every 8 bars
+          // Four distinct kick feels
           const kickPats = [
-            [0, 16],           // straight downbeats
-            [0, 10, 16],       // syncopated — kick before beat 3
-            [0, 16, 26],       // kick pushes into bar 2
-            [0, 6, 16, 22],    // trap-ish double-kick pattern
+            [0, 16],
+            [0, 10, 16],
+            [0, 16, 26],
+            [0, 6, 16, 22],
           ];
           // Three snare feels
           const snarePats = [
-            [8, 24],           // standard beats 2+4
-            [16],              // half-time — only beat 3
-            [8, 20, 24],       // syncopated + beat 4
+            [8, 24],
+            [16],
+            [8, 20, 24],
           ];
-          const kicks = pick(kickPats);
+          // THREE HAT GROOVES — the most audible difference between pattern regen
+          const hatGroove = Math.floor(Math.random() * 3);
+          const kicks  = pick(kickPats);
           const snares = pick(snarePats);
-          kicks.forEach(s => { drPattern[ki][s] = rnd(90, 108); drPattern[si][s] = rnd(80, 95); });
-          snares.forEach(s => drPattern[sni][s] = rnd(95, 112));
+          kicks.forEach(s  => { drPattern[ki][s]  = rnd(90, 108); drPattern[si][s]  = rnd(80, 95); });
+          snares.forEach(s => { drPattern[sni][s] = rnd(95, 112); });
           if (Math.random() < 0.6) drPattern[cli][snares[snares.length - 1]] = rnd(78, 95);
-          // 16th-note hat with velocity groove
-          for (let s = 0; s < 32; s++) {
-            const onBeat = s % 8 === 0, onEighth = s % 4 === 0;
-            drPattern[chhi][s] = onBeat ? rnd(80, 95) : onEighth ? rnd(65, 78) : rnd(45, 62);
+          if (hatGroove === 0) {
+            // Sparse 8th-note hats — mellow, open feel
+            for (let s = 0; s < 32; s += 4) drPattern[chhi][s] = rnd(72, 90);
+            [4, 12, 20, 28].forEach(s => { if (Math.random() < 0.7) drPattern[ohhi][s] = rnd(68, 82); });
+          } else if (hatGroove === 1) {
+            // Full 16th-note hats — driving, dense
+            for (let s = 0; s < 32; s++) {
+              const onBeat = s % 8 === 0, onEighth = s % 4 === 0;
+              drPattern[chhi][s] = onBeat ? rnd(80, 95) : onEighth ? rnd(65, 78) : rnd(45, 62);
+            }
+            [4, 12, 20, 28].forEach(s => { if (Math.random() < 0.5) drPattern[ohhi][s] = rnd(65, 75); });
+            hatFill(15, 4, 88);
+            if (Math.random() < 0.6) hatFill(31, 4, 85);
+          } else {
+            // Shuffled accent hats — off-beat emphasis, alt-rock feel
+            [0, 3, 6, 8, 11, 14, 16, 19, 22, 24, 27, 30].forEach(s => drPattern[chhi][s] = rnd(58, 82));
+            [4, 12, 20, 28].forEach(s => { drPattern[ohhi][s] = rnd(72, 88); });
+            if (Math.random() < 0.5) hatFill(15, 3, 82);
           }
-          [4, 12, 20, 28].forEach(s => { if (Math.random() < 0.55) drPattern[ohhi][s] = rnd(65, 78); });
-          hatFill(15, 4, 88);
-          if (Math.random() < 0.6) hatFill(31, 4, 85);
 
         } else if (section === 'chorus') {
           // Four energetic kick patterns
@@ -5892,13 +5900,15 @@
           if (Math.abs(currentMs - msPerBar) > 50) { scStartBarClock(); return; }
           scBarCount++;
           scSectionBar = (scSectionBar + 1) % 8;
-          if (scSectionBar === 0) {
+          // Drums update every 4 bars — always audible even without piano roll playing
+          if (scSectionBar % 4 === 0) {
             const next = scChooseSection();
             if (next !== scSection) { scSection = next; }
             scApplySectionToDrone(scSection);
-            // Drums update every 8 bars regardless of piano roll state
-            scGenerateDrumPattern(scSection);
-            console.log(`[SCORE] 8-bar drum regen — section: ${scSection}`);
+            if (!playing) {
+              scGenerateDrumPattern(scSection);
+              console.log(`[SCORE] bar-clock drum regen — section: ${scSection}`);
+            }
           }
           scUpdatePanel();
         }, msPerBar);
