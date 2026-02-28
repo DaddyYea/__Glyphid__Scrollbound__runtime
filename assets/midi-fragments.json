@@ -1,0 +1,11352 @@
+[
+  {
+    "id": "A_-_i_i_iv_iv_v7_ii5_v_v7_-_Dark_Mysterious",
+    "label": "i i iv iv v7 ii5 v v7 (Dark Mysterious)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 8,
+    "moods": [
+      "Dark",
+      "Mysterious"
+    ],
+    "sections": [
+      "breakdown",
+      "verse"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 47,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_ii_v_i_-_Mysterious_Triumphant",
+    "label": "i ii v i (Mysterious Triumphant)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Mysterious",
+      "Triumphant"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus",
+      "peak"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 47,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 52,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_ii_v_III_i_ii_v_VII_-_Mysterious_Dramatic",
+    "label": "i ii v III i ii v VII (Mysterious Dramatic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 8,
+    "moods": [
+      "Mysterious",
+      "Dramatic"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus",
+      "peak"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 47,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 52,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 48,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 52,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 47,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_III_iv_VI_-_Nostalgic_Romantic",
+    "label": "i III iv VI (Nostalgic Romantic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Nostalgic",
+      "Romantic"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_III_VII_VI_-_Nostalgic_Romantic",
+    "label": "i III VII VI (Nostalgic Romantic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Nostalgic",
+      "Romantic"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_iv_III_VI_-_Nostalgic_Romantic",
+    "label": "i iv III VI (Nostalgic Romantic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Nostalgic",
+      "Romantic"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_iv_v_iv_-_Mysterious_Sad",
+    "label": "i iv v iv (Mysterious Sad)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Mysterious",
+      "Sad"
+    ],
+    "sections": [
+      "breakdown",
+      "verse"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_iv_v_v_-_Sad_Lonely",
+    "label": "i iv v v (Sad Lonely)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Sad",
+      "Lonely"
+    ],
+    "sections": [
+      "breakdown",
+      "verse"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_iv_VI_v_-_Sad_Hopeful",
+    "label": "i iv VI v (Sad Hopeful)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Sad",
+      "Hopeful"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_iv_VII_i_-_Sad_Nostalgic",
+    "label": "i iv VII i (Sad Nostalgic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Sad",
+      "Nostalgic"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_iv_VII_v_i_i_ii_V_-_Mysterious_Surprised",
+    "label": "i iv VII v i i ii V (Mysterious Surprised)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 8,
+    "moods": [
+      "Mysterious",
+      "Surprised"
+    ],
+    "sections": [
+      "breakdown",
+      "verse"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 52,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 48,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 52,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 47,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_v_iv_VII_-_Sad_Rebellious",
+    "label": "i v iv VII (Sad Rebellious)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Sad",
+      "Rebellious"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus",
+      "peak"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_vdim_iv_VI_-_Dark_Nostalgic",
+    "label": "i vdim iv VI (Dark Nostalgic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Dark",
+      "Nostalgic"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 70,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_VI_III_VII_-_Nostalgic_Hopeful",
+    "label": "i VI III VII (Nostalgic Hopeful)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Nostalgic",
+      "Hopeful"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_VI_III_VII_i_VI69_III7_VII_-_Mysterious_Spiritual",
+    "label": "i VI III VII i VI69 III7 VII (Mysterious Spiritual)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 8,
+    "moods": [
+      "Mysterious",
+      "Spiritual"
+    ],
+    "sections": [
+      "breakdown",
+      "verse"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_VI_iv_ii_-_Sad_Tender",
+    "label": "i VI iv ii (Sad Tender)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Sad",
+      "Tender"
+    ],
+    "sections": [
+      "breakdown",
+      "verse"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 50,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 47,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_VI_iv_III_-_Sad_Nostalgic",
+    "label": "i VI iv III (Sad Nostalgic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Sad",
+      "Nostalgic"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_VI_iv_v_-_Sad_Hopeful",
+    "label": "i VI iv v (Sad Hopeful)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Sad",
+      "Hopeful"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_VI_VII_iv_-_Mysterious_Nostalgic",
+    "label": "i VI VII iv (Mysterious Nostalgic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Mysterious",
+      "Nostalgic"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_VI_VII_v_-_Mysterious_Rebellious",
+    "label": "i VI VII v (Mysterious Rebellious)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Mysterious",
+      "Rebellious"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus",
+      "peak"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_VI_VII_VII_-_Triumphant_Rebellious",
+    "label": "i VI VII VII (Triumphant Rebellious)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Triumphant",
+      "Rebellious"
+    ],
+    "sections": [
+      "verse",
+      "chorus",
+      "peak"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_VII_i_v_-_Mysterious_Nostalgic",
+    "label": "i VII i v (Mysterious Nostalgic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Mysterious",
+      "Nostalgic"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_VII_i_v_III_VII_i_v_i_-_Mysterious_Surprised",
+    "label": "i VII i v III VII i v i (Mysterious Surprised)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 9,
+    "moods": [
+      "Mysterious",
+      "Surprised"
+    ],
+    "sections": [
+      "breakdown",
+      "verse"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 32,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 32,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 32,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 32,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_VII_III_VI_-_Rebellious_Triumphant",
+    "label": "i VII III VI (Rebellious Triumphant)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Rebellious",
+      "Triumphant"
+    ],
+    "sections": [
+      "verse",
+      "chorus",
+      "peak"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 48,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_VII_v_VI_-_Mysterious_Hopeful",
+    "label": "i VII v VI (Mysterious Hopeful)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Mysterious",
+      "Hopeful"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_VII_VI_III_-_Nostalgic_Hopeful",
+    "label": "i VII VI III (Nostalgic Hopeful)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Nostalgic",
+      "Hopeful"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_VII_VI_III_iv_VI_VII_i_-_Mysterious_Surprised",
+    "label": "i VII VI III iv VI VII i (Mysterious Surprised)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 8,
+    "moods": [
+      "Mysterious",
+      "Surprised"
+    ],
+    "sections": [
+      "breakdown",
+      "verse"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_VII_VI_iv_-_Sad_Romantic",
+    "label": "i VII VI iv (Sad Romantic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Sad",
+      "Romantic"
+    ],
+    "sections": [
+      "breakdown",
+      "verse"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i_VII_VI_VII_-_Rebellious_Triumphant",
+    "label": "i VII VI VII (Rebellious Triumphant)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Rebellious",
+      "Triumphant"
+    ],
+    "sections": [
+      "verse",
+      "chorus",
+      "peak"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i7_VI_III7_VII6_i_i7_III7_iv7_-_Dark_Nostalgic",
+    "label": "i7 VI III7 VII6 i i7 III7 iv7 (Dark Nostalgic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 8,
+    "moods": [
+      "Dark",
+      "Nostalgic"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 52,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_i7_VII_VI7_iv7_-_Nostalgic_Romantic",
+    "label": "i7 VII VI7 iv7 (Nostalgic Romantic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Nostalgic",
+      "Romantic"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 76,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_ii_v_i_iv_-_Peaceful_Nostalgic",
+    "label": "ii v i iv (Peaceful Nostalgic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Peaceful",
+      "Nostalgic"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 71,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 47,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 52,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_ii_VI_i_iv_-_Sad_Hopeful",
+    "label": "ii VI i iv (Sad Hopeful)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Sad",
+      "Hopeful"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 71,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 47,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_im7_ivsus4_v7_isus4_-_Mysterious_Tender",
+    "label": "im7 ivsus4 v7 isus4 (Mysterious Tender)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Mysterious",
+      "Tender"
+    ],
+    "sections": [
+      "breakdown",
+      "verse"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 52,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_iv_i_v_VI_-_Nostalgic_Hopeful",
+    "label": "iv i v VI (Nostalgic Hopeful)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Nostalgic",
+      "Hopeful"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 62,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_iv_III_VII_i_-_Nostalgic_Mysterious",
+    "label": "iv III VII i (Nostalgic Mysterious)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Nostalgic",
+      "Mysterious"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 62,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_iv_III_vsus4_VI_iv_i_III_VI_-_Nostalgic_Mysterious",
+    "label": "iv III vsus4 VI iv i III VI (Nostalgic Mysterious)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 8,
+    "moods": [
+      "Nostalgic",
+      "Mysterious"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 62,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_iv_v_VI_VII_-_Mysterious_Rebellious",
+    "label": "iv v VI VII (Mysterious Rebellious)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Mysterious",
+      "Rebellious"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus",
+      "peak"
+    ],
+    "notes": [
+      {
+        "pitch": 62,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_iv_VI_v_VII_-_Mysterious_Hopeful",
+    "label": "iv VI v VII (Mysterious Hopeful)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Mysterious",
+      "Hopeful"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 62,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_v_i_iv_VII_-_Dark_Rebellious",
+    "label": "v i iv VII (Dark Rebellious)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Dark",
+      "Rebellious"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus",
+      "peak"
+    ],
+    "notes": [
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_i_iv_iv_v7_ii5_v_v7_-_Dark_Mysterious",
+    "label": "soul_A (i i iv iv v7 ii5 v v7 - Dark Mysterious)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Dark",
+      "Mysterious"
+    ],
+    "sections": [
+      "breakdown",
+      "verse"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 8,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 8,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 8,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 9,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 9,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 9,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 9,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 9,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 10,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 10,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 47,
+        "start": 10,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 11.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 11.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 11.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 11.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 13.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 13.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 13.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 13.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 13.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_ii_v_i_-_Mysterious_Triumphant",
+    "label": "soul_A (i ii v i - Mysterious Triumphant)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 2,
+    "moods": [
+      "Mysterious",
+      "Triumphant"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus",
+      "peak"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 47,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 52,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_ii_v_III_i_ii_v_VII_-_Mysterious_Dramatic",
+    "label": "soul_A (i ii v III i ii v VII - Mysterious Dramatic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Mysterious",
+      "Dramatic"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus",
+      "peak"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 47,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 52,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 48,
+        "start": 8,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 52,
+        "start": 8,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 8,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 8,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 9,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 9,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 9,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 9,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 10,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 10,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 10,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 47,
+        "start": 10,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 11.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 11.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 11.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 11.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 13.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 13.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 13.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 13.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_III_iv_VI_-_Nostalgic_Romantic",
+    "label": "soul_A (i III iv VI - Nostalgic Romantic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 2,
+    "moods": [
+      "Nostalgic",
+      "Romantic"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_III_VII_VI_-_Nostalgic_Romantic",
+    "label": "soul_A (i III VII VI - Nostalgic Romantic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 2,
+    "moods": [
+      "Nostalgic",
+      "Romantic"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_iv_III_VI_-_Nostalgic_Romantic",
+    "label": "soul_A (i iv III VI - Nostalgic Romantic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 2,
+    "moods": [
+      "Nostalgic",
+      "Romantic"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_iv_v_iv_-_Mysterious_Sad",
+    "label": "soul_A (i iv v iv - Mysterious Sad)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 2,
+    "moods": [
+      "Mysterious",
+      "Sad"
+    ],
+    "sections": [
+      "breakdown",
+      "verse"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_iv_v_v_-_Sad_Lonely",
+    "label": "soul_A (i iv v v - Sad Lonely)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 2,
+    "moods": [
+      "Sad",
+      "Lonely"
+    ],
+    "sections": [
+      "breakdown",
+      "verse"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_iv_VI_v_-_Sad_Hopeful",
+    "label": "soul_A (i iv VI v - Sad Hopeful)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 2,
+    "moods": [
+      "Sad",
+      "Hopeful"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_iv_VII_i_-_Sad_Nostalgic",
+    "label": "soul_A (i iv VII i - Sad Nostalgic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 2,
+    "moods": [
+      "Sad",
+      "Nostalgic"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_iv_VII_v_i_i_ii_V_-_Mysterious_Surprised",
+    "label": "soul_A (i iv VII v i i ii V - Mysterious Surprised)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Mysterious",
+      "Surprised"
+    ],
+    "sections": [
+      "breakdown",
+      "verse"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 52,
+        "start": 8,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 8,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 8,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 8,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 48,
+        "start": 9,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 52,
+        "start": 9,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 9,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 9,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 10,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 10,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 10,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 10,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 11.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 11.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 11.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 47,
+        "start": 11.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 13.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 13.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 13.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 13.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_v_iv_VII_-_Sad_Rebellious",
+    "label": "soul_A (i v iv VII - Sad Rebellious)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 2,
+    "moods": [
+      "Sad",
+      "Rebellious"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus",
+      "peak"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_vdim_iv_VI_-_Dark_Nostalgic",
+    "label": "soul_A (i vdim iv VI - Dark Nostalgic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 2,
+    "moods": [
+      "Dark",
+      "Nostalgic"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 70,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_VI_III_VII_-_Nostalgic_Hopeful",
+    "label": "soul_A (i VI III VII - Nostalgic Hopeful)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 2,
+    "moods": [
+      "Nostalgic",
+      "Hopeful"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_VI_III_VII_i_VI69_III7_VII_-_Mysterious_Spiritual",
+    "label": "soul_A (i VI III VII i VI69 III7 VII - Mysterious Spiritual)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Mysterious",
+      "Spiritual"
+    ],
+    "sections": [
+      "breakdown",
+      "verse"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 8,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 8,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 9,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 9,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 9,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 9,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 10,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 10,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 10,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 10,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 10,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 10,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 11.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 11.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 11.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 11.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 11.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 13.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 13.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 13.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 13.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_VI_iv_ii_-_Sad_Tender",
+    "label": "soul_A (i VI iv ii - Sad Tender)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 2,
+    "moods": [
+      "Sad",
+      "Tender"
+    ],
+    "sections": [
+      "breakdown",
+      "verse"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 50,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 47,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_VI_iv_III_-_Sad_Nostalgic",
+    "label": "soul_A (i VI iv III - Sad Nostalgic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 2,
+    "moods": [
+      "Sad",
+      "Nostalgic"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 36,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_VI_iv_v_-_Sad_Hopeful",
+    "label": "soul_A (i VI iv v - Sad Hopeful)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 2,
+    "moods": [
+      "Sad",
+      "Hopeful"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 53,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_VI_VII_iv_-_Mysterious_Nostalgic",
+    "label": "soul_A (i VI VII iv - Mysterious Nostalgic)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 2,
+    "moods": [
+      "Mysterious",
+      "Nostalgic"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "soul_A_-_i_VI_VII_v_-_Mysterious_Rebellious",
+    "label": "soul_A (i VI VII v - Mysterious Rebellious)",
+    "mode": "minor",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 2,
+    "moods": [
+      "Mysterious",
+      "Rebellious"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus",
+      "peak"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 1,
+        "dur": 1,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 60,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 65,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 41,
+        "start": 2,
+        "dur": 1.5,
+        "vel": 100
+      },
+      {
+        "pitch": 67,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 43,
+        "start": 3.5,
+        "dur": 2,
+        "vel": 100
+      },
+      {
+        "pitch": 55,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 5.5,
+        "dur": 2.5,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_I_IM-5_IM-5_IV_IV_V_Vsus2_-_Joyful_Triumphant",
+    "label": "I I IM-5 IM-5 IV IV V Vsus2 (Joyful Triumphant)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 8,
+    "moods": [
+      "Joyful",
+      "Triumphant"
+    ],
+    "sections": [
+      "chorus",
+      "peak"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 63,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 63,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 54,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_I_IV_iii_-_Hopeful_Nostalgic",
+    "label": "I I IV iii (Hopeful Nostalgic)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Hopeful",
+      "Nostalgic"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 54,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 37,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_iii_IV_vi_-_Romantic_Nostalgic",
+    "label": "I iii IV vi (Romantic Nostalgic)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Romantic",
+      "Nostalgic"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 37,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 42,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_iii_vi_Isus4_-_Tender_Spiritual",
+    "label": "I iii vi Isus4 (Tender Spiritual)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Tender",
+      "Spiritual"
+    ],
+    "sections": [
+      "breakdown"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 37,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 42,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_iii_vi_IV_-_Romantic_Hopeful",
+    "label": "I iii vi IV (Romantic Hopeful)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Romantic",
+      "Hopeful"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 37,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 42,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 54,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_IV_ii_V_-_Joyful_Triumphant",
+    "label": "I IV ii V (Joyful Triumphant)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Joyful",
+      "Triumphant"
+    ],
+    "sections": [
+      "chorus",
+      "peak"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 54,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 50,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 54,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 47,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_IV_Isus2_IV_-_Peaceful_Hopeful",
+    "label": "I IV Isus2 IV (Peaceful Hopeful)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Peaceful",
+      "Hopeful"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 54,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_IV_V_IV_-_Joyful_Triumphant",
+    "label": "I IV V IV (Joyful Triumphant)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Joyful",
+      "Triumphant"
+    ],
+    "sections": [
+      "chorus",
+      "peak"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 54,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_IV_vi_V_-_Joyful_Hopeful",
+    "label": "I IV vi V (Joyful Hopeful)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Joyful",
+      "Hopeful"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 54,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 42,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_IV_vii_iii_vi_ii_V_I_-_Romantic_Triumphant",
+    "label": "I IV vii iii vi ii V I (Romantic Triumphant)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 8,
+    "moods": [
+      "Romantic",
+      "Triumphant"
+    ],
+    "sections": [
+      "verse",
+      "chorus",
+      "peak"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 54,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 44,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 56,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 52,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 37,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 42,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 54,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 47,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_V_IV_vi_-_Romantic_Hopeful",
+    "label": "I V IV vi (Romantic Hopeful)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Romantic",
+      "Hopeful"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 42,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_V_vi_ii_-_Hopeful_Romantic",
+    "label": "I V vi ii (Hopeful Romantic)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Hopeful",
+      "Romantic"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 42,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 54,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 47,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_V_vi_iii_IV_-_Hopeful_Joyful",
+    "label": "I V vi iii IV (Hopeful Joyful)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 5,
+    "moods": [
+      "Hopeful",
+      "Joyful"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 42,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 37,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_V_vi_iii_IV_I_IV_V_-_Hopeful_Joyful",
+    "label": "I V vi iii IV I IV V (Hopeful Joyful)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 8,
+    "moods": [
+      "Hopeful",
+      "Joyful"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 42,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 37,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 16,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 20,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 54,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 24,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 28,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_V_vi_IV_-_Hopeful_Romantic",
+    "label": "I V vi IV (Hopeful Romantic)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Hopeful",
+      "Romantic"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 42,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 54,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_V_vi_V_-_Hopeful_Romantic",
+    "label": "I V vi V (Hopeful Romantic)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Hopeful",
+      "Romantic"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 42,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_vi_I_IV_-_Tender_Nostalgic",
+    "label": "I vi I IV (Tender Nostalgic)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Tender",
+      "Nostalgic"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 42,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 52,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_vi_ii_IV_-_Tender_Nostalgic",
+    "label": "I vi ii IV (Tender Nostalgic)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Tender",
+      "Nostalgic"
+    ],
+    "sections": [
+      "breakdown",
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 42,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 54,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 47,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 69,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_vi_ii_V_-_Nostalgic_Romantic",
+    "label": "I vi ii V (Nostalgic Romantic)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Nostalgic",
+      "Romantic"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 42,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 54,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 59,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 47,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 71,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 40,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  },
+  {
+    "id": "A_-_I_vi_IV_iii_-_Nostalgic_Romantic",
+    "label": "I vi IV iii (Nostalgic Romantic)",
+    "mode": "major",
+    "rootPc": 9,
+    "bpm": 80,
+    "bars": 4,
+    "moods": [
+      "Nostalgic",
+      "Romantic"
+    ],
+    "sections": [
+      "verse",
+      "chorus"
+    ],
+    "notes": [
+      {
+        "pitch": 69,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 45,
+        "start": 0,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 66,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 42,
+        "start": 4,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 54,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 62,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 57,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 38,
+        "start": 8,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 61,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 64,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 68,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      },
+      {
+        "pitch": 37,
+        "start": 12,
+        "dur": 4,
+        "vel": 100
+      }
+    ]
+  }
+]

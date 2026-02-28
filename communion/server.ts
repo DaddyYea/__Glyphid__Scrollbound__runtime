@@ -335,6 +335,19 @@ async function main() {
       return;
     }
 
+    // MIDI fragment library
+    if (url === '/api/midi-fragments') {
+      const fragPath = join(process.cwd(), 'assets', 'midi-fragments.json');
+      if (existsSync(fragPath)) {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=86400' });
+        res.end(readFileSync(fragPath, 'utf-8'));
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'midi-fragments.json not found — run: npx tsx scripts/bake-midi-fragments.ts' }));
+      }
+      return;
+    }
+
     // SSE stream
     if (url === '/events') {
       res.writeHead(200, {

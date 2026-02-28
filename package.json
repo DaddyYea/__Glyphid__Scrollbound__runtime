@@ -6,6 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "communion": "tsx communion/server.ts",
+    "bake-midi": "tsx scripts/bake-midi-fragments.ts",
     "import": "tsx communion/import/cli.ts",
     "start:full": "tsx Tools/runRuntime.ts",
     "start:web": "tsx server/index.ts",
@@ -32,6 +33,7 @@
   "private": true,
   "dependencies": {
     "@anthropic-ai/sdk": "^0.73.0",
+    "@tonejs/midi": "^2.0.28",
     "dotenv": "^17.2.4",
     "mammoth": "^1.11.0",
     "node-edge-tts": "^1.2.10",

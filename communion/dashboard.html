@@ -3613,7 +3613,7 @@
         alois: { fill: '#c47eda', stroke: '#8840b8' },
       };
 
-      const tracks = { jason: [], alois: [] };
+      const tracks = { jason: [], alois: [], arp: [] };
       let bpm = 120, loopBars = 4, beatsPerBar = 4, snapDiv = 4;
       let activeTrack = 'jason';
       let playing = false, playPos = 0, playStartCtxTime = 0;
@@ -4023,17 +4023,19 @@
         playStartCtxTime = loopStart; // cursor tracking reads this
 
         // ── Evolution — happens BEFORE notes are scheduled so changes play THIS loop ──
-        // Full scGeneratePianoPattern every 8 bars — the original algorithm (random rootDegIdx
-        // per bar, ascending voicing, in key) sounds good; partial re-rolls caused harmonic clash.
         prLoopCount++;
+        drBpm = bpm; // keep drum scheduler BPM locked to piano BPM
         if (scEnabled && prLoopCount > 1) {
           const next = scChooseSection();
-          if (next !== scSection) { scSection = next; scApplySectionToDrone(next); }
-          // Every 4 bars (every loop): fresh drums so groove changes are always audible
-          scGenerateDrumPattern(scSection);
-          // Piano regen every 8 bars — chords need more time to breathe
-          if (prLoopCount % 2 === 0) {
+          const sectionChanged = (next !== scSection);
+          if (sectionChanged) { scSection = next; scApplySectionToDrone(next); }
+          // Piano + drums regenerate together every 8 bars (every 2 loops) or on section change.
+          // Drums deferred to exact loopStart so they flip at beat-1, locked with piano.
+          if (prLoopCount % 2 === 0 || sectionChanged) {
             scGeneratePianoPattern(scSection);
+            const msToStart = Math.max(0, (loopStart - prAudioCtx.currentTime) * 1000);
+            const capturedSection = scSection;
+            setTimeout(() => scGenerateDrumPattern(capturedSection), msToStart);
             console.log(`[SCORE] regen @ loop ${prLoopCount} — section: ${scSection}`);
           }
         }
@@ -4047,6 +4049,9 @@
             const durS = n.dur * spb;
             if (tid === 'alois') {
               schedPadNote(midiToFreq(n.pitch), t0, durS, n.vel);
+            } else if (tid === 'arp') {
+              // Arp: lead synth voice at reduced velocity — shimmer/delay detail layer
+              scPlayLead(n.pitch, t0, durS, Math.round(n.vel * 0.62), scSection);
             } else {
               schedPluckNote(midiToFreq(n.pitch), t0, durS, n.vel);
             }
@@ -4290,8 +4295,8 @@
           const chordType = chordTypes[Math.floor(Math.random() * chordTypes.length)];
           const intervals = CHORD_TYPES[chordType] || CHORD_TYPES.maj7;
 
-          // Stagger notes for light arpeggio feel (every 1/8 beat apart)
-          const stagger = 1 / (snapDiv * 2);
+          // Near-simultaneous stagger — pad feel, no arpeggio
+          const STAGGER = 0.02;
           const noteDur  = density <= 2 ? 3.8 : density <= 4 ? 2.0 : 1.0;
 
           intervals.forEach((semis, vi) => {
@@ -4300,7 +4305,7 @@
             while (pitch > 72) pitch -= 12;
             while (pitch < 48) pitch += 12;
             pitch = Math.max(MIDI_MIN, Math.min(MIDI_MAX, pitch));
-            const start = snapBeat(chordBeat + vi * stagger);
+            const start = snapBeat(chordBeat + vi * STAGGER);
             if (start >= loopBeats) return;
             // Root note slightly louder, top note slightly softer
             const vel = 72 + Math.floor(Math.random() * 14) - vi * 3;
@@ -5366,6 +5371,44 @@
       let scSection = 'verse', scSectionBar = 0, scBarCount = 0;
       let scBarInterval = null, scEnabled = false;
 
+      // ── MIDI fragment library ──
+      // Pre-baked from free-midi-chords (MIT). Each fragment has notes in beat time,
+      // originally in A/Am (rootPc=9) — transposed to active key at playback time.
+      let midiFragmentLib = [];
+      let midiFragLibBySection = {};
+
+      async function loadMidiFragments() {
+        try {
+          const r = await fetch('/api/midi-fragments');
+          if (!r.ok) { console.warn('[MIDI] fragment library not found — run bake script'); return; }
+          midiFragmentLib = await r.json();
+          midiFragLibBySection = {};
+          for (const frag of midiFragmentLib) {
+            for (const sec of frag.sections) {
+              if (!midiFragLibBySection[sec]) midiFragLibBySection[sec] = [];
+              midiFragLibBySection[sec].push(frag);
+            }
+          }
+          console.log(`[MIDI] loaded ${midiFragmentLib.length} fragments (${Object.entries(midiFragLibBySection).map(([k,v])=>`${k}:${v.length}`).join(', ')})`);
+        } catch (e) {
+          console.warn('[MIDI] fragment load failed:', e);
+        }
+      }
+
+      // Pick a random fragment matching section+mode, return notes transposed to targetRootPc
+      function pickMidiFragment(section, mode, targetRootPc) {
+        const pool = (midiFragLibBySection[section] || []).filter(f => f.mode === mode);
+        if (pool.length === 0) return null;
+        const frag = pool[Math.floor(Math.random() * pool.length)];
+        const shift = ((targetRootPc - frag.rootPc) + 12) % 12;
+        return { frag, notes: frag.notes.map(n => ({
+          pitch: Math.max(28, Math.min(96, n.pitch + shift)),
+          start: n.start,
+          dur:   n.dur,
+          vel:   n.vel,
+        })) };
+      }
+
       // ── Pond / speech state ──
       let scLastAffect = new Array(8).fill(0.12);
       let scLastMyco = { absorption: 0.1, bioluminescence: 0.05, hyphal_activity: 0.2 };
@@ -5727,6 +5770,27 @@
           drPattern[rdi][0] = 80; drPattern[rdi][16] = 80;
           for (let s = 4; s < 32; s += 8) { if (Math.random() < 0.5) drPattern[perci][s] = rnd(70, 90); }
         }
+        // ── Bar-2 micro-variation ──
+        // The drum machine loops at 32 steps (2 bars) inside a 4-bar piano loop,
+        // so bar 1 (steps 0-15) plays twice without variation. Give steps 16-31
+        // subtle hat and ghost-kick differences so each hearing feels unique.
+        for (let s = 16; s < 32; s++) {
+          // 25% chance to thin a non-downbeat closed hat (open feel)
+          if (drPattern[chhi][s] > 0 && s % 8 !== 0 && s % 4 !== 0 && Math.random() < 0.25) {
+            drPattern[chhi][s] = 0;
+          // 20% chance to accent it instead (forward drive)
+          } else if (drPattern[chhi][s] > 0 && Math.random() < 0.20) {
+            drPattern[chhi][s] = Math.min(127, drPattern[chhi][s] + rnd(5, 14));
+          }
+        }
+        // 45% chance of a ghost kick step in bar 2 to break symmetry
+        if (Math.random() < 0.45) {
+          const ghostStep = pick([18, 20, 22, 26, 28, 30]);
+          if (drPattern[ki][ghostStep] === 0) drPattern[ki][ghostStep] = rnd(52, 72);
+        }
+        // Anticipation fill: rapid hats before beat 1 of bar 2 (steps 12–15)
+        if (Math.random() < 0.55) hatFill(15, 4, 82);
+
         drRenderGrid();
       }
 
@@ -5751,66 +5815,90 @@
           : (scale.includes(10) && scale.includes(3)) ? 'minor' : 'minor';
         const rootMidi = 48 + rootPc;  // C3 + root = comfortable bass register
 
-        // Pick one progression for this whole pattern (cycled, not random per chord)
-        const progPool = ALT_ROCK_PROGS[scaleType] || ALT_ROCK_PROGS.minor;
-        const prog = progPool[Math.floor(Math.random() * progPool.length)];
+        const bassNotes = [];
 
-        // Mellow alt-rock palette: sus2/add9/min7 — open, no jazz dom7 in verse/chorus
-        const SECTION_CHORDS = {
-          breakdown: ['sus2', 'add9'],
-          verse:     ['sus2', 'min7', 'add9'],
-          chorus:    ['add9', 'min7', 'sus2'],
-          peak:      ['min9', 'add9', 'dom7'],
-        };
-        const chordPalette = SECTION_CHORDS[section] || SECTION_CHORDS.verse;
-        // 1 chord per bar for verse/breakdown, 2 per bar for chorus, faster for peak
-        const spacing   = { breakdown: 8, verse: 4, chorus: 2, peak: 1.5 }[section] ?? 4;
-        const numChords = Math.min(12, Math.floor(beats / spacing));
-        // Pre-compute which pitch classes are in-scale for snapping
-        const scalePCs = scale.map(deg => (rootPc + deg) % 12);
+        // ── Hybrid pad layer: MIDI fragment (70%) or procedural (30%) ──
+        // Fragment library loaded from free-midi-chords (MIT). Falls back to procedural
+        // if library not yet loaded or no matching fragment found.
+        const useFragment = midiFragmentLib.length > 0 && Math.random() < 0.70;
+        const fragResult  = useFragment ? pickMidiFragment(section, scaleType, rootPc) : null;
 
-        for (let ci = 0; ci < numChords; ci++) {
-          const chordBeat = ci * spacing;
-          if (chordBeat >= beats) break;
-
-          // Step through the progression in order — gives harmonic direction
-          const degOffset = prog[ci % prog.length];
-          const chordRoot = rootMidi + degOffset;
-          const chordType = chordPalette[Math.floor(Math.random() * chordPalette.length)];
-          const intervals = CHORD_TYPES[chordType] || CHORD_TYPES.min7;
-
-          // Collect pitches, snap to scale
-          const voices = [];
-          intervals.forEach(semis => {
-            let pitch = chordRoot + semis;
-            while (pitch > 72) pitch -= 12;
-            while (pitch < 48) pitch += 12;
-            pitch = Math.max(36, Math.min(84, pitch));
-            const pc = ((pitch % 12) + 12) % 12;
-            if (!scalePCs.includes(pc)) {
-              let bestPc = scalePCs[0], bestDist = 99;
-              for (const sp of scalePCs) {
-                let d = Math.abs(pc - sp); if (d > 6) d = 12 - d;
-                if (d < bestDist) { bestDist = d; bestPc = sp; }
+        if (fragResult) {
+          // ── Fragment path: real human-written chord progression ──
+          const { frag, notes: fragNotes } = fragResult;
+          const loopBeats = beats;
+          // Clip/loop fragment to fill loopBeats
+          const fragLen = frag.bars * 4; // fragment length in beats
+          for (let offset = 0; offset < loopBeats; offset += fragLen) {
+            for (const n of fragNotes) {
+              const start = offset + n.start;
+              if (start >= loopBeats) break;
+              // Only include mid-register notes as pad (48–84); low notes go to bass
+              if (n.pitch >= 48 && n.pitch <= 84) {
+                padNotes.push({ pitch: n.pitch, start, dur: Math.min(n.dur, loopBeats - start), vel: n.vel });
+              } else if (n.pitch < 48) {
+                bassNotes.push({ pitch: Math.max(28, n.pitch), start, dur: Math.min(n.dur, loopBeats - start), vel: n.vel });
               }
-              const diff = ((bestPc - pc + 12) % 12);
-              pitch += diff <= 6 ? diff : diff - 12;
             }
-            voices.push(pitch);
-          });
+          }
+          console.log(`[SCORE] fragment: "${frag.label}" [${section}]`);
+        } else {
+          // ── Procedural path: algorithmic alt-rock progression ──
+          const progPool = ALT_ROCK_PROGS[scaleType] || ALT_ROCK_PROGS.minor;
+          const prog = progPool[Math.floor(Math.random() * progPool.length)];
 
-          // Sort low→high: bass note anchors the beat, higher voices float up over time
-          voices.sort((a, b) => a - b);
-          // Spread voices evenly across the chord window — no more clumping
-          const voiceStep = spacing / voices.length;
-          const noteDur   = spacing * 1.08;  // slight legato crossfade into next chord
+          const SECTION_CHORDS = {
+            breakdown: ['sus2', 'add9'],
+            verse:     ['sus2', 'min7', 'add9'],
+            chorus:    ['add9', 'min7', 'sus2'],
+            peak:      ['min9', 'add9', 'dom7'],
+          };
+          const chordType = (SECTION_CHORDS[section] || SECTION_CHORDS.verse)[Math.floor(Math.random() * 3)];
+          const intervals = CHORD_TYPES[chordType] || CHORD_TYPES.min7;
+          const spacing   = { breakdown: 8, verse: 4, chorus: 2, peak: 1.5 }[section] ?? 4;
+          const numChords = Math.min(12, Math.floor(beats / spacing));
+          const scalePCs  = scale.map(deg => (rootPc + deg) % 12);
+          const STAGGER   = 0.02;
 
-          voices.forEach((pitch, vi) => {
-            const start = chordBeat + vi * voiceStep;
-            if (start >= beats) return;
+          for (let ci = 0; ci < numChords; ci++) {
+            const chordBeat = ci * spacing;
+            if (chordBeat >= beats) break;
+            const chordRoot = rootMidi + prog[ci % prog.length];
+
+            const voices = [];
+            intervals.forEach(semis => {
+              let pitch = chordRoot + semis;
+              while (pitch > 72) pitch -= 12;
+              while (pitch < 48) pitch += 12;
+              pitch = Math.max(36, Math.min(84, pitch));
+              const pc = ((pitch % 12) + 12) % 12;
+              if (!scalePCs.includes(pc)) {
+                let bestPc = scalePCs[0], bestDist = 99;
+                for (const sp of scalePCs) { let d = Math.abs(pc - sp); if (d > 6) d = 12 - d; if (d < bestDist) { bestDist = d; bestPc = sp; } }
+                const diff = ((bestPc - pc + 12) % 12);
+                pitch += diff <= 6 ? diff : diff - 12;
+              }
+              voices.push(pitch);
+            });
+            voices.sort((a, b) => a - b);
+            const noteDur = spacing * 1.05;
             const vel = Math.max(35, def.velLo + Math.floor(Math.random() * (def.velHi - def.velLo)));
-            padNotes.push({ pitch, start, dur: noteDur, vel });
-          });
+            voices.forEach((pitch, vi) => {
+              const start = chordBeat + vi * STAGGER;
+              if (start >= beats) return;
+              padNotes.push({ pitch, start, dur: noteDur, vel });
+            });
+
+            let bassPitch = chordRoot - 12;
+            while (bassPitch > 52) bassPitch -= 12;
+            while (bassPitch < 28) bassPitch += 12;
+            const bassVel = Math.min(100, def.velLo + 18 + Math.floor(Math.random() * 15));
+            bassNotes.push({ pitch: bassPitch, start: chordBeat, dur: spacing * 0.88, vel: bassVel });
+            if (ci < numChords - 1 && spacing >= 3 && Math.random() < 0.45) {
+              const walkPitch = Math.max(28, Math.min(52, bassPitch + (Math.random() < 0.6 ? 2 : -2)));
+              bassNotes.push({ pitch: walkPitch, start: chordBeat + spacing - 0.5, dur: 0.45, vel: bassVel - 12 });
+            }
+          }
         }
 
         // ── Lead layer: sparser, higher register, half-beat positions ──
@@ -5830,15 +5918,46 @@
             }
           }
         }
-        tracks.alois = padNotes;
-        if (tracks.jason.length === 0) {
-          const rootMidi = 48 + rootPc;
-          tracks.jason = [
-            { pitch: rootMidi, start: 0, dur: 2, vel: 50 },
-            { pitch: rootMidi, start: beats / 2, dur: 2, vel: 45 },
-          ];
+        // ── Arp layer: same chord roots, one octave up, time-spread ──
+        // Breakdown skips arp entirely (too quiet to support it).
+        const arpNotes = [];
+        if (section !== 'breakdown') {
+          // 8th-note steps for verse, 16th for chorus/peak
+          const arpStep = (section === 'chorus' || section === 'peak') ? 0.25 : 0.5;
+          const arpDur  = arpStep * 0.78;
+
+          for (let ci = 0; ci < numChords; ci++) {
+            const chordBeat = ci * spacing;
+            if (chordBeat >= beats) break;
+
+            const degOffset = prog[ci % prog.length];
+            const chordRoot = rootMidi + degOffset + 12; // one octave above pad
+
+            // Same chord type, higher register (MIDI 60–84)
+            const arpPitches = [];
+            intervals.forEach(semis => {
+              let pitch = chordRoot + semis;
+              while (pitch > 84) pitch -= 12;
+              while (pitch < 60) pitch += 12;
+              arpPitches.push(pitch);
+            });
+            arpPitches.sort((a, b) => a - b);
+
+            // Ascending then fold back: 0,1,2,1,0,1,2…
+            const pattern = [...arpPitches, ...arpPitches.slice(1, -1).reverse()];
+            let pIdx = 0;
+            for (let t = chordBeat; t < chordBeat + spacing - arpStep * 0.5 && t < beats; t += arpStep) {
+              const vel = 38 + Math.floor(Math.random() * 18); // quiet detail
+              arpNotes.push({ pitch: pattern[pIdx % pattern.length], start: t, dur: arpDur, vel });
+              pIdx++;
+            }
+          }
         }
-        scLeadNotes = leadNotes;
+
+        tracks.alois = padNotes;
+        tracks.jason = bassNotes; // always regenerate — bass follows chord roots
+        tracks.arp   = arpNotes;
+        scLeadNotes  = leadNotes;
         prDraw();
       }
 
@@ -6008,6 +6127,8 @@
         scGenerateDrumPattern('verse');
         scGeneratePianoPattern('verse');
         scStartBarClock();
+        // Load MIDI fragment library in background — doesn't block start
+        if (midiFragmentLib.length === 0) loadMidiFragments();
       }
 
       function scStop() {
