@@ -3962,6 +3962,52 @@
         carrier.stop(endT); mod.stop(endT);
       }
 
+      // Sub-bass voice — triangle + sine blend, punchy transient, no delay bleed
+      function schedBassNote(freq, t0, durS, vel) {
+        const ctx = prAudioCtx;
+        if (!ctx) return;
+        const vol = (vel / 127) * 0.9;
+
+        // Triangle for punch, sine for sub warmth
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        osc1.type = 'triangle';
+        osc2.type = 'sine';
+        osc1.frequency.value = freq;
+        osc2.frequency.value = freq;
+
+        const g1 = ctx.createGain(); g1.gain.value = 0.55;
+        const g2 = ctx.createGain(); g2.gain.value = 0.45;
+
+        // Low-pass at 4× freq — keeps it in the bass register, kills highs
+        const filt = ctx.createBiquadFilter();
+        filt.type = 'lowpass';
+        filt.frequency.value = Math.min(900, freq * 4);
+        filt.Q.value = 0.7;
+
+        // Amp: fast attack, punchy decay to natural tail
+        const env = ctx.createGain();
+        const tail = Math.min(durS * 0.82, 1.1);
+        env.gain.setValueAtTime(0, t0);
+        env.gain.linearRampToValueAtTime(vol, t0 + 0.004);
+        env.gain.exponentialRampToValueAtTime(vol * 0.38, t0 + 0.07);
+        env.gain.exponentialRampToValueAtTime(0.001, t0 + tail);
+
+        osc1.connect(g1); g1.connect(filt);
+        osc2.connect(g2); g2.connect(filt);
+        filt.connect(env);
+
+        // Dry bus only — no delay. Tiny reverb for glue.
+        const dA  = ctx.createGain(); dA.gain.value  = 0.88;
+        const rvA = ctx.createGain(); rvA.gain.value = 0.04;
+        env.connect(dA);  dA.connect(prDryBus);
+        env.connect(rvA); rvA.connect(prReverbBus);
+
+        const endT = t0 + tail + 0.05;
+        osc1.start(t0); osc2.start(t0);
+        osc1.stop(endT); osc2.stop(endT);
+      }
+
       // Detuned sawtooth pad — dreamy, washy, Alois's voice
       function schedPadNote(freq, t0, durS, vel) {
         const ctx = prAudioCtx;
@@ -4056,8 +4102,10 @@
             const durS = n.dur * spb;
             if (tid === 'alois') {
               schedPadNote(midiToFreq(n.pitch), t0, durS, n.vel);
+            } else if (tid === 'jason') {
+              schedBassNote(midiToFreq(n.pitch), t0, durS, n.vel);
             } else if (tid !== 'arp') {
-              // jason (bass) and any future named tracks → pluck voice
+              // future named melody/lead tracks → pluck voice
               schedPluckNote(midiToFreq(n.pitch), t0, durS, n.vel);
             }
           }
@@ -5602,12 +5650,11 @@
         osc2.connect(shaper);
         shaper.connect(filt);
         filt.connect(env);
-        // Lead routing: dry + delay (dotted-8th shimmer) + reverb
-        // Delay lives on lead only — keeps bass/pads clean
+        // Melody routing: dry-forward, light delay shimmer, moderate reverb
         if (prDryBus) {
-          const dA  = ctx.createGain(); dA.gain.value  = 0.65;
-          const dlA = ctx.createGain(); dlA.gain.value = 0.40;
-          const rvA = ctx.createGain(); rvA.gain.value = 0.45;
+          const dA  = ctx.createGain(); dA.gain.value  = 0.72;
+          const dlA = ctx.createGain(); dlA.gain.value = 0.18; // was 0.40 — less echo repetition
+          const rvA = ctx.createGain(); rvA.gain.value = 0.28; // was 0.45
           env.connect(dA);  dA.connect(prDryBus);
           env.connect(dlA); dlA.connect(prDelayBus);
           env.connect(rvA); rvA.connect(prReverbBus);
@@ -5916,17 +5963,53 @@
             while (bassPitch < 28) bassPitch += 12;
             const bassVel = Math.min(100, def.velLo + 18 + Math.floor(Math.random() * 15));
             bassNotes.push({ pitch: bassPitch, start: chordBeat, dur: spacing * 0.88, vel: bassVel });
-            if (ci < numChords - 1 && spacing >= 3 && Math.random() < 0.45) {
-              const walkPitch = Math.max(28, Math.min(52, bassPitch + (Math.random() < 0.6 ? 2 : -2)));
-              bassNotes.push({ pitch: walkPitch, start: chordBeat + spacing - 0.5, dur: 0.45, vel: bassVel - 12 });
-            }
           }
         }
 
         tracks.alois = padNotes;
         tracks.jason = bassNotes; // always regenerate — bass follows chord roots
-        tracks.arp   = [];        // removed — melody goes on dedicated tracks
-        scLeadNotes  = [];        // removed — melody goes on dedicated tracks
+        tracks.arp   = [];        // reserved — not used
+
+        // ── Melody layer: soprano voice extracted from MIDI fragment ──
+        // Picks a fragment, groups notes by half-beat slot, keeps only the highest pitch
+        // (the soprano / melody voice). Transposed into melody register (MIDI 60–84).
+        const melFrag = midiFragmentLib.length > 0 ? pickMidiFragment(section, scaleType, rootPc) : null;
+        const melNotes = [];
+        if (melFrag) {
+          const { frag, notes: mNotes } = melFrag;
+          const fragLen = frag.bars * 4;
+          for (let offset = 0; offset < beats; offset += fragLen) {
+            // Group by half-beat slot → keep only highest pitch per slot (soprano voice)
+            const slots = new Map(); // slot → {pitch, start, dur, vel}
+            for (const n of mNotes) {
+              const slot = Math.round(n.start * 2) / 2; // quantize to 0.5-beat grid
+              const absStart = offset + slot;
+              if (absStart >= beats) continue;
+              if (!slots.has(slot) || n.pitch > slots.get(slot).pitch) {
+                slots.set(slot, { pitch: n.pitch, start: absStart, dur: n.dur, vel: n.vel });
+              }
+            }
+            for (const note of slots.values()) {
+              if (Math.random() < 0.28) continue; // breathe — skip ~28% of notes
+              // Lift into melody register
+              let pitch = note.pitch;
+              while (pitch < 60) pitch += 12;
+              while (pitch > 84) pitch -= 12;
+              // Scale snap
+              const pc = ((pitch % 12) + 12) % 12;
+              if (!scalePCs.includes(pc)) {
+                let bestPc = scalePCs[0], bestDist = 99;
+                for (const sp of scalePCs) { let d = Math.abs(pc - sp); if (d > 6) d = 12 - d; if (d < bestDist) { bestDist = d; bestPc = sp; } }
+                const diff = ((bestPc - pc + 12) % 12);
+                pitch += diff <= 6 ? diff : diff - 12;
+              }
+              const dur = Math.min(0.88, note.dur, beats - note.start);
+              melNotes.push({ pitch, start: note.start, dur, vel: Math.min(92, note.vel + 8) });
+            }
+          }
+          if (melNotes.length > 0) console.log(`[SCORE] melody: ${melNotes.length} notes from "${melFrag.frag.label}"`);
+        }
+        scLeadNotes = melNotes;
         prDraw();
       }
 
