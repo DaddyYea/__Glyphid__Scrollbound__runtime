@@ -72,6 +72,9 @@ export class AloisBackend implements AgentBackend {
     this.chamber.setInnerJournalPath(
       path.join(dataDir, 'alois-inner-journal.txt')
     );
+    this.chamber.setPlcsLogPath(
+      path.join(dataDir, 'plcs.log')
+    );
 
     // Start 333ms heartbeat — propagates affect through axon network continuously
     this.pulseLoop = new PulseLoop();
