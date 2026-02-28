@@ -5923,27 +5923,10 @@
           }
         }
 
-        // ── Lead layer: sparser, higher register, half-beat positions ──
-        const leadSkip = genre.leadSkip[section];
-        for (let beat = 0; beat < beats; beat += 0.5) {
-          if (Math.random() < leadSkip) {
-            const degree   = scale[Math.floor(Math.random() * scale.length)];
-            const target   = def.midiLo + 12 + Math.floor(Math.random() * 12);
-            const pc       = (rootPc + degree) % 12;
-            let pitch      = Math.floor(target / 12) * 12 + pc;
-            // Snap to closest octave of this pitch class to the target position
-            if (Math.abs(pitch - target) > 6) pitch += (pitch < target ? 12 : -12);
-            if (pitch <= 84 && pitch >= def.midiLo) {
-              const vel = def.velLo + 10 + Math.floor(Math.random() * (def.velHi - def.velLo));
-              const dur = [0.25, 0.25, 0.5][Math.floor(Math.random() * 3)];
-              leadNotes.push({ pitch, start: Math.round(beat * 4) / 4, dur, vel });
-            }
-          }
-        }
         tracks.alois = padNotes;
         tracks.jason = bassNotes; // always regenerate — bass follows chord roots
-        tracks.arp   = [];        // arp removed — pads are pure sustain; melody goes on dedicated tracks
-        scLeadNotes  = leadNotes;
+        tracks.arp   = [];        // removed — melody goes on dedicated tracks
+        scLeadNotes  = [];        // removed — melody goes on dedicated tracks
         prDraw();
       }
 
