@@ -5094,7 +5094,7 @@
         // Base trap beat in bar 1 (steps 0–15)
         // Kick: 1, syncopated hits
         const kickHits = [0, 6, 10, 14];
-        kickHits.forEach(s => { drPattern[ki][s] = 110; drPattern[si][s] = 105; }); // kick+sub locked
+        kickHits.forEach(s => { drPattern[ki][s] = 110; if (s === 0 || s === 16) drPattern[si][s] = 105; }); // sub on downbeats only
 
         // Snare on 2 and 4 (steps 4, 12)
         drPattern[sni][4]  = 108;
@@ -5115,7 +5115,7 @@
 
         // Bar 2 (steps 16–31) — doubled structure with Cloud Hop fills
         // Copy base kick/snare
-        kickHits.forEach(s => { drPattern[ki][s+16] = 110; drPattern[si][s+16] = 105; });
+        kickHits.forEach(s => { drPattern[ki][s+16] = 110; if ((s+16) === 16) drPattern[si][s+16] = 105; }); // sub on step 16 only
         drPattern[sni][20] = 108;
         drPattern[sni][28] = 108;
         drPattern[cli][20] = 95;
@@ -5127,7 +5127,7 @@
         const shuffled = fillCandidates.sort(() => Math.random() - 0.5).slice(0, numFills);
         shuffled.forEach(s => {
           drPattern[ki][s] = 75 + Math.floor(Math.random() * 25);
-          drPattern[si][s] = 70 + Math.floor(Math.random() * 20);
+          // No sub on fill kicks — sub stays anchored to downbeats only
         });
 
         // Perc hits for Cloud Hop texture — sparse, off-grid feel
@@ -5738,7 +5738,7 @@
         if (section === 'breakdown') {
           // Sparse, dreamy — pick one of 4 minimalist kick placements
           const kicks = pick([[0, 24], [0, 20], [0, 28], [0, 16, 24]]);
-          kicks.forEach(s => { drPattern[ki][s] = rnd(75, 92); drPattern[si][s] = rnd(62, 78); });
+          kicks.forEach(s => { drPattern[ki][s] = rnd(75, 92); if (s === 0 || s === 16) drPattern[si][s] = rnd(62, 78); });
           for (let s = 0; s < 32; s += 8) drPattern[chhi][s] = rnd(40, 58);
           if (Math.random() < 0.5) hatFill(15, 3, 62);
           if (Math.random() < 0.4) drPattern[rdi][0] = rnd(55, 72);
@@ -5761,7 +5761,7 @@
           const hatGroove = Math.floor(Math.random() * 3);
           const kicks  = pick(kickPats);
           const snares = pick(snarePats);
-          kicks.forEach(s  => { drPattern[ki][s]  = rnd(90, 108); drPattern[si][s]  = rnd(80, 95); });
+          kicks.forEach(s  => { drPattern[ki][s]  = rnd(90, 108); if (s === 0 || s === 16) drPattern[si][s] = rnd(80, 95); });
           snares.forEach(s => { drPattern[sni][s] = rnd(95, 112); });
           if (Math.random() < 0.6) drPattern[cli][snares[snares.length - 1]] = rnd(78, 95);
           if (hatGroove === 0) {
@@ -5793,7 +5793,7 @@
             [0, 12, 16, 28],
           ];
           const kicks = pick(kickPats);
-          kicks.forEach(s => { drPattern[ki][s] = rnd(100, 115); drPattern[si][s] = rnd(88, 100); });
+          kicks.forEach(s => { drPattern[ki][s] = rnd(100, 115); if (s === 0 || s === 16) drPattern[si][s] = rnd(88, 100); });
           [8, 24].forEach(s => { drPattern[sni][s] = rnd(98, 112); drPattern[cli][s] = rnd(85, 100); });
           for (let s = 0; s < 32; s++) {
             drPattern[chhi][s] = (s % 4 === 0) ? rnd(82, 100) : rnd(55, 72);
@@ -5812,7 +5812,7 @@
             [0, 10, 14, 16, 26, 30],
           ];
           const kicks = pick(kickPats);
-          kicks.forEach(s => { drPattern[ki][s] = rnd(108, 120); drPattern[si][s] = rnd(95, 110); });
+          kicks.forEach(s => { drPattern[ki][s] = rnd(108, 120); if (s === 0 || s === 16) drPattern[si][s] = rnd(95, 110); });
           drPattern[sni][8]  = 112; drPattern[cli][8]  = 95;
           drPattern[sni][24] = 115; drPattern[cli][24] = 100;
           for (let s = 0; s < 32; s++) drPattern[chhi][s] = rnd(70, 100);
