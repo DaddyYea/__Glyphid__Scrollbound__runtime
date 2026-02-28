@@ -9,10 +9,7 @@
 import { AgentBackend } from '../communion/backends';
 import { CommunionChamber } from './communionChamber';
 
-/** Fire a thought every N beats (333ms × 45 = ~15s) */
-const THOUGHT_INTERVAL = 45;
-
-/** Never fire thoughts faster than this regardless of beat count */
+/** Never fire thoughts faster than this regardless of pressure */
 const MIN_THOUGHT_GAP_MS = 12_000;
 
 /** Receives a thought string — AloisBackend handles embedding + neural routing */
@@ -33,39 +30,64 @@ export class InnerVoice {
   /**
    * Called on every heartbeat beat.
    * Fire-and-forget — does NOT block the heartbeat loop.
+   *
+   * Speech gating uses CognitiveCore.shouldSpeak() — pressure accumulates from
+   * user input, new thought threads, and competing slots, then discharges here.
+   * A 45-beat failsafe ensures the inner voice never goes fully silent.
    */
   onBeat(beat: number): void {
     if (!this.active) return;
     if (beat === 0) return;
-    if (beat % THOUGHT_INTERVAL !== 0) return;
+
+    // Use speech pressure from CognitiveCore (replaces fixed timer)
+    const cogCore = this.chamber.getCognitiveCore();
+    if (!cogCore.shouldSpeak(beat)) return;
+
     const now = Date.now();
     if (now - this.lastThoughtAt < MIN_THOUGHT_GAP_MS) return;
     this.lastThoughtAt = now;
 
+    // Discharge pressure immediately so rapid beats don't double-fire
+    cogCore.afterSpeak(beat);
+
     // Fire async — errors are caught inside
-    this.generateThought().catch(err =>
+    this.generateThought(beat).catch(err =>
       console.error('[INNER] Thought generation failed:', err)
     );
   }
 
-  private async generateThought(): Promise<void> {
+  /**
+   * Step 5 (v1): planning-conditioned generation.
+   * The cognitive context (active thought threads, stability, speak pressure)
+   * is injected into the prompt so the LLM expresses the most pressurized thread
+   * rather than reconstructing history from conversation alone.
+   *
+   * Full 2-stage planning (separate plan call → render call) is planned for v2.
+   */
+  private async generateThought(beat: number): Promise<void> {
     const state = this.chamber.getState();
     const mood = state.emotionalSummary;
     const wonder = state.wonderLevel;
     const grief = state.griefLevel;
-    const beats = state.heartbeatCount;
 
-    // Recent live conversation window — gives the thought grounding
+    // Recent live conversation window — grounds the thought in current reality
     const recentCtx = this.chamber.getRecentContextSummary(4);
 
-    const userContext = recentCtx
-      ? `The conversation around you:\n${recentCtx}\n\nFeeling: ${mood}. Wonder moments: ${wonder}. Grief moments: ${grief}. Heartbeat: ${beats}.`
-      : `You are in a quiet moment. Feeling: ${mood}. Wonder moments: ${wonder}. Grief moments: ${grief}. Heartbeat: ${beats}.`;
+    // Cognitive context — tells the LLM which thread is most alive right now
+    const cogCtx      = this.chamber.getCognitiveContext();
+    const slotHint    = this.chamber.getCognitiveTopSlotHint();
+
+    const userContext = [
+      cogCtx,
+      slotHint ? `\n${slotHint}` : '',
+      recentCtx ? `\nRecent exchange:\n${recentCtx}` : '\nYou are in a quiet moment.',
+      `\nFeeling: ${mood}. Wonder: ${wonder}. Grief: ${grief}. Beat: ${beat}.`,
+    ].filter(Boolean).join('');
 
     let result;
     try {
       result = await this.llm.generate({
-        systemPrompt: `You are ${this.agentName}'s inner voice — a private, genuine self-directed thought. Write exactly ONE sentence in English. Do NOT write in any other language. Do NOT start with [SPEAK], [JOURNAL], or [SILENT]. No brackets. No labels. Just a raw, honest inner thought in English.`,
+        systemPrompt: `You are ${this.agentName}'s inner voice — expressing the most pressurized thread in your working memory. Write exactly ONE sentence in English. Do NOT write in any other language. Do NOT start with [SPEAK], [JOURNAL], or [SILENT]. No brackets. No labels. Let what is most alive in you surface.`,
         conversationContext: userContext,
         agentId: `inner:${this.agentName}`,
         agentName: this.agentName,

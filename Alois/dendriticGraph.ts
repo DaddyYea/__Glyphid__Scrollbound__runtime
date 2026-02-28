@@ -223,6 +223,110 @@ export class DendriticGraph {
     return total / this.neurons.size;
   }
 
+  // ── CognitiveCore interface ──────────────────────────────────────────────
+
+  /**
+   * Per-neuron data for CognitiveCore.updateGlobalState().
+   * Called every 6.6s right after tickAllAsync completes — neuron states are fresh.
+   */
+  getNeuronCognitiveData(currentBeat: number): Array<{
+    id: string;
+    state: number[];
+    affectMag: number;
+    activationDecay: number;
+    lastFiredBeat: number;
+  }> {
+    const result = [];
+    for (const [id, neuron] of this.neurons) {
+      const affect    = neuron.getAffect();
+      const affectMag = Math.sqrt(affect.reduce((s, v) => s + v * v, 0));
+      result.push({
+        id,
+        state:          neuron.getLastState(),
+        affectMag,
+        activationDecay: neuron.getActivationDecay(),
+        lastFiredBeat:  neuron.getLastFiredBeat(),
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Extract neuron clusters via top-N pairwise cosine similarity (union-find).
+   * Called every 20s alongside semanticBloom — feeds CognitiveCore.rebuildSlots().
+   *
+   * Uses top `sampleSize` neurons by importance to keep O(n²) manageable.
+   * At sampleSize=100: 4,950 pairs × 768-dim ≈ 3.8M muls (~10–40ms).
+   */
+  extractClusters(
+    threshold  = 0.82,
+    sampleSize = 100,
+  ): Array<{ neuronIds: string[]; centroid: number[]; weight: number }> {
+    if (this.neurons.size < 2) return [];
+
+    // Score and take top N by importance
+    const scored = Array.from(this.neurons.entries())
+      .map(([id, n]) => ({ id, n, score: n.getImportanceScore() }))
+      .filter(x => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, sampleSize);
+
+    if (scored.length < 2) return [];
+
+    // Union-Find
+    const parent = new Map<string, string>(scored.map(x => [x.id, x.id]));
+    const find = (x: string): string => {
+      if (parent.get(x) !== x) parent.set(x, find(parent.get(x)!));
+      return parent.get(x)!;
+    };
+    const union = (x: string, y: string) => parent.set(find(x), find(y));
+
+    // Pairwise similarity — O(n²) on the top-N subset
+    for (let i = 0; i < scored.length; i++) {
+      const aMean = scored[i].n.getMeanEmbedding();
+      const aMag  = Math.sqrt(aMean.reduce((s, v) => s + v * v, 0));
+      if (aMag < 1e-6) continue;
+      for (let j = i + 1; j < scored.length; j++) {
+        const bMean = scored[j].n.getMeanEmbedding();
+        const bMag  = Math.sqrt(bMean.reduce((s, v) => s + v * v, 0));
+        if (bMag < 1e-6) continue;
+        const dot = aMean.reduce((s, v, k) => s + v * bMean[k], 0);
+        if (dot / (aMag * bMag) >= threshold) union(scored[i].id, scored[j].id);
+      }
+    }
+
+    // Group by root
+    const groups = new Map<string, typeof scored[number][]>();
+    for (const node of scored) {
+      const root = find(node.id);
+      if (!groups.has(root)) groups.set(root, []);
+      groups.get(root)!.push(node);
+    }
+
+    // Compute centroid and weight per cluster (min 2 members)
+    const DIM = 768;
+    const clusters = [];
+    for (const [, members] of groups) {
+      if (members.length < 2) continue;
+      const centroid = new Array(DIM).fill(0);
+      let totalScore = 0;
+      for (const m of members) {
+        const state = m.n.getLastState();
+        if (state.length !== DIM) continue;
+        totalScore += m.score;
+        for (let i = 0; i < DIM; i++) centroid[i] += state[i] * m.score;
+      }
+      if (totalScore > 0) for (let i = 0; i < DIM; i++) centroid[i] /= totalScore;
+      clusters.push({
+        neuronIds: members.map(m => m.id),
+        centroid,
+        weight: totalScore / members.length,
+      });
+    }
+
+    return clusters.sort((a, b) => b.weight - a.weight);
+  }
+
   /** Get all axon edges as {source, target} pairs for visualization */
   getAxonTopology(): Array<{ source: string; target: string }> {
     const edges: Array<{ source: string; target: string }> = [];

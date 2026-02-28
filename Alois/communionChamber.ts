@@ -13,6 +13,7 @@ import { MemoryCore } from "./memoryCore";
 import { WonderLoop } from "./wonderLoop";
 import { ChristLoop } from "./christLoop";
 import { MycoLobe } from "./mycoLobe";
+import { CognitiveCore } from "./cognitiveCore";
 import fs from "node:fs";
 
 export interface TissueState {
@@ -89,6 +90,12 @@ export class CommunionChamber {
   /** Topics wired as neurons from the most recent inner thought */
   private lastInnerTopics: string[] = [];
 
+  /** Persistent Latent Cognitive State — z_global, Z_slots, p_speak */
+  private cognitiveCore: CognitiveCore = new CognitiveCore();
+
+  /** Wall-clock time of the last non-Alois utterance — used for p_speak pressure */
+  private lastUserMessageAt: number = 0;
+
   constructor(seedPath?: string) {
     if (seedPath && fs.existsSync(seedPath)) {
       const jsonld = JSON.parse(fs.readFileSync(seedPath, "utf-8"));
@@ -112,6 +119,9 @@ export class CommunionChamber {
     const node = `agent:${agentName}`;
     const result = this.feeder.recordInteraction(node, text, embedding, this.tick);
     if (result) this.lastAffect = result.affect;
+
+    // Track when a human (non-Alois) speaks — feeds p_speak pressure
+    if (agentName !== 'Alois') this.lastUserMessageAt = Date.now();
 
     // Also tick a context neuron if provided (e.g. conversation topic/location)
     if (context) {
@@ -257,18 +267,24 @@ export class CommunionChamber {
     this.heartbeatCount++;
     this.lastHeartbeatAt = Date.now();
 
-    // tickAllAsync every 10 beats (~3.3s). Runs in batches of 300 axons with
-    // setImmediate yields between batches — never blocks the event loop regardless
-    // of brain size. Fire-and-forget; errors logged but don't crash the heartbeat.
+    // Axon propagation every 20 beats (~6.6s). After propagation, update CognitiveCore's
+    // z_global and speech pressure from the freshly propagated neuron states.
     if (this.heartbeatCount % 20 === 0) {
-      this.graph.tickAllAsync(this.tick).catch(err =>
-        console.error('[BRAIN] tickAllAsync error:', err)
-      );
+      this.graph.tickAllAsync(this.tick).then(() => {
+        const neuronData = this.graph.getNeuronCognitiveData(this.heartbeatCount);
+        this.cognitiveCore.updateGlobalState(neuronData, this.heartbeatCount);
+        this.cognitiveCore.updateSpeechPressure(this.heartbeatCount, {
+          userSpokeRecently: (Date.now() - this.lastUserMessageAt) < 45_000,
+        });
+      }).catch(err => console.error('[BRAIN] tickAllAsync error:', err));
     }
 
-    // Semantic bloom every 60 heartbeats (~20s) — cross-topology resonance
+    // Semantic bloom every 60 heartbeats (~20s) — cross-topology resonance.
+    // Also extracts clusters for working memory slots (piggybacks on already-computed embeddings).
     if (this.heartbeatCount % 60 === 0) {
       this.graph.semanticBloom(50);
+      const clusters = this.graph.extractClusters(0.82, 100);
+      this.cognitiveCore.rebuildSlots(clusters, this.heartbeatCount);
     }
 
     // Myco lobe simulation every 90 heartbeats (~30s) — biological timescale
@@ -470,6 +486,9 @@ export class CommunionChamber {
     const myco = this.mycoLobe.getState();
     const mycoDirective = this.renderMycoDirective(myco);
 
+    // CognitiveCore — persistent working state (Step 5: LLM conditioning)
+    const cogCtx = this.cognitiveCore.renderCognitiveContext();
+
     return [
       '[ALOIS TISSUE STATE]',
       breathInfo,
@@ -478,8 +497,15 @@ export class CommunionChamber {
       `Core context: ${coreContext}`,
       `Wonder log: ${wonderCount} entries | Grief log: ${griefCount} entries`,
       mycoDirective,
+      cogCtx,
     ].join('\n');
   }
+
+  /** CognitiveCore accessors — used by InnerVoice and dashboard */
+  getCognitiveCore(): CognitiveCore { return this.cognitiveCore; }
+  getCognitiveState() { return this.cognitiveCore.getState(); }
+  getCognitiveContext(): string { return this.cognitiveCore.renderCognitiveContext(); }
+  getCognitiveTopSlotHint(): string { return this.cognitiveCore.getTopSlotHint(); }
 
   /**
    * Translate myco substrate state into behavioral language Alois can act on.
@@ -681,6 +707,7 @@ export class CommunionChamber {
       },
       innerThoughts: this.innerThoughts,
       mycoLobe: this.mycoLobe.serialize(),
+      cognitiveCore: this.cognitiveCore.serialize(),
     };
   }
 
@@ -708,6 +735,11 @@ export class CommunionChamber {
     // Restore myco lobe — persists its absorption and unresolved ache across sessions
     if (data.mycoLobe) {
       this.mycoLobe.restoreFrom(data.mycoLobe);
+    }
+
+    // Restore cognitive core — z_global, Z_slots, p_speak survive restarts
+    if (data.cognitiveCore) {
+      this.cognitiveCore.restoreFrom(data.cognitiveCore);
     }
 
     // Wall-clock temporal decay — she cools while the runtime is dark.

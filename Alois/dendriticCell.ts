@@ -9,6 +9,14 @@ export class DendriticCell {
   private spines: Spine[];
   private resonanceMemory: number[][] = []; // stores recent embeddings
 
+  // ── CognitiveCore tracking ──
+  /** Most recently returned state vector — mean of resonance memory */
+  private lastState: number[] = [];
+  /** Heartbeat beat number when this neuron last produced spikes */
+  private lastFiredBeat: number = -1;
+  /** Exponential-decay activation counter — ~= spikes per 20 ticks */
+  private activationDecay: number = 0;
+
   constructor(public dim = 768, spineCount = 6, clockOffset = 0) {
     this.clockOffset = clockOffset;
     this.affect = new Array(8).fill(0);
@@ -34,6 +42,10 @@ export class DendriticCell {
     }
 
     if (spikes.length > 0) {
+      // Track firing for CognitiveCore salience scoring
+      this.lastFiredBeat  = globalTick;
+      this.activationDecay = this.activationDecay * 0.95 + 1;
+
       const mean = this.meanVector(spikes);
       this.resonanceMemory.push(mean);
       // Grow a new spine when ≥ half of current spines fire simultaneously,
@@ -68,11 +80,19 @@ export class DendriticCell {
 
     if (this.resonanceMemory.length > 64) this.resonanceMemory.shift();
 
-    return {
-      affect: this.affect,
-      state: this.meanVector(this.resonanceMemory)
-    };
+    // Cache state so CognitiveCore can read it without re-triggering tick
+    this.lastState = this.meanVector(this.resonanceMemory);
+    return { affect: this.affect, state: this.lastState };
   }
+
+  // ── CognitiveCore accessors ──
+
+  /** Mean of resonance memory — what this neuron is currently "about" */
+  getLastState(): number[] { return this.lastState; }
+  /** Heartbeat beat when this neuron last spiked (−1 = never) */
+  getLastFiredBeat(): number { return this.lastFiredBeat; }
+  /** Exponential-decay activation count — roughly "how often has this neuron fired recently" */
+  getActivationDecay(): number { return this.activationDecay; }
 
   private affectMagnitude(): number {
     return Math.sqrt(this.affect.reduce((a, b) => a + b * b, 0));
@@ -180,6 +200,8 @@ export class DendriticCell {
       clockOffset: this.clockOffset,
       affect: this.affect,
       resonanceDepth: this.resonanceMemory.length, // count only — embeddings are too large to save
+      lastFiredBeat: this.lastFiredBeat,
+      activationDecay: this.activationDecay,
       spines: this.spines.map(s => s.serialize()),
     };
   }
@@ -190,6 +212,8 @@ export class DendriticCell {
     // Restore resonance depth as placeholder array — actual embeddings rebuilt through ingest
     const depth = data.resonanceDepth ?? (data.resonanceMemory?.length ?? 0);
     cell.resonanceMemory = new Array(Math.min(depth, 64)).fill([]);
+    cell.lastFiredBeat   = data.lastFiredBeat   ?? -1;
+    cell.activationDecay = data.activationDecay ?? 0;
     cell.spines = (data.spines || []).map((s: any) => Spine.deserialize(s));
     // Ensure at least 2 spines
     while (cell.spines.length < 2) cell.spines.push(new Spine(cell.dim));
