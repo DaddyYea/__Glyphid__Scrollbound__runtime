@@ -4018,13 +4018,11 @@
             scGeneratePianoPattern(scSection);
             console.log(`[SCORE] Full regen @ loop ${prLoopCount} — section: ${scSection}`);
           } else if (prLoopCount % 2 === 0) {
-            // Every 8 bars: section check + fresh piano pattern (drums stay)
-            if (next !== scSection) {
-              scSection = next; scApplySectionToDrone(next);
-              scGenerateDrumPattern(next);
-            }
+            // Every 8 bars: section check + fresh piano + fresh drums (drums change = audible)
+            if (next !== scSection) { scSection = next; scApplySectionToDrone(next); }
+            scGenerateDrumPattern(scSection);
             scGeneratePianoPattern(scSection);
-            console.log(`[SCORE] Piano regen @ loop ${prLoopCount} — section: ${scSection}`);
+            console.log(`[SCORE] 8-bar regen @ loop ${prLoopCount} — section: ${scSection}`);
           }
         }
 
@@ -5692,35 +5690,45 @@
         const genre     = SC_GENRES[scGenre] || SC_GENRES.cloudhop;
         const chordStep = genre.chordStep[section];
         const chordSize = genre.chordSize[section];
-        const barSkip   = genre.barSkip[section];
-        const chordDur  = chordStep * 1.5;
-        const baseOctave = Math.floor((def.midiLo + (def.midiHi - def.midiLo) * 0.3) / 12);
+        // ── Pad layer: real chord types with stagger and sustain ──
+        // Uses CHORD_TYPES (min7/min9/sus2/dom7 etc.) with staggered voice timing so
+        // notes overlap naturally across bar lines — no rigid step-quantization.
+        const scaleType = scale.includes(4) ? 'major'
+          : (scale.includes(10) && scale.includes(3)) ? 'minor' : 'minor';
+        const diatonicOffsets = DIATONIC_ROOTS[scaleType] || DIATONIC_ROOTS.minor;
+        const rootMidi = 48 + rootPc;  // C3 + root = comfortable bass register
 
-        // ── Pad layer: decide per measure (bar), then fill it entirely ──
-        // Each bar either contributes chords or stays silent — no partial fills.
-        for (let bar = 0; bar < loopBars; bar++) {
-          if (Math.random() < barSkip) continue;               // whole bar silent
-          const barStart   = bar * beatsPerBar;
-          const rootDegIdx = Math.floor(Math.random() * scale.length); // one chord identity per bar
-          for (let beatInBar = 0; beatInBar < beatsPerBar; beatInBar += chordStep) {
-            // Build ascending voicing: each note walks up from the previous pitch.
-            // This ensures the chord is always in key AND properly voiced (no inversions/collapses).
-            // For short scales (≤4 degrees), step by 1 to avoid cycling the same index.
-            // For longer scales, step by 2 (skip-thirds for diatonic chords).
-            const scaleStep = scale.length <= 4 ? 1 : 2;
-            let lastPitch = baseOctave * 12 - 1;
-            for (let ci = 0; ci < chordSize; ci++) {
-              const degIdx = (rootDegIdx + ci * scaleStep) % scale.length;
-              const pc     = (rootPc + scale[degIdx]) % 12;   // pitch class in key
-              let pitch    = Math.floor(lastPitch / 12) * 12 + pc;
-              if (pitch <= lastPitch) pitch += 12;             // walk up if same or below
-              if (pitch < def.midiLo) pitch += 12;            // lift into range
-              if (pitch > def.midiHi + 4) break;              // too high — stop voicing
-              lastPitch = pitch;
-              const vel = def.velLo + Math.floor(Math.random() * (def.velHi - def.velLo));
-              padNotes.push({ pitch, start: barStart + beatInBar, dur: Math.min(chordDur, beatsPerBar - beatInBar), vel });
-            }
-          }
+        const SECTION_CHORDS = {
+          breakdown: ['sus2', 'min7'],
+          verse:     ['min7', 'min9', 'sus2'],
+          chorus:    ['min9', 'dom7', 'min7'],
+          peak:      ['dom7', 'maj9', 'min9'],
+        };
+        const chordPalette = SECTION_CHORDS[section] || SECTION_CHORDS.verse;
+        const spacing  = { breakdown: 4, verse: 2, chorus: 2, peak: 1 }[section] ?? 2;
+        const noteDur  = { breakdown: 5.5, verse: 3.8, chorus: 3.0, peak: 2.2 }[section] ?? 3.5;
+        const stagger  = 1 / (snapDiv * 2); // 1/8-beat offset per voice = light arpeggio
+        const numChords = Math.min(12, Math.floor(beats / spacing));
+
+        for (let ci = 0; ci < numChords; ci++) {
+          const chordBeat = ci * spacing;
+          if (chordBeat >= beats) break;
+
+          const degOffset = diatonicOffsets[Math.floor(Math.random() * diatonicOffsets.length)];
+          const chordRoot = rootMidi + degOffset;
+          const chordType = chordPalette[Math.floor(Math.random() * chordPalette.length)];
+          const intervals = CHORD_TYPES[chordType] || CHORD_TYPES.min7;
+
+          intervals.forEach((semis, vi) => {
+            let pitch = chordRoot + semis;
+            while (pitch > 72) pitch -= 12;  // keep in C3–C5
+            while (pitch < 48) pitch += 12;
+            pitch = Math.max(36, Math.min(84, pitch));
+            const start = chordBeat + vi * stagger;
+            if (start >= beats) return;
+            const vel = Math.max(35, def.velLo + Math.floor(Math.random() * (def.velHi - def.velLo)) - vi * 3);
+            padNotes.push({ pitch, start, dur: noteDur, vel });
+          });
         }
 
         // ── Lead layer: sparser, higher register, half-beat positions ──
