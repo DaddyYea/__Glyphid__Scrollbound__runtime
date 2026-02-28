@@ -3636,15 +3636,15 @@
       // ── Instrument / FX settings ──
       const pluckSettings = {
         fmRatio: 3.5, fmBright: 1.0, decay: 0.55,
-        drive: 0.0, mangle: 0.0, delaySend: 0.28, reverbSend: 0.18,
+        drive: 0.0, mangle: 0.0, delaySend: 0.0, reverbSend: 0.08,
       };
       const padSettings = {
         detune: 10, filterCutoff: 2400, filterQ: 2.2,
         attack: 0.14, release: 0.38, reverbSend: 0.85,
       };
       const fxSettings = {
-        revSize: 2.4, revDecay: 5.0, delayFeedback: 0.34,
-        delayReturn: 0.22, compThreshold: -18, masterVol: 0.72,
+        revSize: 2.4, revDecay: 5.0, delayFeedback: 0.38,
+        delayReturn: 0.32, compThreshold: -18, masterVol: 0.72,
       };
 
       let activeMoodScale = null;    // { rootPc, intervals, color } | null
@@ -5542,8 +5542,18 @@
         osc2.connect(shaper);
         shaper.connect(filt);
         filt.connect(env);
-        // Route through FX chain if available
-        env.connect(prReverbBus || prDryBus || ctx.destination);
+        // Lead routing: dry + delay (dotted-8th shimmer) + reverb
+        // Delay lives on lead only — keeps bass/pads clean
+        if (prDryBus) {
+          const dA  = ctx.createGain(); dA.gain.value  = 0.55;
+          const dlA = ctx.createGain(); dlA.gain.value = 0.75;
+          const rvA = ctx.createGain(); rvA.gain.value = 0.60;
+          env.connect(dA);  dA.connect(prDryBus);
+          env.connect(dlA); dlA.connect(prDelayBus);
+          env.connect(rvA); rvA.connect(prReverbBus);
+        } else {
+          env.connect(ctx.destination);
+        }
 
         lfo.start(startTime);
         osc1.start(startTime);
