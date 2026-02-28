@@ -5839,7 +5839,8 @@
           }
           [4, 12, 20, 28].forEach(s => drPattern[ohhi][s] = rnd(72, 88));
           if (Math.random() < 0.5) drPattern[ohhi][pick([2, 10, 18, 26])] = rnd(68, 82);
-          hatFill(15, 6, 95); hatFill(31, 6, 92);
+          if (Math.random() < 0.35) hatFill(15, 6, 95);
+          if (Math.random() < 0.35) hatFill(31, 6, 92);
           if (Math.random() < 0.4) drPattern[perci][rnd(0, 4) * 8 + rnd(2, 6)] = rnd(65, 80);
 
         } else {
@@ -5857,7 +5858,8 @@
           for (let s = 0; s < 32; s++) drPattern[chhi][s] = rnd(70, 100);
           [4, 12, 20, 28].forEach(s => drPattern[ohhi][s] = rnd(80, 95));
           [2, 10, 18, 26].forEach(s => { if (Math.random() < 0.5) drPattern[ohhi][s] = rnd(72, 85); });
-          hatFill(15, 8, 105); hatFill(31, 8, 105);
+          if (Math.random() < 0.40) hatFill(15, 8, 105);
+          if (Math.random() < 0.40) hatFill(31, 8, 105);
           drPattern[rdi][0] = 80; drPattern[rdi][16] = 80;
           for (let s = 4; s < 32; s += 8) { if (Math.random() < 0.5) drPattern[perci][s] = rnd(70, 90); }
         }
@@ -6039,35 +6041,30 @@
         const melNotes = [];
         if (melFrag) {
           const { frag, notes: mNotes } = melFrag;
-          const fragLen = frag.bars * 4;
-          for (let offset = 0; offset < beats; offset += fragLen) {
-            // Group by half-beat slot → keep only highest pitch per slot (soprano voice)
-            const slots = new Map(); // slot → {pitch, start, dur, vel}
-            for (const n of mNotes) {
-              const slot = Math.round(n.start * 2) / 2; // quantize to 0.5-beat grid
-              const absStart = offset + slot;
-              if (absStart >= beats) continue;
-              if (!slots.has(slot) || n.pitch > slots.get(slot).pitch) {
-                slots.set(slot, { pitch: n.pitch, start: absStart, dur: n.dur, vel: n.vel });
-              }
+          // Play fragment ONCE — no tiling. Leaves the rest of the loop silent.
+          // Tiling was causing the same phrase to repeat 4× per loop ("endless fill").
+          const slots = new Map();
+          for (const n of mNotes) {
+            const slot = Math.round(n.start * 2) / 2; // quantize to 0.5-beat grid
+            if (slot >= beats) continue;
+            if (!slots.has(slot) || n.pitch > slots.get(slot).pitch) {
+              slots.set(slot, { pitch: n.pitch, start: slot, dur: n.dur, vel: n.vel });
             }
-            for (const note of slots.values()) {
-              if (Math.random() < 0.28) continue; // breathe — skip ~28% of notes
-              // Lift into melody register
-              let pitch = note.pitch;
-              while (pitch < 60) pitch += 12;
-              while (pitch > 84) pitch -= 12;
-              // Scale snap
-              const pc = ((pitch % 12) + 12) % 12;
-              if (!scalePCs.includes(pc)) {
-                let bestPc = scalePCs[0], bestDist = 99;
-                for (const sp of scalePCs) { let d = Math.abs(pc - sp); if (d > 6) d = 12 - d; if (d < bestDist) { bestDist = d; bestPc = sp; } }
-                const diff = ((bestPc - pc + 12) % 12);
-                pitch += diff <= 6 ? diff : diff - 12;
-              }
-              const dur = Math.min(0.88, note.dur, beats - note.start);
-              melNotes.push({ pitch, start: note.start, dur, vel: Math.min(92, note.vel + 8) });
+          }
+          for (const note of slots.values()) {
+            if (Math.random() < 0.28) continue; // breathe — skip ~28% of notes
+            let pitch = note.pitch;
+            while (pitch < 60) pitch += 12;
+            while (pitch > 84) pitch -= 12;
+            const pc = ((pitch % 12) + 12) % 12;
+            if (!scalePCs.includes(pc)) {
+              let bestPc = scalePCs[0], bestDist = 99;
+              for (const sp of scalePCs) { let d = Math.abs(pc - sp); if (d > 6) d = 12 - d; if (d < bestDist) { bestDist = d; bestPc = sp; } }
+              const diff = ((bestPc - pc + 12) % 12);
+              pitch += diff <= 6 ? diff : diff - 12;
             }
+            const dur = Math.min(0.88, note.dur, beats - note.start);
+            melNotes.push({ pitch, start: note.start, dur, vel: Math.min(92, note.vel + 8) });
           }
           if (melNotes.length > 0) console.log(`[SCORE] melody: ${melNotes.length} notes from "${melFrag.frag.label}"`);
         }
