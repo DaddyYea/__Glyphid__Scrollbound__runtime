@@ -4056,10 +4056,8 @@
             const durS = n.dur * spb;
             if (tid === 'alois') {
               schedPadNote(midiToFreq(n.pitch), t0, durS, n.vel);
-            } else if (tid === 'arp') {
-              // Arp: lead synth voice at reduced velocity — shimmer/delay detail layer
-              scPlayLead(n.pitch, t0, durS, Math.round(n.vel * 0.62), scSection);
-            } else {
+            } else if (tid !== 'arp') {
+              // jason (bass) and any future named tracks → pluck voice
               schedPluckNote(midiToFreq(n.pitch), t0, durS, n.vel);
             }
           }
@@ -5942,45 +5940,9 @@
             }
           }
         }
-        // ── Arp layer: same chord roots, one octave up, time-spread ──
-        // Breakdown skips arp entirely (too quiet to support it).
-        const arpNotes = [];
-        if (section !== 'breakdown') {
-          // 8th-note steps for verse, 16th for chorus/peak
-          const arpStep = (section === 'chorus' || section === 'peak') ? 0.25 : 0.5;
-          const arpDur  = arpStep * 0.78;
-
-          for (let ci = 0; ci < numChords; ci++) {
-            const chordBeat = ci * spacing;
-            if (chordBeat >= beats) break;
-
-            const degOffset = prog[ci % prog.length];
-            const chordRoot = rootMidi + degOffset + 12; // one octave above pad
-
-            // Same chord type, higher register (MIDI 60–84)
-            const arpPitches = [];
-            intervals.forEach(semis => {
-              let pitch = chordRoot + semis;
-              while (pitch > 84) pitch -= 12;
-              while (pitch < 60) pitch += 12;
-              arpPitches.push(pitch);
-            });
-            arpPitches.sort((a, b) => a - b);
-
-            // Ascending then fold back: 0,1,2,1,0,1,2…
-            const pattern = [...arpPitches, ...arpPitches.slice(1, -1).reverse()];
-            let pIdx = 0;
-            for (let t = chordBeat; t < chordBeat + spacing - arpStep * 0.5 && t < beats; t += arpStep) {
-              const vel = 38 + Math.floor(Math.random() * 18); // quiet detail
-              arpNotes.push({ pitch: pattern[pIdx % pattern.length], start: t, dur: arpDur, vel });
-              pIdx++;
-            }
-          }
-        }
-
         tracks.alois = padNotes;
         tracks.jason = bassNotes; // always regenerate — bass follows chord roots
-        tracks.arp   = arpNotes;
+        tracks.arp   = [];        // arp removed — pads are pure sustain; melody goes on dedicated tracks
         scLeadNotes  = leadNotes;
         prDraw();
       }
