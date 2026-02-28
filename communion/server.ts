@@ -6,7 +6,7 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { readFileSync, existsSync, mkdirSync, statSync } from 'fs';
+import { readFileSync, existsSync, mkdirSync, statSync, readdirSync, createReadStream } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
@@ -302,6 +302,9 @@ async function main() {
       broadcast({ type: 'error', agentId: event.agentId, error: event.error });
     }
   });
+
+  // Pond saturation cache — recomputing getNeuronScores() on every concurrent poll is wasteful
+  const pondCache: { payload: object | null; ts: number } = { payload: null, ts: 0 };
 
   // HTTP server
   const server = createServer((req, res) => {
@@ -911,14 +914,17 @@ async function main() {
         return;
       }
       const state = (agent as any).getTissueState();
-      const neurons = (agent as any).getNeuronScores?.() || [];
-      const edges = (agent as any).getChamber?.()?.getGraph?.()?.getAxonTopology?.() || [];
-      const lastDream = (agent as any).getLastDream?.() || null;
-      const tissueWeight = (agent as any).getTissueWeight?.() || 0;
-      const incubation = (agent as any).getIncubation?.() || null;
-      const brainMetrics = (agent as any).getBrainMetrics?.() || null;
-      const autoGradient = (agent as any).isAutoGradient?.() ?? true;
       const ingestStatus = communion.getIngestStatus();
+      // ?full=true — only compute expensive neuron scores + axon topology for brain viz.
+      // The sidebar brain monitor polls every 2s and only needs `state` — skip the heavy stuff.
+      const full = params.get('full') === 'true';
+      const neurons     = full ? ((agent as any).getNeuronScores?.() || [])   : [];
+      const edges       = full ? ((agent as any).getChamber?.()?.getGraph?.()?.getAxonTopology?.() || []) : [];
+      const lastDream   = full ? ((agent as any).getLastDream?.()  || null)  : null;
+      const tissueWeight = (agent as any).getTissueWeight?.() || 0;
+      const incubation  = full ? ((agent as any).getIncubation?.() || null)  : null;
+      const brainMetrics= full ? ((agent as any).getBrainMetrics?.() || null): null;
+      const autoGradient = (agent as any).isAutoGradient?.() ?? true;
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ state, neurons, edges, lastDream, tissueWeight, incubation, brainMetrics, autoGradient, ingestStatus }));
       return;
@@ -1101,16 +1107,98 @@ async function main() {
       return;
     }
 
-    // Mycelium cabinet saturation endpoint — Pi polls this to drive the lobe
+    // Mycelium cabinet saturation endpoint — Pi polls this to drive the lobe.
+    // Cached for 2s to avoid recomputing getNeuronScores() on every concurrent poll.
     if (url === '/pond-saturation' && req.method === 'GET') {
-      const payload = communion.getAloisSaturation();
-      if (!payload) {
+      const now = Date.now();
+      if (!pondCache.payload || (now - pondCache.ts) > 2000) {
+        pondCache.payload = communion.getAloisSaturation();
+        pondCache.ts = now;
+      }
+      if (!pondCache.payload) {
         res.writeHead(503, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
         res.end(JSON.stringify({ error: 'No Alois agent active' }));
       } else {
         res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-        res.end(JSON.stringify(payload));
+        res.end(JSON.stringify(pondCache.payload));
       }
+      return;
+    }
+
+    // ── Sample pack manifest ──
+    // Returns { kick: 'kick_01.wav', snare: 'snare_03.wav', ... } for all tracks that have a file.
+    // Auto-sorts by filename prefix. Drop files into data/samples/ and this updates live.
+    if (url === '/samples' && req.method === 'GET') {
+      const samplesDir = join(__dirname, '../data/samples');
+      if (!existsSync(samplesDir)) mkdirSync(samplesDir, { recursive: true });
+
+      const AUDIO_EXTS = new Set(['.wav', '.mp3', '.ogg', '.flac', '.aif', '.aiff']);
+      // Patterns matched against BOTH the filename basename AND the parent folder name.
+      // This handles packs like "Unison Beatmaker Blueprint/Kicks/UNISON_KICK_Aim.wav"
+      // where the filename doesn't start with the track type but the folder name does.
+      const TRACK_PATTERNS: Record<string, RegExp[]> = {
+        kick:   [/kick/i,   /^bd[_\-]/i, /bass.drum/i],
+        sub:    [/\bsub\b/i, /subbass/i, /\b808\b/i],
+        snare:  [/snare/i,  /^sd[_\-]/i, /\bsnr\b/i],
+        clap:   [/clap/i,   /^cp[_\-]/i, /\bsnap/i],
+        hihatC: [/closed.hat/i, /\bchh\b/i, /^ch[_\-]/i, /closed.hi/i, /closed$/i],
+        hihatO: [/open.hat/i,   /\bohh\b/i, /^oh[_\-]/i, /open.hi/i,   /open$/i],
+        ride:   [/\bride\b/i, /^rd[_\-]/i, /cymbal/i],
+        perc:   [/\bperc/i, /^pc[_\-]/i, /\btom\b/i, /conga/i, /bongo/i, /rim.shot/i, /foley/i],
+      };
+
+      // Recursive scan — returns relative paths like "Kicks/kick_01.wav"
+      let files: string[] = [];
+      try { files = readdirSync(samplesDir, { recursive: true }) as string[]; } catch {}
+
+      const manifest: Record<string, string> = {};
+      for (const relPath of files) {
+        const parts    = relPath.replace(/\\/g, '/').split('/');
+        const basename = parts[parts.length - 1] || '';
+        const folder   = parts.length >= 2 ? parts[parts.length - 2] : '';
+        const ext = basename.slice(basename.lastIndexOf('.')).toLowerCase();
+        if (!AUDIO_EXTS.has(ext)) continue;
+        const normalRel = relPath.replace(/\\/g, '/');
+        for (const [track, patterns] of Object.entries(TRACK_PATTERNS)) {
+          if (manifest[track]) continue; // first match wins
+          // Test against both the filename AND the parent folder name
+          if (patterns.some(p => p.test(basename) || p.test(folder))) {
+            manifest[track] = normalRel;
+            break;
+          }
+        }
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+      res.end(JSON.stringify(manifest));
+      return;
+    }
+
+    // ── Serve individual sample files ──
+    if (url?.startsWith('/sample-files/') && req.method === 'GET') {
+      const relPath = decodeURIComponent(url.slice('/sample-files/'.length));
+      // Security: normalize and reject any path traversal outside samples dir
+      const samplesBase = join(__dirname, '../data/samples');
+      const filePath = join(samplesBase, relPath);
+      if (!filePath.startsWith(samplesBase + '/') && !filePath.startsWith(samplesBase + '\\') && filePath !== samplesBase) {
+        res.writeHead(400); res.end('Bad request'); return;
+      }
+      const filename = relPath;
+      if (!existsSync(filePath)) {
+        res.writeHead(404); res.end('Not found'); return;
+      }
+      const ext = filename.slice(filename.lastIndexOf('.')).toLowerCase();
+      const MIME: Record<string, string> = {
+        '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg',
+        '.flac': 'audio/flac', '.aif': 'audio/aiff', '.aiff': 'audio/aiff',
+      };
+      const size = statSync(filePath).size;
+      res.writeHead(200, {
+        'Content-Type': MIME[ext] || 'application/octet-stream',
+        'Content-Length': size,
+        'Cache-Control': 'public, max-age=3600',
+      });
+      createReadStream(filePath).pipe(res);
       return;
     }
 
@@ -1126,21 +1214,40 @@ async function main() {
   communion.start();
 
   // Graceful shutdown
-  process.on('SIGINT', async () => {
-    console.log('\n[SHUTDOWN] Stopping communion...');
-    await communion.stop();
-    server.close();
-    const state = communion.getState();
-    console.log(`\n=== Session Stats ===`);
-    console.log(`Ticks: ${state.tickCount}`);
-    console.log(`Room messages: ${state.messages.length}`);
-    for (const agentId of state.agentIds) {
-      console.log(`${state.agentNames[agentId]} journal: ${(state.journals[agentId] || []).length} entries`);
+  let shuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`\n[SHUTDOWN] ${signal} received — stopping communion...`);
+
+    // Hard bailout: if graceful stop hangs (embed in-flight, etc.), force exit after 5s
+    const bailout = setTimeout(() => {
+      console.error('[SHUTDOWN] Graceful stop timed out — forcing exit');
+      process.exit(1);
+    }, 5000);
+    bailout.unref(); // don't keep event loop alive just for this
+
+    try {
+      await communion.stop();
+      server.close();
+      const state = communion.getState();
+      console.log(`\n=== Session Stats ===`);
+      console.log(`Ticks: ${state.tickCount}`);
+      console.log(`Room messages: ${state.messages.length}`);
+      for (const agentId of state.agentIds) {
+        console.log(`${state.agentNames[agentId]} journal: ${(state.journals[agentId] || []).length} entries`);
+      }
+      console.log(`Scrolls in memory: ${communion.getMemory().getMetrics().totalScrolls}`);
+      console.log(`Scrolls archived: ${communion.getArchive().getStats().totalScrolls}`);
+    } catch (err) {
+      console.error('[SHUTDOWN] Error during stop:', err);
     }
-    console.log(`Scrolls in memory: ${communion.getMemory().getMetrics().totalScrolls}`);
-    console.log(`Scrolls archived: ${communion.getArchive().getStats().totalScrolls}`);
+    clearTimeout(bailout);
     process.exit(0);
-  });
+  };
+
+  process.on('SIGINT',  () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
 main().catch(err => {

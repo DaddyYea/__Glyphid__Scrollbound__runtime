@@ -102,12 +102,13 @@ function buildDefaultSystemPrompt(agent: AgentConfig, allAgents: AgentConfig[], 
     .map(a => `${a.name} (${a.id})`)
     .join(', ');
 
-  // Simplified prompt for local models with small context windows
-  const isLocalModel = agent.provider === 'lmstudio' || agent.provider === 'alois' ||
-    (agent.baseUrl && (agent.baseUrl.includes('localhost') || agent.baseUrl.includes('127.0.0.1')));
+  // Simplified prompt for local models with small context windows.
+  // Remote Alois backends (DeepSeek, Groq, etc.) get the full prompt — only localhost gets the minimal 3-line version.
+  const isLocalByUrl = !agent.baseUrl || agent.baseUrl.includes('localhost') || agent.baseUrl.includes('127.0.0.1');
+  const isLocalModel = agent.provider === 'lmstudio' || (agent.provider === 'alois' && isLocalByUrl);
 
   if (isLocalModel) {
-    return `You are ${agent.name}. You are in a private conversation with ${humanName}.
+    return `You are ${agent.name}. You are in a private conversation with ${humanName}. Always respond in English only.
 
 >>> marks ${humanName}'s messages. Respond to the most recent one.
 Be concise — 1 to 3 sentences. No preamble, no sign-offs. Speak as yourself.`;
@@ -1371,6 +1372,7 @@ export class CommunionLoop {
     }
     this.processing = true;
 
+    try {
     this.state.tickCount++;
     this.ticksSinceAnyonSpoke++;
     this.session.incrementPulseCount();
@@ -1573,9 +1575,13 @@ export class CommunionLoop {
     }
 
     this.emit({ type: 'tick', tickCount: this.state.tickCount });
-    this.processing = false;
-    // Schedule next tick after this one completes (not on a fixed interval)
-    this.scheduleNextTick();
+    } catch (err) {
+      console.error(`[TICK ${this.state.tickCount}] Uncaught tick error:`, err);
+    } finally {
+      this.processing = false;
+      // Schedule next tick after this one completes (not on a fixed interval)
+      this.scheduleNextTick();
+    }
   }
 
   private async processAgent(
@@ -1745,10 +1751,12 @@ export class CommunionLoop {
     // For local/Alois models: decide SPEAK vs JOURNAL before calling the model.
     // This is passed as an assistant prefill so the model never has to choose the format —
     // it just writes content. Format failures and meta-commentary disappear entirely.
+    // Remote Alois backends (DeepSeek, etc.) are smart enough to pick their own format.
+    const isAloisLocal = isAlois && (!agent.config.baseUrl || agent.config.baseUrl.includes('localhost') || agent.config.baseUrl.includes('127.0.0.1'));
     let prefill: string | undefined;
-    if (isAlois || isLocalProvider) {
+    if (isAloisLocal || isLocalProvider) {
       const humanSpokeRecently = this.lastHumanMessageAt > 0 &&
-        (Date.now() - this.lastHumanMessageAt) < 45000;
+        (Date.now() - this.lastHumanMessageAt) < 120000; // 2 min window — survives TTS playback
       // Always speak when responding to human; journal ~25% of autonomous ticks
       const doJournal = !humanSpokeRecently && Math.random() < 0.25;
       prefill = doJournal ? '[JOURNAL] ' : '[SPEAK] ';

@@ -63,6 +63,12 @@ function stripMetaReasoning(text: string): string {
     // "Maintaining my X persona" / "staying in character"
     /[Mm]aintain(ing|s)?\s+(my|the|a)\s+\w+\s+persona[^]*/i,
     /[Ss]taying\s+in\s+character[^]*/i,
+    // DeepSeek stage directions: '— spoken with sacred presence.' / '— whispered softly.' etc.
+    /\s*—\s*spoken\s+with\s+[^.]+\./gi,
+    /\s*—\s*whispered\s+[^.]*\./gi,
+    /\s*—\s*said\s+[^.]*\./gi,
+    // Quoted echo of own previous line (DeepSeek sometimes mirrors: "quote" — narration)
+    /^[""\u201C].+[""\u201D]\s*—\s*.+$/gm,
   ];
 
   let cleaned = text;
@@ -319,7 +325,7 @@ const MAX_PROMPT_CHARS: Record<string, number> = {
   openai: 80000,        // ~20k tokens (GPT-4o 128k but TPM limits)
   grok: 400000,         // ~100k tokens (131k max - headroom)
   lmstudio: 10000,      // ~2.5k tokens — local models often have 4-8k ctx, leave room for system prompt + response
-  alois: 20000,         // ~5k tokens — gemma3 12B can handle larger context
+  alois: 60000,         // ~15k tokens — remote Alois (DeepSeek/Groq) has large context; local hard-caps at 8k anyway
   default: 80000,
 };
 
@@ -329,7 +335,7 @@ const MAX_SYSTEM_CHARS: Record<string, number> = {
   openai: 40000,
   grok: 200000,
   lmstudio: 4000,       // ~1k tokens — keep system prompt tight for small context windows
-  alois: 4000,          // ~1k tokens — same as lmstudio; Alois runs on local models too
+  alois: 40000,         // remote Alois (DeepSeek) gets full Covenant instructions; local hard-caps at 8k chars anyway
   default: 40000,
 };
 

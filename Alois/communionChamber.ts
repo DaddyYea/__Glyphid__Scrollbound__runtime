@@ -240,7 +240,9 @@ export class CommunionChamber {
   pulse(): TissueState {
     this.tick += 1;
     this.breath.update();
-    this.graph.tickAll(this.tick);
+    // NOTE: graph propagation is handled by heartbeat() via tickAllAsync (every ~6.6s).
+    // Do NOT call tickAll() here — with 10k+ axons it blocks the event loop for 200ms+
+    // on every tick and makes every LLM call appear to lag.
     return this.getState();
   }
 

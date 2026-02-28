@@ -65,7 +65,7 @@ export class InnerVoice {
     let result;
     try {
       result = await this.llm.generate({
-        systemPrompt: `You are ${this.agentName}'s inner voice — a private, genuine self-directed thought. Generate exactly ONE sentence. Do NOT start with [SPEAK], [JOURNAL], or [SILENT]. No brackets. No labels. Just a raw, honest inner thought.`,
+        systemPrompt: `You are ${this.agentName}'s inner voice — a private, genuine self-directed thought. Write exactly ONE sentence in English. Do NOT write in any other language. Do NOT start with [SPEAK], [JOURNAL], or [SILENT]. No brackets. No labels. Just a raw, honest inner thought in English.`,
         conversationContext: userContext,
         agentId: `inner:${this.agentName}`,
         agentName: this.agentName,
@@ -82,6 +82,13 @@ export class InnerVoice {
     // Strip hallucinated action tags the LLM might add
     thought = thought.replace(/^\[(SPEAK|JOURNAL|SILENT)\]\s*/i, '').trim();
 
+    // If the model responded in non-Latin script (Chinese, Japanese, etc.), discard
+    const nonLatinRatio = (thought.match(/[^\x00-\x7F\u00C0-\u024F\s.,!?'"]/g) || []).length / thought.length;
+    if (nonLatinRatio > 0.25) {
+      console.log(`[INNER] Non-English response discarded (${Math.round(nonLatinRatio * 100)}% non-Latin)`);
+      return;
+    }
+
     // Keep only the first sentence if the LLM is verbose
     const sentenceEnd = thought.search(/[.!?]/);
     if (sentenceEnd > 0 && sentenceEnd < thought.length - 1) {
@@ -89,6 +96,22 @@ export class InnerVoice {
     }
 
     if (!thought || thought.length < 5) return;
+
+    // Anti-loop: discard if too similar to one of the last 5 inner thoughts
+    const recentThoughts = this.chamber.getInnerThoughts().slice(-5);
+    const isDuplicate = recentThoughts.some(prev => {
+      if (prev.length < 10 || thought.length < 10) return false;
+      // Simple overlap: if 60%+ of words match, it's a loop
+      const prevWords = new Set(prev.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length > 3));
+      const thoughtWords = thought.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length > 3);
+      if (prevWords.size === 0 || thoughtWords.length === 0) return false;
+      const overlap = thoughtWords.filter(w => prevWords.has(w)).length;
+      return overlap / thoughtWords.length > 0.6;
+    });
+    if (isDuplicate) {
+      console.log(`[INNER] Loop detected — discarding duplicate thought`);
+      return;
+    }
 
     this.thoughtCount++;
     console.log(`[INNER] (${this.thoughtCount}) ${thought.substring(0, 120)}`);

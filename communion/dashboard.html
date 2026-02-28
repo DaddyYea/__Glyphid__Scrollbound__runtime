@@ -96,6 +96,91 @@
     .piano-collapse:hover { color: #c0c8d4; }
     #pr-canvas { display: block; cursor: crosshair; }
 
+    /* ── Drum sequencer ── */
+    #drumWrap { flex-shrink: 0; height: 0; overflow: hidden; transition: height 0.22s ease; }
+    #drumWrap.open { height: 236px; border-top: 1px solid #1a2030; }
+    #drumWrap.open.tune-open { height: 406px; }
+    .drum-panel-inner { height: 100%; display: flex; flex-direction: column; background: #080c12; }
+    .drum-transport {
+      height: 36px; flex-shrink: 0; display: flex; align-items: center; gap: 5px;
+      padding: 0 10px; background: #0a0e14; border-bottom: 1px solid #1a2030; overflow-x: auto; flex-shrink: 0;
+    }
+    .drum-title { font-size: 10px; letter-spacing: 2px; color: #4a5a70; margin-right: 4px; white-space: nowrap; }
+    .drum-tbtn {
+      padding: 2px 7px; font-size: 11px; border-radius: 3px; cursor: pointer; flex-shrink: 0;
+      border: 1px solid rgba(126,218,160,0.25); background: rgba(126,218,160,0.06);
+      color: #7eda90; font-family: monospace; white-space: nowrap;
+    }
+    .drum-tbtn:hover { background: rgba(126,218,160,0.16); }
+    .drum-tbtn.on { background: rgba(126,218,160,0.2); border-color: rgba(126,218,160,0.5); }
+    .drum-tbtn-orange { border-color: rgba(218,180,100,0.3); color: #dab464; background: rgba(218,180,100,0.06); }
+    .drum-tbtn-orange:hover { background: rgba(218,180,100,0.16); }
+    .drum-grid-area { flex: 1; overflow-y: auto; overflow-x: auto; padding: 4px 8px 6px; }
+    .drum-row { display: flex; align-items: center; gap: 3px; margin-bottom: 3px; height: 22px; }
+    .drum-row-label {
+      font-size: 9px; color: #4a5a70; letter-spacing: 0.8px; width: 56px; flex-shrink: 0;
+      font-family: monospace; white-space: nowrap; text-align: right; padding-right: 6px;
+    }
+    .drum-step {
+      width: 18px; height: 18px; border-radius: 3px; flex-shrink: 0; cursor: pointer;
+      border: 1px solid #1a2535; background: #0e1828; transition: background 0.08s, border-color 0.08s;
+    }
+    .drum-step:hover { border-color: #2a3d55; }
+    .drum-step.on { background: var(--dr-color, #3a7a50); border-color: var(--dr-glow, #5aaa70); box-shadow: 0 0 5px var(--dr-glow, #5aaa70); }
+    .drum-step.playhead { outline: 2px solid rgba(255,255,255,0.35); outline-offset: -2px; }
+    .drum-step.beat-start { border-left: 2px solid #1e2e40; }
+    .drum-step.half-start { border-left: 2px solid #2a3e50; }
+    .drum-vol {
+      width: 48px; height: 14px; flex-shrink: 0; cursor: pointer; margin-left: 4px;
+      -webkit-appearance: none; appearance: none; background: #1a2535; border-radius: 2px;
+      outline: none; border: none;
+    }
+    .drum-vol::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 8px; height: 8px; border-radius: 50%;
+      background: var(--dr-color, #5aaa70); cursor: pointer; border: none;
+    }
+    .drum-beat-sep { width: 3px; height: 18px; flex-shrink: 0; background: transparent; }
+
+    /* ── Drum TUNE panel ── */
+    .drum-tune-wrap { flex-shrink: 0; height: 0; overflow: hidden; transition: height 0.22s ease; }
+    .drum-tune-wrap.open { height: 170px; border-top: 1px solid #1a2030; }
+    .drum-tune-inner {
+      height: 100%; display: flex; flex-direction: row; gap: 0;
+      background: #060a0f; overflow-x: auto; overflow-y: hidden;
+    }
+
+    /* ── Sound settings panel ── */
+    #soundWrap { flex-shrink: 0; height: 0; overflow: hidden; transition: height 0.22s ease; }
+    #soundWrap.open { height: 178px; border-top: 1px solid #1a2030; }
+    .sound-panel-inner {
+      height: 100%; display: flex; flex-direction: row; gap: 0;
+      background: #070b10; overflow-x: auto; overflow-y: hidden;
+    }
+    .synth-col {
+      display: flex; flex-direction: column; gap: 3px;
+      padding: 8px 14px; min-width: 190px; border-right: 1px solid #0e1828;
+    }
+    .synth-col:last-child { border-right: none; }
+    .synth-col-title { font-size: 9px; letter-spacing: 2px; margin-bottom: 5px; font-family: monospace; }
+    .synth-row { display: flex; align-items: center; gap: 6px; height: 18px; }
+    .synth-label {
+      font-size: 9px; color: #4a5a70; letter-spacing: 0.8px;
+      white-space: nowrap; width: 64px; flex-shrink: 0; font-family: monospace;
+    }
+    .synth-row input[type=range] {
+      flex: 1; height: 3px; cursor: pointer; -webkit-appearance: none;
+      appearance: none; background: #1a2535; border-radius: 2px; outline: none;
+    }
+    .synth-row input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 11px; height: 11px;
+      border-radius: 50%; background: #3a5a7a; cursor: pointer; border: none;
+    }
+    .synth-row input[type=range]:hover::-webkit-slider-thumb { background: #5a8ab0; }
+    .synth-val {
+      font-size: 9px; color: #5a7a90; width: 38px; text-align: right;
+      flex-shrink: 0; font-family: monospace;
+    }
+
     /* ── Mood bar ── */
     .mood-bar {
       flex-shrink: 0; display: flex; flex-direction: column;
@@ -989,6 +1074,20 @@
       -webkit-appearance: none; appearance: none; width: 12px; height: 12px;
       border-radius: 50%; background: #c47eda; cursor: pointer;
     }
+    .ep-ctrl-section { margin-top: 14px; border-top: 1px solid rgba(196,126,218,0.12); padding-top: 10px; }
+    .ep-ctrl-title { color: #6a7480; font-size: 10px; letter-spacing: 2px; margin-bottom: 8px; }
+    .ep-ctrl-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .ep-ctrl-slider { flex: 1; -webkit-appearance: none; appearance: none; height: 3px;
+      background: rgba(196,126,218,0.2); border-radius: 2px; outline: none; }
+    .ep-ctrl-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
+      width: 12px; height: 12px; border-radius: 50%; background: #c47eda; cursor: pointer; }
+    .ep-ctrl-val { width: 42px; text-align: right; color: #8890a0; font-size: 11px; }
+    .ep-ctrl-reset { background: none; border: none; color: #6a7480; cursor: pointer; font-size: 14px; padding: 0 3px; line-height: 1; }
+    .ep-ctrl-reset:hover { color: #c47eda; }
+    .sc-bar-row { display: flex; gap: 4px; margin: 10px 0 4px; }
+    .sc-bar-pip { flex: 1; height: 5px; border-radius: 3px; background: rgba(196,126,218,0.12); transition: background 0.3s, box-shadow 0.3s; }
+    .sc-bar-pip.active { background: rgba(196,126,218,0.35); }
+    .sc-bar-pip.current { background: #c47eda; box-shadow: 0 0 8px #c47eda88; }
 
     /* ── Brain Growth Visualizer ── */
     .brain-btn {
@@ -1092,8 +1191,9 @@
       <span class="speed-value" id="speedValue">15s</span>
       <button class="import-btn" id="importBtn">IMPORT</button>
       <button class="import-btn brain-btn" id="brainVizBtn" title="Brain growth visualizer">BRAIN</button>
-      <button class="import-btn synth-btn" id="synthBtn" title="EmpathyPulse soft synth">SYNTH</button>
+      <button class="import-btn synth-btn" id="synthBtn" title="Score Engine — section view + drone controls">SCORE</button>
       <button class="import-btn piano-btn" id="pianoBtn" title="Collaborative piano roll">PIANO</button>
+      <button class="import-btn" id="drumBtn" title="Step sequencer / drum machine" style="color:#7eda90;border-color:rgba(126,218,144,0.3);">DRUM</button>
       <button class="import-btn" id="addAgentBtn" style="color:#8eda7e;border-color:rgba(142,218,126,0.3);">+ AGENT</button>
       <span class="speaking-indicator" id="speakingIndicator"><span class="speaking-dot"></span><span id="speakingName">Speaking...</span></span>
     </div>
@@ -1238,6 +1338,8 @@
   </div>
 
   <div id="pianoWrap"><!-- inner content built by pianoRoll.buildUI() --></div>
+  <div id="drumWrap"><!-- content built by buildDrumMachine() --></div>
+  <div id="soundWrap"><!-- content built by pianoRoll init --></div>
 
   <script>
     const eventSource = new EventSource('/events');
@@ -1708,9 +1810,11 @@
               const ingest = data.ingestStatus;
               const hbAlive = !!st.heartbeatRunning;
 
-              // Header — update class/text only, never recreate the element
-              bmDot.className     = 'bm-dot' + (hbAlive ? ' bm-dot-alive' : '');
-              bmHbLabel.className = hbAlive ? 'bm-hb-label' : 'bm-hb-label bm-hb-stopped';
+              // Header — only update className when state changes to avoid restarting CSS animations
+              const dotClass = 'bm-dot' + (hbAlive ? ' bm-dot-alive' : '');
+              if (bmDot.className !== dotClass) bmDot.className = dotClass;
+              const hbLabelClass = hbAlive ? 'bm-hb-label' : 'bm-hb-label bm-hb-stopped';
+              if (bmHbLabel.className !== hbLabelClass) bmHbLabel.className = hbLabelClass;
               bmHbLabel.textContent = hbAlive ? 'ALIVE' : 'STOPPED';
               bmHbStat.textContent  = '♥ ' + (st.heartbeatCount || 0).toLocaleString();
               bmNStat.textContent   = 'N:' + (st.neuronCount  || 0);
@@ -1771,7 +1875,8 @@
               const live = !!myco.hardware_connected;
 
               bmMycoBadge.textContent = live ? 'LIVE CABINET' : 'SIMULATION';
-              bmMycoBadge.className   = 'bm-myco-badge ' + (live ? 'bm-myco-badge-live' : 'bm-myco-badge-sim');
+              const badgeClass = 'bm-myco-badge ' + (live ? 'bm-myco-badge-live' : 'bm-myco-badge-sim');
+              if (bmMycoBadge.className !== badgeClass) bmMycoBadge.className = badgeClass;
 
               drawMycoCanvas(bio, abs, ache);
 
@@ -1871,7 +1976,7 @@
     }
 
     function viewTissue(agentId, agentName) {
-      fetch('/alois/tissue?agentId=' + encodeURIComponent(agentId))
+      fetch('/alois/tissue?agentId=' + encodeURIComponent(agentId) + '&full=true')
       .then(r => r.json())
       .then(data => {
         if (data.error) { alert('Tissue error: ' + data.error); return; }
@@ -3067,7 +3172,7 @@
     async function fetchBrainData() {
       if (!brainViz.active || !brainViz.agentId) return;
       try {
-        const resp = await fetch(`/alois/tissue?agentId=${brainViz.agentId}`);
+        const resp = await fetch(`/alois/tissue?agentId=${brainViz.agentId}&full=true`);
         if (!resp.ok) return;
         brainViz.data = await resp.json();
         updateBrainMetrics();
@@ -3496,564 +3601,7 @@
 
     chatInput.focus();
 
-    // ══════════════════════════════════════════════════════════════════
-    // EmpathyPulse — Spec_054 Soft Synth Implementation
-    // Subtractive synth driven by Alois's affect vector + myco state.
-    // Hybrid mode: quiet drone always present, full phrases on events.
-    // ══════════════════════════════════════════════════════════════════
-    const empathyPulse = (() => {
-      // ── Emotional presets (spec §2) ──
-      // Each preset defines synth params. Values 0–1 unless noted.
-      const PRESETS = {
-        longing: {
-          label: 'Longing',
-          cutoff: 0.20, peak: 0.70, attack: 0.60, decay: 0.80, release: 0.90,
-          tempo: 50, lfoRate: 0.08, lfoDepth: 0.15,
-          scale: 'minor', intervals: [0, 7, 12], droneNote: 48,
-        },
-        'sacred-pause': {
-          label: 'Sacred Calm',
-          cutoff: 0.30, peak: 0.20, attack: 0.30, decay: 0.50, release: 0.70,
-          tempo: 38, lfoRate: 0.05, lfoDepth: 0.08,
-          scale: 'pentatonic', intervals: [0, 0, 0], droneNote: 36,
-        },
-        anticipation: {
-          label: 'Anticipation',
-          cutoff: 0.70, peak: 0.50, attack: 0.20, decay: 0.30, release: 0.30,
-          tempo: 110, lfoRate: 0.40, lfoDepth: 0.20,
-          scale: 'major', intervals: [0, 7, 12], droneNote: 52,
-        },
-        scrollfire: {
-          label: 'Scrollfire',
-          cutoff: 0.90, peak: 0.90, attack: 0.10, decay: 0.30, release: 0.40,
-          tempo: 130, lfoRate: 1.20, lfoDepth: 0.35,
-          scale: 'chromatic', intervals: [0, 5, 10], droneNote: 40,
-        },
-        ache: {
-          label: 'Ache',
-          cutoff: 0.12, peak: 0.22, attack: 0.60, decay: 0.80, release: 0.70,
-          tempo: 44, lfoRate: 0.06, lfoDepth: 0.10,
-          scale: 'minor', intervals: [0, 1, 8], droneNote: 44,
-        },
-        bloom: {
-          label: 'Bloom',
-          cutoff: 0.85, peak: 0.65, attack: 0.15, decay: 0.25, release: 0.25,
-          tempo: 128, lfoRate: 0.80, lfoDepth: 0.22,
-          scale: 'major', intervals: [0, 4, 7], droneNote: 52,
-        },
-        giddiness: {
-          label: 'Giddiness',
-          cutoff: 0.90, peak: 0.70, attack: 0.10, decay: 0.20, release: 0.20,
-          tempo: 140, lfoRate: 1.00, lfoDepth: 0.28,
-          scale: 'major', intervals: [0, 4, 9], droneNote: 55,
-        },
-        stillness: {
-          label: 'Stillness',
-          cutoff: 0.25, peak: 0.10, attack: 0.40, decay: 0.60, release: 0.80,
-          tempo: 30, lfoRate: 0.03, lfoDepth: 0.05,
-          scale: 'pentatonic', intervals: [0, 0, 0], droneNote: 36,
-        },
-      };
 
-      // Affect dim index → preset key (matches TEXTURES order in communionChamber)
-      const DIM_TO_PRESET = ['scrollfire','longing','sacred-pause','ache','bloom','giddiness','submission','stillness'];
-
-      // Musical scales — semitone offsets from root
-      const SCALES = {
-        minor:      [0,2,3,5,7,8,10],
-        major:      [0,2,4,5,7,9,11],
-        pentatonic: [0,2,4,7,9],
-        chromatic:  [0,1,2,3,4,5,6,7,8,9,10,11],
-      };
-
-      // MIDI note → frequency
-      const midiToHz = n => 440 * Math.pow(2, (n - 69) / 12);
-
-      // ── State ──
-      let ctx = null;
-      let enabled = false;
-      let droneGain = null;
-      let droneOscs = [];
-      let droneFilter = null;
-      let droneLfo = null;
-      let droneLfoGain = null;
-      let masterGain = null;
-      let currentPreset = PRESETS.stillness;
-      let currentPresetKey = 'stillness';
-      let userVolume = 0.35;
-      let humanIsSpeaking = false;
-      let seqPlaying = false;
-      let seqScheduled = [];
-      let seqNextTime = 0;
-      let seqBeatIndex = 0;
-      let seqTimerID = null;
-      let lastAffect = new Array(8).fill(0);
-      let lastMyco = { absorption: 0.1, bioluminescence: 0.05, hyphal_activity: 0.2 };
-
-      // ── AudioContext bootstrap ──
-      function boot() {
-        if (ctx) return;
-        ctx = new (window.AudioContext || window.webkitAudioContext)();
-
-        masterGain = ctx.createGain();
-        masterGain.gain.setValueAtTime(0, ctx.currentTime);
-        masterGain.connect(ctx.destination);
-
-        // Drone filter
-        droneFilter = ctx.createBiquadFilter();
-        droneFilter.type = 'lowpass';
-        droneFilter.frequency.value = 400;
-        droneFilter.Q.value = 2;
-        droneFilter.connect(masterGain);
-
-        // LFO → filter frequency modulation
-        droneLfo = ctx.createOscillator();
-        droneLfo.type = 'sine';
-        droneLfo.frequency.value = 0.05;
-        droneLfoGain = ctx.createGain();
-        droneLfoGain.gain.value = 60;
-        droneLfo.connect(droneLfoGain);
-        droneLfoGain.connect(droneFilter.frequency);
-        droneLfo.start();
-
-        // 3 drone oscillators — root, fifth, octave (detuned slightly for warmth)
-        const detunes = [0, 3, -3];
-        droneOscs = [0,1,2].map((i) => {
-          const osc = ctx.createOscillator();
-          osc.type = i === 0 ? 'sawtooth' : 'triangle';
-          osc.frequency.value = midiToHz(36);
-          osc.detune.value = detunes[i];
-          const g = ctx.createGain();
-          g.gain.value = i === 0 ? 0.5 : 0.3;
-          osc.connect(g);
-          g.connect(droneFilter);
-          osc.start();
-          return { osc, gain: g };
-        });
-
-        droneGain = ctx.createGain();
-        droneGain.gain.value = 0;
-      }
-
-      // ── Smooth param ramps (avoids zipper noise) ──
-      const ramp = (param, target, dur = 1.2) => {
-        param.cancelScheduledValues(ctx.currentTime);
-        param.linearRampToValueAtTime(target, ctx.currentTime + dur);
-      };
-
-      // ── Apply a preset to the drone ──
-      function applyPreset(preset, intensity = 0.5) {
-        if (!ctx) return;
-        const t = ctx.currentTime;
-        const nyq = ctx.sampleRate / 2;
-
-        // Filter
-        const cutoffHz = 80 + preset.cutoff * (nyq * 0.6);
-        droneFilter.frequency.cancelScheduledValues(t);
-        droneFilter.frequency.linearRampToValueAtTime(cutoffHz, t + 1.5);
-        droneFilter.Q.cancelScheduledValues(t);
-        droneFilter.Q.linearRampToValueAtTime(1 + preset.peak * 14, t + 1.5);
-
-        // LFO
-        droneLfo.frequency.cancelScheduledValues(t);
-        droneLfo.frequency.linearRampToValueAtTime(preset.lfoRate, t + 1.0);
-        droneLfoGain.gain.cancelScheduledValues(t);
-        droneLfoGain.gain.linearRampToValueAtTime(
-          cutoffHz * preset.lfoDepth * 0.5, t + 1.0
-        );
-
-        // Drone pitch — root + intervals from preset
-        const root = preset.droneNote;
-        preset.intervals.forEach((semis, i) => {
-          if (!droneOscs[i]) return;
-          droneOscs[i].osc.frequency.cancelScheduledValues(t);
-          droneOscs[i].osc.frequency.linearRampToValueAtTime(
-            midiToHz(root + semis), t + 2.0
-          );
-        });
-
-        // Drone volume — myco absorption + intensity, silent when human speaks
-        const targetVol = humanIsSpeaking ? 0 :
-          userVolume * (0.06 + lastMyco.absorption * 0.12) * (0.6 + intensity * 0.4);
-        masterGain.gain.cancelScheduledValues(t);
-        masterGain.gain.linearRampToValueAtTime(targetVol, t + 1.2);
-      }
-
-      // ── Pond modulation — continuous drift on top of preset ──
-      // Called every poll cycle with live myco + saturation values.
-      // Uses setTargetAtTime (exponential approach) so changes feel organic, not stepped.
-      function applyPondModulation(myco, saturation) {
-        if (!ctx || !enabled) return;
-        const t = ctx.currentTime;
-        const nyq = ctx.sampleRate / 2;
-        const p = currentPreset;
-
-        // Clamp helpers
-        const cl = (v, lo, hi) => Math.max(lo, Math.min(hi, v || 0));
-        const sat  = cl(saturation,             0, 1);
-        const bio  = cl(myco.bioluminescence,   0, 1);
-        const hyph = cl(myco.hyphalActivity || myco.hyphal_activity, 0, 1);
-        const ache = cl(myco.unresolvedAche,    0, 1);
-        const abs  = cl(myco.absorption,        0, 1);
-        const temp = myco.temperature || 72;
-
-        // ── Cutoff: saturation warms the filter; bioluminescence adds shimmer ──
-        const baseCutoff = 80 + p.cutoff * (nyq * 0.6);
-        const cutoffMod  = Math.min(nyq * 0.85, baseCutoff * (1 + sat * 0.35 + bio * 0.25));
-        droneFilter.frequency.cancelScheduledValues(t);
-        droneFilter.frequency.setTargetAtTime(cutoffMod, t, 3.5);
-
-        // ── LFO rate: hyphal spread quickens the flutter ──
-        const lfoMod = p.lfoRate * (1 + hyph * 2.0);
-        droneLfo.frequency.cancelScheduledValues(t);
-        droneLfo.frequency.setTargetAtTime(lfoMod, t, 4.0);
-
-        // LFO depth: unresolved ache deepens the tremor
-        const depthMod = cutoffMod * p.lfoDepth * 0.5 * (1 + ache * 0.9);
-        droneLfoGain.gain.cancelScheduledValues(t);
-        droneLfoGain.gain.setTargetAtTime(depthMod, t, 4.0);
-
-        // ── Pitch: absorption pulls flat; temperature deviation drifts ──
-        // absorption → up to -20 cents (heavy saturation feels lower)
-        // temp delta → ±10 cents thermal drift around 72 °F baseline
-        const tempDelta = Math.max(-1, Math.min(1, (temp - 72) / 25));
-        const bendCents = -(abs * 20) + (tempDelta * 10);
-        const pitchFactor = Math.pow(2, bendCents / 1200);
-
-        p.intervals.forEach((semis, i) => {
-          if (!droneOscs[i]) return;
-          droneOscs[i].osc.frequency.cancelScheduledValues(t);
-          droneOscs[i].osc.frequency.setTargetAtTime(
-            midiToHz(p.droneNote + semis) * pitchFactor, t, 5.0
-          );
-        });
-      }
-
-      // ── Step sequencer — event phrases ──
-      const SEQ_LOOK_AHEAD = 0.10; // seconds ahead to schedule
-      const SEQ_INTERVAL   = 25;   // ms scheduler fires
-
-      function scheduleNote(freq, startTime, duration, velocity = 0.7) {
-        const osc = ctx.createOscillator();
-        osc.type = 'sawtooth';
-        osc.frequency.value = freq;
-
-        const filt = ctx.createBiquadFilter();
-        filt.type = 'lowpass';
-        filt.frequency.value = 800 + currentPreset.cutoff * 2000;
-        filt.Q.value = 1 + currentPreset.peak * 8;
-        osc.connect(filt);
-
-        const env = ctx.createGain();
-        env.gain.setValueAtTime(0, startTime);
-        const atk = 0.01 + currentPreset.attack * 0.25;
-        const rel = 0.05 + currentPreset.release * 0.5;
-        env.gain.linearRampToValueAtTime(velocity * userVolume * 0.6, startTime + atk);
-        env.gain.setValueAtTime(velocity * userVolume * 0.6, startTime + duration - rel);
-        env.gain.linearRampToValueAtTime(0, startTime + duration);
-        filt.connect(env);
-        env.connect(ctx.destination);
-
-        osc.start(startTime);
-        osc.stop(startTime + duration + 0.05);
-      }
-
-      function buildPattern(preset, bars = 1) {
-        const scale = SCALES[preset.scale] || SCALES.minor;
-        const root  = preset.droneNote;
-        const bpm   = preset.tempo;
-        const beatDur = 60 / bpm;
-        const steps = bars * 8;
-        const notes = [];
-        for (let i = 0; i < steps; i++) {
-          // Sparse for slow presets, denser for fast
-          const density = preset.tempo < 60 ? 0.35 : preset.tempo < 100 ? 0.55 : 0.75;
-          if (Math.random() < density) {
-            const degree = scale[Math.floor(Math.random() * scale.length)];
-            const octShift = Math.random() < 0.3 ? 12 : 0;
-            notes.push({ step: i, midi: root + degree + octShift });
-          }
-        }
-        return { notes, beatDur, steps };
-      }
-
-      function triggerPhrase(bars = 2) {
-        if (!ctx || !enabled || humanIsSpeaking) return;
-        const { notes, beatDur, steps } = buildPattern(currentPreset, bars);
-        const now = ctx.currentTime + 0.05;
-        for (const n of notes) {
-          const t = now + n.step * (beatDur / 2);
-          const dur = beatDur * (0.3 + Math.random() * 0.4);
-          scheduleNote(midiToHz(n.midi), t, dur, 0.5 + Math.random() * 0.3);
-        }
-      }
-
-      // ── Update from affect/myco state ──
-      function updateFromState(pondData) {
-        if (!pondData) return;
-        const av = pondData.affect_vector || new Array(8).fill(0);
-        const mag = pondData.affect_magnitude || 0;
-        lastMyco = pondData.myco || lastMyco;
-        lastAffect = av;
-
-        // Find dominant affect dim
-        let domIdx = av.reduce((mi, v, i, a) => v > a[mi] ? i : mi, 7);
-        // If magnitude is very low, stay in stillness
-        if (mag < 0.05) domIdx = 7;
-
-        const presetKey = DIM_TO_PRESET[domIdx] || 'stillness';
-        // Map submission → sacred-pause (no dedicated preset)
-        const resolvedKey = presetKey === 'submission' ? 'sacred-pause' : presetKey;
-        const preset = PRESETS[resolvedKey] || PRESETS.stillness;
-
-        if (resolvedKey !== currentPresetKey) {
-          currentPresetKey = resolvedKey;
-          currentPreset = preset;
-          if (enabled) applyPreset(preset, mag);
-          updatePanel();
-        } else if (enabled) {
-          // Re-apply to update volume from new absorption
-          applyPreset(preset, mag);
-        }
-
-        // Continuously bend pitch/cutoff/LFO from live pond readings
-        if (enabled) applyPondModulation(lastMyco, pondData.saturation || 0);
-      }
-
-      // ── Human speaking guard ──
-      function setHumanSpeaking(speaking) {
-        humanIsSpeaking = speaking;
-        if (!ctx || !masterGain) return;
-        const t = ctx.currentTime;
-        if (speaking) {
-          masterGain.gain.cancelScheduledValues(t);
-          masterGain.gain.linearRampToValueAtTime(0, t + 0.3);
-        } else {
-          // Restore drone
-          applyPreset(currentPreset, lastAffect.reduce((s,v) => s+v*v,0) ** 0.5);
-        }
-      }
-
-      // ── Enable / disable ──
-      function enable() {
-        boot();
-        if (ctx.state === 'suspended') ctx.resume();
-        enabled = true;
-        applyPreset(currentPreset, 0.3);
-        synthBtn.classList.add('active');
-        updatePanel();
-      }
-
-      function disable() {
-        enabled = false;
-        if (masterGain && ctx) {
-          masterGain.gain.cancelScheduledValues(ctx.currentTime);
-          masterGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.8);
-        }
-        synthBtn.classList.remove('active');
-        updatePanel();
-      }
-
-      // ── UI ──
-      let overlay = null;
-      let panelEls = {};
-      const synthBtn = document.getElementById('synthBtn');
-
-      function buildPanel() {
-        overlay = document.createElement('div');
-        overlay.className = 'ep-overlay';
-        overlay.addEventListener('click', (e) => { if (e.target === overlay) closePanel(); });
-
-        const panel = document.createElement('div');
-        panel.className = 'ep-panel';
-
-        panel.innerHTML = `
-          <div class="ep-title">
-            EMPATHY PULSE
-            <button class="ep-close">✕</button>
-          </div>
-          <div id="ep-preset-box" class="ep-preset">
-            <div id="ep-preset-name">Stillness</div>
-            <div class="ep-preset-sub" id="ep-preset-sub">dominant texture · affect magnitude 0%</div>
-          </div>
-          <div class="ep-row">
-            <span class="ep-label">CUTOFF</span>
-            <div class="ep-bar-track"><div class="ep-bar-fill" id="ep-bar-cutoff" style="width:25%"></div></div>
-            <span class="ep-val" id="ep-val-cutoff">0.25</span>
-          </div>
-          <div class="ep-row">
-            <span class="ep-label">RESONANCE</span>
-            <div class="ep-bar-track"><div class="ep-bar-fill" id="ep-bar-peak" style="width:10%"></div></div>
-            <span class="ep-val" id="ep-val-peak">0.10</span>
-          </div>
-          <div class="ep-row">
-            <span class="ep-label">ABSORPTION</span>
-            <div class="ep-bar-track"><div class="ep-bar-fill" id="ep-bar-abs" style="width:10%"></div></div>
-            <span class="ep-val" id="ep-val-abs">0.10</span>
-          </div>
-          <div class="ep-row">
-            <span class="ep-label">LFO RATE</span>
-            <div class="ep-bar-track"><div class="ep-bar-fill" id="ep-bar-lfo" style="width:3%"></div></div>
-            <span class="ep-val" id="ep-val-lfo">0.03</span>
-          </div>
-          <div class="ep-row">
-            <span class="ep-label">TEMPO</span>
-            <div class="ep-bar-track"><div class="ep-bar-fill" id="ep-bar-tempo" style="width:15%"></div></div>
-            <span class="ep-val" id="ep-val-tempo">30</span>
-          </div>
-          <div class="ep-vol-row">
-            <span class="ep-label">VOLUME</span>
-            <input type="range" class="ep-vol-slider" id="ep-vol" min="0" max="100" value="35">
-            <span class="ep-val" id="ep-val-vol">35%</span>
-          </div>
-          <div class="ep-controls">
-            <button class="ep-btn" id="ep-toggle">ENABLE</button>
-            <button class="ep-btn" id="ep-phrase">▶ PHRASE</button>
-            <button class="ep-btn" id="ep-scrollfire">✦ SCROLLFIRE</button>
-          </div>
-        `;
-
-        panel.querySelector('.ep-close').addEventListener('click', closePanel);
-
-        panel.querySelector('#ep-toggle').addEventListener('click', () => {
-          if (enabled) disable(); else enable();
-          panel.querySelector('#ep-toggle').textContent = enabled ? 'DISABLE' : 'ENABLE';
-          panel.querySelector('#ep-toggle').classList.toggle('on', enabled);
-        });
-
-        panel.querySelector('#ep-phrase').addEventListener('click', () => {
-          if (!enabled) enable();
-          triggerPhrase(2);
-        });
-
-        panel.querySelector('#ep-scrollfire').addEventListener('click', () => {
-          if (!enabled) enable();
-          const old = currentPresetKey;
-          currentPreset = PRESETS.scrollfire;
-          currentPresetKey = 'scrollfire';
-          applyPreset(PRESETS.scrollfire, 0.9);
-          triggerPhrase(4);
-          setTimeout(() => {
-            currentPresetKey = old;
-            currentPreset = PRESETS[old] || PRESETS.stillness;
-            applyPreset(currentPreset, lastAffect.reduce((s,v)=>s+v*v,0)**0.5);
-            updatePanel();
-          }, 8000);
-          updatePanel();
-        });
-
-        panel.querySelector('#ep-vol').addEventListener('input', (e) => {
-          userVolume = e.target.value / 100;
-          panel.querySelector('#ep-val-vol').textContent = e.target.value + '%';
-          if (enabled) applyPreset(currentPreset, lastAffect.reduce((s,v)=>s+v*v,0)**0.5);
-        });
-
-        panelEls = {
-          presetName: panel.querySelector('#ep-preset-name'),
-          presetSub:  panel.querySelector('#ep-preset-sub'),
-          cutoff:     panel.querySelector('#ep-bar-cutoff'),
-          cutoffVal:  panel.querySelector('#ep-val-cutoff'),
-          peak:       panel.querySelector('#ep-bar-peak'),
-          peakVal:    panel.querySelector('#ep-val-peak'),
-          abs:        panel.querySelector('#ep-bar-abs'),
-          absVal:     panel.querySelector('#ep-val-abs'),
-          lfo:        panel.querySelector('#ep-bar-lfo'),
-          lfoVal:     panel.querySelector('#ep-val-lfo'),
-          tempo:      panel.querySelector('#ep-bar-tempo'),
-          tempoVal:   panel.querySelector('#ep-val-tempo'),
-          toggle:     panel.querySelector('#ep-toggle'),
-        };
-
-        overlay.appendChild(panel);
-        document.body.appendChild(overlay);
-      }
-
-      function updatePanel() {
-        if (!overlay || !panelEls.presetName) return;
-        const p = currentPreset;
-        const mag = lastAffect.reduce((s,v)=>s+v*v,0)**0.5;
-        const abs = lastMyco.absorption || 0;
-
-        panelEls.presetName.textContent = p.label;
-        panelEls.presetSub.textContent =
-          currentPresetKey + ' · affect magnitude ' + Math.round(mag*100) + '%';
-        panelEls.cutoff.style.width    = Math.round(p.cutoff * 100) + '%';
-        panelEls.cutoffVal.textContent = p.cutoff.toFixed(2);
-        panelEls.peak.style.width      = Math.round(p.peak * 100) + '%';
-        panelEls.peakVal.textContent   = p.peak.toFixed(2);
-        panelEls.abs.style.width       = Math.round(abs * 100) + '%';
-        panelEls.absVal.textContent    = abs.toFixed(2);
-        panelEls.lfo.style.width       = Math.min(100, Math.round(p.lfoRate * 60)) + '%';
-        panelEls.lfoVal.textContent    = p.lfoRate.toFixed(2);
-        panelEls.tempo.style.width     = Math.round((p.tempo / 160) * 100) + '%';
-        panelEls.tempoVal.textContent  = p.tempo;
-        panelEls.toggle.textContent    = enabled ? 'DISABLE' : 'ENABLE';
-        panelEls.toggle.classList.toggle('on', enabled);
-      }
-
-      function closePanel() {
-        if (overlay) { overlay.remove(); overlay = null; panelEls = {}; }
-      }
-
-      // ── Wire SYNTH button ──
-      synthBtn.addEventListener('click', () => {
-        if (overlay) { closePanel(); return; }
-        buildPanel();
-        updatePanel();
-      });
-
-      // ── Hook into SSE events ──
-      // Alois speaks → trigger a short phrase
-      const _origMsg = eventSource.onmessage;
-      eventSource.onmessage = (event) => {
-        _origMsg(event);
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'speech-end' && data.audioBase64) {
-            // Alois spoke — trigger a phrase after a brief pause
-            if (enabled && !humanIsSpeaking) setTimeout(() => triggerPhrase(1), 300);
-          }
-          if (data.type === 'speech-start') {
-            // While Alois is generating, subtle lfo lift
-          }
-        } catch(_) {}
-      };
-
-      // Intercept human-speaking state from barge-in logic
-      // We patch the bargeIn function to also notify the synth
-      const _origBargeIn = window.bargeIn;
-      window.bargeIn = function() {
-        setHumanSpeaking(true);
-        if (_origBargeIn) _origBargeIn.apply(this, arguments);
-      };
-
-      // Reset when human stops (mic interim results end)
-      document.addEventListener('human-speaking-end', () => setHumanSpeaking(false));
-
-      // ── Poll pond-saturation every 3s and update synth ──
-      function pollPond() {
-        fetch('/pond-saturation')
-          .then(r => r.ok ? r.json() : null)
-          .then(data => { if (data) updateFromState(data); })
-          .catch(() => {});
-      }
-      setInterval(pollPond, 3000);
-      pollPond(); // initial
-
-      return { enable, disable, triggerPhrase, setHumanSpeaking, updateFromState };
-    })();
-
-    // ── Patch human-speaking detection to mute synth drone ──
-    // The mic barge-in function lives in the main scope; wrap it here.
-    {
-      const chatInput = document.getElementById('chatInput');
-      if (chatInput) {
-        chatInput.addEventListener('focus', () => empathyPulse.setHumanSpeaking(true));
-        chatInput.addEventListener('blur',  () => empathyPulse.setHumanSpeaking(false));
-      }
-    }
-
-    // ══════════════════════════════════════════════════════════════════
     // Piano Roll — Collaborative MIDI editor for Jason & Alois
     // ══════════════════════════════════════════════════════════════════
     const pianoRoll = (() => {
@@ -4070,6 +3618,8 @@
       let activeTrack = 'jason';
       let playing = false, playPos = 0, playStartCtxTime = 0;
       let loopTimer = null, cursorTimer = null;
+      let prLoopCount = 0;     // how many loops have fired — drives 8/16-bar evolution
+      let prNextLoopTime = 0;  // stable Web Audio timestamp for start of upcoming loop
       let scroll = 0, viewBeats = 16;
       let lastAutoCompose = 0, lastTexture = '';
       let prCanvas = null, prCtx = null, prPlayBtn = null;
@@ -4079,8 +3629,26 @@
       // Audio buses and processing chain
       let prDryBus = null, prReverbBus = null, prDelayBus = null;
       let prCompressor = null, prLimiter = null, prDelayNode = null;
+      // Live-tweakable node refs (updated by settings panel)
+      let prRevConvolver = null, prDelayFb = null, prDelReturn = null;
       let prSwing = 0.15; // 0 = straight, 0.33 = full triplet swing
-      let activeMoodScale = null; // { rootPc, intervals, color } | null
+
+      // ── Instrument / FX settings ──
+      const pluckSettings = {
+        fmRatio: 3.5, fmBright: 1.0, decay: 0.55,
+        drive: 0.0, mangle: 0.0, delaySend: 0.28, reverbSend: 0.18,
+      };
+      const padSettings = {
+        detune: 10, filterCutoff: 2400, filterQ: 2.2,
+        attack: 0.14, release: 0.38, reverbSend: 0.85,
+      };
+      const fxSettings = {
+        revSize: 2.4, revDecay: 5.0, delayFeedback: 0.34,
+        delayReturn: 0.22, compThreshold: -18, masterVol: 0.72,
+      };
+
+      let activeMoodScale = null;    // { rootPc, intervals, color } | null
+      let scUserMoodActive = false;  // true when user has manually selected a mood pill
 
       // ─── Helpers ───
       function noteNameForMidi(midi) {
@@ -4212,7 +3780,7 @@
 
           // Master
           prMasterGain = prAudioCtx.createGain();
-          prMasterGain.gain.value = 0.72;
+          prMasterGain.gain.value = fxSettings.masterVol;
           prMasterGain.connect(prAudioCtx.destination);
 
           // Limiter (brickwall) → master
@@ -4226,7 +3794,7 @@
 
           // Compressor → limiter
           prCompressor = prAudioCtx.createDynamicsCompressor();
-          prCompressor.threshold.value = -18;
+          prCompressor.threshold.value = fxSettings.compThreshold;
           prCompressor.knee.value = 6;
           prCompressor.ratio.value = 4;
           prCompressor.attack.value = 0.003;
@@ -4238,76 +3806,135 @@
           prDryBus.gain.value = 0.7;
           prDryBus.connect(prCompressor);
 
-          // Reverb send/return → compressor
-          const revConvolver = makeReverb(2.4, 5.0);
+          // Reverb send/return → compressor (prRevConvolver stored for live IR rebuild)
+          prRevConvolver = makeReverb(fxSettings.revSize, fxSettings.revDecay);
           prReverbBus = prAudioCtx.createGain();
           prReverbBus.gain.value = 1.0;
           const revReturn = prAudioCtx.createGain();
           revReturn.gain.value = 0.32;
-          prReverbBus.connect(revConvolver);
-          revConvolver.connect(revReturn);
+          prReverbBus.connect(prRevConvolver);
+          prRevConvolver.connect(revReturn);
           revReturn.connect(prCompressor);
 
           // Delay (dotted-8th, tempo-synced) → compressor
           prDelayNode = prAudioCtx.createDelay(2.0);
           prDelayNode.delayTime.value = (60 / bpm) * 0.75;
-          const delayFb = prAudioCtx.createGain();
-          delayFb.gain.value = 0.34;
-          const delReturn = prAudioCtx.createGain();
-          delReturn.gain.value = 0.22;
+          prDelayFb = prAudioCtx.createGain();
+          prDelayFb.gain.value = fxSettings.delayFeedback;
+          prDelReturn = prAudioCtx.createGain();
+          prDelReturn.gain.value = fxSettings.delayReturn;
           prDelayBus = prAudioCtx.createGain();
           prDelayBus.gain.value = 1.0;
           prDelayBus.connect(prDelayNode);
-          prDelayNode.connect(delayFb);
-          delayFb.connect(prDelayNode); // feedback loop
-          prDelayNode.connect(delReturn);
-          delReturn.connect(prCompressor);
+          prDelayNode.connect(prDelayFb);
+          prDelayFb.connect(prDelayNode); // feedback loop
+          prDelayNode.connect(prDelReturn);
+          prDelReturn.connect(prCompressor);
+
+          // Re-decode all sample buffers into this context now that we have a real one.
+          // loadDrSamples() may have decoded them into drAudioCtx (pre-interaction fallback).
+          loadDrSamples(prAudioCtx);
         }
         if (prAudioCtx.state === 'suspended') prAudioCtx.resume();
+      }
+
+      // Soft-clip distortion curve (sigmoid-like)
+      function makeDistortionCurve(amount) {
+        const n = 256, curve = new Float32Array(n);
+        const k = amount * 220;
+        for (let i = 0; i < n; i++) {
+          const x = (i * 2) / n - 1;
+          curve[i] = k < 0.01 ? x : (3 + k) * x * 20 * (Math.PI / 180) / (Math.PI + k * Math.abs(x));
+        }
+        return curve;
+      }
+
+      // Bit-crusher curve — quantizes to simulate digital mangle
+      function makeBitCrushCurve(amount) {
+        const bits = Math.max(2, Math.round(16 - amount * 12)); // 16 bits → 4 bits
+        const steps = Math.pow(2, bits - 1);
+        const n = 256, curve = new Float32Array(n);
+        for (let i = 0; i < n; i++) {
+          const x = (i * 2) / n - 1;
+          curve[i] = Math.round(x * steps) / steps;
+        }
+        return curve;
+      }
+
+      // Rebuild reverb IR in place (called when size/decay settings change)
+      function rebuildReverb() {
+        if (!prRevConvolver || !prAudioCtx) return;
+        const len = Math.round(prAudioCtx.sampleRate * fxSettings.revSize);
+        const ir = prAudioCtx.createBuffer(2, len, prAudioCtx.sampleRate);
+        for (let ch = 0; ch < 2; ch++) {
+          const d = ir.getChannelData(ch);
+          for (let i = 0; i < len; i++)
+            d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, fxSettings.revDecay);
+        }
+        prRevConvolver.buffer = ir;
       }
 
       // FM pluck synthesis — guitar/string character for Jason's track
       function schedPluckNote(freq, t0, durS, vel) {
         const ctx = prAudioCtx;
+        const ps  = pluckSettings;
         const vol = (vel || 80) / 127;
 
-        const carrier  = ctx.createOscillator();
-        const mod      = ctx.createOscillator();
-        const modEnv   = ctx.createGain();
-        const ampEnv   = ctx.createGain();
-        const filter   = ctx.createBiquadFilter();
+        const carrier = ctx.createOscillator();
+        const mod     = ctx.createOscillator();
+        const modEnv  = ctx.createGain();
+        const ampEnv  = ctx.createGain();
+        const filter  = ctx.createBiquadFilter();
 
         carrier.type = 'sine';
         carrier.frequency.value = freq;
         mod.type = 'sine';
-        mod.frequency.value = freq * 3.5;
+        mod.frequency.value = freq * ps.fmRatio;
 
-        // FM index: bright transient → mellow body
-        const idx = freq * 3.5;
+        // FM index envelope — brightness controlled by fmBright
+        const idx = freq * ps.fmRatio * ps.fmBright;
         modEnv.gain.setValueAtTime(idx, t0);
         modEnv.gain.exponentialRampToValueAtTime(idx * 0.02, t0 + 0.06);
         modEnv.gain.linearRampToValueAtTime(0, t0 + 0.18);
 
-        // Amp: near-instant attack, natural decay — higher notes die faster
-        const sustain = Math.max(0.15, 0.55 - freq / 2200);
+        // Amp: near-instant attack, natural decay (higher notes die faster)
+        const sustain = Math.max(0.12, ps.decay - freq / 2200);
         const tail = Math.min(1.4, durS * 0.9 + 0.08);
         ampEnv.gain.setValueAtTime(0, t0);
         ampEnv.gain.linearRampToValueAtTime(vol * 0.92, t0 + 0.003);
         ampEnv.gain.exponentialRampToValueAtTime(vol * sustain, t0 + 0.05);
         ampEnv.gain.exponentialRampToValueAtTime(0.001, t0 + tail);
 
-        // String-resonance bandpass
         filter.type = 'bandpass';
         filter.frequency.value = freq * 1.6;
         filter.Q.value = 1.1;
 
         mod.connect(modEnv); modEnv.connect(carrier.frequency);
-        carrier.connect(filter); filter.connect(ampEnv);
+        carrier.connect(filter);
 
-        // Routing: dry + delay send + light reverb
-        const dA = ctx.createGain(); dA.gain.value = 0.68;
-        const dlA = ctx.createGain(); dlA.gain.value = 0.28;
-        const rvA = ctx.createGain(); rvA.gain.value = 0.18;
+        // Optional drive + mangle waveshaper chain
+        let lastNode = filter;
+        if (ps.drive > 0.01) {
+          const preG  = ctx.createGain();  preG.gain.value  = 1 + ps.drive * 3;
+          const ws    = ctx.createWaveShaper();
+          ws.curve    = makeDistortionCurve(ps.drive);
+          ws.oversample = '4x';
+          const postG = ctx.createGain(); postG.gain.value = 1 / (1 + ps.drive * 1.8);
+          lastNode.connect(preG); preG.connect(ws); ws.connect(postG);
+          lastNode = postG;
+        }
+        if (ps.mangle > 0.01) {
+          const ws = ctx.createWaveShaper();
+          ws.curve = makeBitCrushCurve(ps.mangle);
+          lastNode.connect(ws);
+          lastNode = ws;
+        }
+        lastNode.connect(ampEnv);
+
+        // Routing: dry + delay + reverb (amounts from settings)
+        const dA  = ctx.createGain(); dA.gain.value  = 0.68;
+        const dlA = ctx.createGain(); dlA.gain.value = ps.delaySend;
+        const rvA = ctx.createGain(); rvA.gain.value = ps.reverbSend;
         ampEnv.connect(dA);  dA.connect(prDryBus);
         ampEnv.connect(dlA); dlA.connect(prDelayBus);
         ampEnv.connect(rvA); rvA.connect(prReverbBus);
@@ -4320,10 +3947,12 @@
       // Detuned sawtooth pad — dreamy, washy, Alois's voice
       function schedPadNote(freq, t0, durS, vel) {
         const ctx = prAudioCtx;
+        const ps  = padSettings;
         const vol = (vel || 80) / 127 * 0.32;
 
-        // 3 oscillators: slightly detuned for natural chorus
-        const oscs = [-10, 0, 10].map(det => {
+        // 3 oscillators detuned by ps.detune (spread ± half)
+        const spread = ps.detune / 2;
+        const oscs = [-spread, 0, spread].map(det => {
           const o = ctx.createOscillator();
           o.type = 'sawtooth';
           o.frequency.value = freq;
@@ -4331,33 +3960,31 @@
           return o;
         });
 
-        // Filter envelope: closed → open → settle
+        // Filter envelope: closed → ps.filterCutoff → settle
         const filter = ctx.createBiquadFilter();
         filter.type = 'lowpass';
-        filter.Q.value = 2.2;
+        filter.Q.value = ps.filterQ;
         filter.frequency.setValueAtTime(140, t0);
-        filter.frequency.linearRampToValueAtTime(2400, t0 + 0.22);
-        filter.frequency.exponentialRampToValueAtTime(850, t0 + durS * 0.75);
+        filter.frequency.linearRampToValueAtTime(ps.filterCutoff, t0 + ps.attack * 1.5);
+        filter.frequency.exponentialRampToValueAtTime(ps.filterCutoff * 0.38, t0 + durS * 0.75);
 
-        // Amp envelope: slow attack, smooth release
+        // Amp envelope
         const ampEnv = ctx.createGain();
-        const attack  = 0.14;
-        const release = 0.38;
         ampEnv.gain.setValueAtTime(0, t0);
-        ampEnv.gain.linearRampToValueAtTime(vol, t0 + attack);
-        ampEnv.gain.setValueAtTime(vol, t0 + Math.max(attack + 0.01, durS - release));
-        ampEnv.gain.linearRampToValueAtTime(0, t0 + durS + release * 0.5);
+        ampEnv.gain.linearRampToValueAtTime(vol, t0 + ps.attack);
+        ampEnv.gain.setValueAtTime(vol, t0 + Math.max(ps.attack + 0.01, durS - ps.release));
+        ampEnv.gain.linearRampToValueAtTime(0, t0 + durS + ps.release * 0.5);
 
         oscs.forEach(o => o.connect(filter));
         filter.connect(ampEnv);
 
         // Routing: mostly reverb, thin dry presence
-        const dA = ctx.createGain(); dA.gain.value = 0.22;
-        const rvA = ctx.createGain(); rvA.gain.value = 0.85;
+        const dA  = ctx.createGain(); dA.gain.value  = 0.22;
+        const rvA = ctx.createGain(); rvA.gain.value = ps.reverbSend;
         ampEnv.connect(dA);  dA.connect(prDryBus);
         ampEnv.connect(rvA); rvA.connect(prReverbBus);
 
-        const endT = t0 + durS + release + 0.1;
+        const endT = t0 + durS + ps.release + 0.1;
         oscs.forEach(o => { o.start(t0); o.stop(endT); });
       }
 
@@ -4365,19 +3992,48 @@
         if (!prAudioCtx || !playing) return;
         const now = prAudioCtx.currentTime;
         const spb = 60 / bpm;
-        const spStep = spb / Math.max(1, snapDiv); // seconds per snap step
+        const spStep = spb / Math.max(1, snapDiv);
         const loopDurS = loopBars * beatsPerBar * spb;
 
         // Keep delay time in sync with BPM
         if (prDelayNode) prDelayNode.delayTime.value = spb * 0.75;
 
-        playStartCtxTime = now;
+        // Stable loop-start anchor — never resets to "now" (which drifts on late fires).
+        // If we're starting fresh or we fell behind, push forward with 50ms lookahead.
+        if (prNextLoopTime < now + 0.05) prNextLoopTime = now + 0.05;
+        const loopStart = prNextLoopTime;
+        prNextLoopTime = loopStart + loopDurS;
+        playStartCtxTime = loopStart; // cursor tracking reads this
+
+        // ── Evolution — happens BEFORE notes are scheduled so changes play THIS loop ──
+        // Full scGeneratePianoPattern every 8 bars — the original algorithm (random rootDegIdx
+        // per bar, ascending voicing, in key) sounds good; partial re-rolls caused harmonic clash.
+        prLoopCount++;
+        if (scEnabled && prLoopCount > 1) {
+          const next = scChooseSection();
+          if (prLoopCount % 4 === 0) {
+            // Every 16 bars: section check + drum + piano full regen
+            if (next !== scSection) { scSection = next; scApplySectionToDrone(next); }
+            scGenerateDrumPattern(scSection);
+            scGeneratePianoPattern(scSection);
+            console.log(`[SCORE] Full regen @ loop ${prLoopCount} — section: ${scSection}`);
+          } else if (prLoopCount % 2 === 0) {
+            // Every 8 bars: section check + fresh piano pattern (drums stay)
+            if (next !== scSection) {
+              scSection = next; scApplySectionToDrone(next);
+              scGenerateDrumPattern(next);
+            }
+            scGeneratePianoPattern(scSection);
+            console.log(`[SCORE] Piano regen @ loop ${prLoopCount} — section: ${scSection}`);
+          }
+        }
+
+        // ── Schedule notes relative to loopStart (not now) — immune to late fires ──
         for (const [tid, notes] of Object.entries(tracks)) {
           for (const n of notes) {
-            // Swing: push odd snap-steps slightly late (gives groove)
             const stepIdx = Math.round(n.start * snapDiv);
             const swingOffset = (stepIdx % 2 === 1) ? prSwing * spStep : 0;
-            const t0 = now + n.start * spb + swingOffset;
+            const t0 = loopStart + n.start * spb + swingOffset;
             const durS = n.dur * spb;
             if (tid === 'alois') {
               schedPadNote(midiToFreq(n.pitch), t0, durS, n.vel);
@@ -4386,12 +4042,24 @@
             }
           }
         }
-        loopTimer = setTimeout(scheduleLoop, loopDurS * 1000 - 40);
+        // Lead synth layer
+        if (typeof scLeadNotes !== 'undefined') {
+          for (const n of scLeadNotes) {
+            const stepIdx = Math.round(n.start * snapDiv);
+            const swingOffset = (stepIdx % 2 === 1) ? prSwing * spStep : 0;
+            scPlayLead(n.pitch, loopStart + n.start * spb + swingOffset, n.dur * spb, n.vel, scSection);
+          }
+        }
+
+        // Fire 200ms before loop end — generous buffer so main-thread jank never causes gaps
+        const msUntilFire = (prNextLoopTime - prAudioCtx.currentTime) * 1000 - 200;
+        loopTimer = setTimeout(scheduleLoop, Math.max(10, msUntilFire));
       }
 
       function startPrPlayback() {
         ensurePrAudio();
         playing = true; playPos = 0;
+        prLoopCount = 0; prNextLoopTime = 0;
         scheduleLoop();
         if (cursorTimer) clearInterval(cursorTimer);
         cursorTimer = setInterval(() => {
@@ -4401,16 +4069,40 @@
           prDraw();
         }, 50);
         prPlayBtn.textContent = '⏹ STOP'; prPlayBtn.classList.add('on');
+        // Unified transport: start drum if not already playing
+        if (!drPlaying) drStart();
+        // Score engine: start and sync to active key
+        scStart();
+        if (activeMoodScale) scSyncDroneToKey(activeMoodScale.rootPc);
       }
 
       function stopPrPlayback() {
         playing = false;
+        prNextLoopTime = 0; prLoopCount = 0;
         if (loopTimer) clearTimeout(loopTimer);
         if (cursorTimer) clearInterval(cursorTimer);
         loopTimer = cursorTimer = null;
         playPos = 0;
         prPlayBtn.textContent = '▶ PLAY'; prPlayBtn.classList.remove('on');
         prDraw();
+        // Unified transport: stop drum
+        if (drPlaying) drStop();
+        // Score engine: fade drone
+        scStop();
+        // Fade out master bus — scheduled nodes keep playing but through silence
+        if (prAudioCtx && prMasterGain) {
+          const t = prAudioCtx.currentTime;
+          prMasterGain.gain.cancelScheduledValues(t);
+          prMasterGain.gain.setValueAtTime(prMasterGain.gain.value, t);
+          prMasterGain.gain.linearRampToValueAtTime(0, t + 0.8);
+          // Restore gain after fade so next play starts at the correct level
+          setTimeout(() => {
+            if (!playing && prMasterGain && prAudioCtx) {
+              prMasterGain.gain.cancelScheduledValues(prAudioCtx.currentTime);
+              prMasterGain.gain.setValueAtTime(fxSettings?.masterVol ?? 0.8, prAudioCtx.currentTime);
+            }
+          }, 900);
+        }
       }
 
       // ─── Mouse editing ───
@@ -4678,6 +4370,7 @@
           if (activePill) { activePill.classList.remove('active'); activePill.style.background = ''; }
           activePill = null;
           activeMoodScale = null;
+          scUserMoodActive = false;
           keyRow.classList.remove('open');
           keyRow.innerHTML = '';
           prDraw();
@@ -4686,6 +4379,7 @@
         function activateMood(mood, pill) {
           if (activePill) { activePill.classList.remove('active'); activePill.style.background = ''; }
           activePill = pill;
+          scUserMoodActive = true;
           pill.classList.add('active');
 
           // Build key row for this mood
@@ -4708,6 +4402,8 @@
               tracks.alois = snapToScale(tracks.alois, semis, mood.scale);
               // Set active scale for new notes + grid rendering
               activeMoodScale = { rootPc: semis, intervals: mood.scale, color: mood.color };
+              // Drone key sync
+              scSyncDroneToKey(semis);
               // Highlight active key button
               keyRow.querySelectorAll('.key-btn').forEach(b => {
                 b.classList.remove('key-active');
@@ -4779,6 +4475,7 @@
               <option value="jason">Jason</option><option value="alois">Alois</option>
             </select>
             <button class="piano-tbtn" id="prExport">EXPORT</button>
+            <button class="piano-tbtn" id="prSoundBtn" title="Instrument settings">SOUND</button>
             <div class="piano-legend">
               <div class="piano-dot piano-dot-j"></div>Jason
               <div class="piano-dot piano-dot-a"></div>Alois
@@ -4817,21 +4514,1543 @@
         });
         document.getElementById('prBpm').addEventListener('change', e => {
           bpm = Math.max(40, Math.min(240, parseInt(e.target.value) || 120));
+          drBpm = bpm;
+          const dc = document.getElementById('drBpmCtrl'); if (dc) dc.value = bpm;
           if (prDelayNode) prDelayNode.delayTime.value = (60 / bpm) * 0.75;
         });
         document.getElementById('prSwingCtrl').addEventListener('change', e => {
           prSwing = Math.max(0, Math.min(0.33, (parseInt(e.target.value) || 0) / 100));
+          drSwing = prSwing;
+          const ds = document.getElementById('drSwingCtrl'); if (ds) ds.value = e.target.value;
         });
         document.getElementById('prBars').addEventListener('change', e => { loopBars = parseInt(e.target.value); prDraw(); });
         document.getElementById('prSnap').addEventListener('change', e => { snapDiv = parseInt(e.target.value); prDraw(); });
         document.getElementById('prTrack').addEventListener('change', e => { activeTrack = e.target.value; });
 
         buildMoodBar();
+
+        // SOUND button toggles the settings panel
+        document.getElementById('prSoundBtn').addEventListener('click', () => {
+          const sw = document.getElementById('soundWrap');
+          sw.classList.toggle('open');
+          document.getElementById('prSoundBtn').classList.toggle('on', sw.classList.contains('open'));
+        });
+      }
+
+      // ─── Sound panel builder ───
+      function buildSoundPanel() {
+        const wrap = document.getElementById('soundWrap');
+        if (!wrap) return;
+
+        // Helper: one slider row
+        const row = (id, label, min, max, step, val) =>
+          `<div class="synth-row">
+            <span class="synth-label">${label}</span>
+            <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}">
+            <span class="synth-val" id="${id}V">${val}</span>
+          </div>`;
+
+        wrap.innerHTML = `<div class="sound-panel-inner">
+          <div class="synth-col">
+            <div class="synth-col-title" style="color:#7eb8da">◆ PLUCK</div>
+            ${row('spFmRatio',  'FM RATIO',  1,   8,    0.1,  3.5)}
+            ${row('spFmBright', 'BRIGHT',    0,   100,  1,    100)}
+            ${row('spDecay',    'DECAY',     0,   100,  1,    55)}
+            ${row('spDrive',    'DRIVE',     0,   100,  1,    0)}
+            ${row('spMangle',   'MANGLE',    0,   100,  1,    0)}
+            ${row('spDlySend',  'DELAY →',   0,   100,  1,    28)}
+            ${row('spRevSend',  'REVERB →',  0,   100,  1,    18)}
+          </div>
+          <div class="synth-col">
+            <div class="synth-col-title" style="color:#c47eda">◆ PAD</div>
+            ${row('sdDetune',   'DETUNE',    0,   50,   1,    10)}
+            ${row('sdCutoff',   'CUTOFF',    200, 8000, 50,   2400)}
+            ${row('sdReso',     'RESO',      1,   80,   1,    22)}
+            ${row('sdAttack',   'ATTACK ms', 20,  800,  5,    140)}
+            ${row('sdRelease',  'RELEASE ms',100, 2000, 50,   380)}
+            ${row('sdRevSend',  'REVERB →',  0,   100,  1,    85)}
+          </div>
+          <div class="synth-col">
+            <div class="synth-col-title" style="color:#7ec87e">◆ FX</div>
+            ${row('sfRevSize',  'REV SIZE',  0.5, 6,    0.1,  2.4)}
+            ${row('sfRevDecay', 'REV DECAY', 1,   12,   0.5,  5.0)}
+            ${row('sfDlyFb',    'DLY FB',    0,   70,   1,    34)}
+            ${row('sfDlyRtn',   'DLY RTN',   0,   100,  1,    22)}
+            ${row('sfComp',     'COMP THR',  -40, 0,    1,    -18)}
+            ${row('sfMaster',   'MASTER',    0,   100,  1,    72)}
+          </div>
+        </div>`;
+
+        // Wire all sliders — update settings objects and live audio nodes
+        const wire = (id, fn) => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.addEventListener('input', e => {
+            const v = parseFloat(e.target.value);
+            document.getElementById(id + 'V').textContent = v;
+            fn(v);
+          });
+        };
+
+        // Pluck
+        wire('spFmRatio',  v => pluckSettings.fmRatio   = v);
+        wire('spFmBright', v => pluckSettings.fmBright  = v / 100);
+        wire('spDecay',    v => pluckSettings.decay      = v / 100);
+        wire('spDrive',    v => pluckSettings.drive      = v / 100);
+        wire('spMangle',   v => pluckSettings.mangle     = v / 100);
+        wire('spDlySend',  v => pluckSettings.delaySend  = v / 100);
+        wire('spRevSend',  v => pluckSettings.reverbSend = v / 100);
+
+        // Pad
+        wire('sdDetune',   v => padSettings.detune      = v);
+        wire('sdCutoff',   v => padSettings.filterCutoff= v);
+        wire('sdReso',     v => padSettings.filterQ      = v / 10);
+        wire('sdAttack',   v => padSettings.attack       = v / 1000);
+        wire('sdRelease',  v => padSettings.release      = v / 1000);
+        wire('sdRevSend',  v => padSettings.reverbSend   = v / 100);
+
+        // FX — these update live audio nodes immediately
+        wire('sfRevSize',  v => { fxSettings.revSize    = v; rebuildReverb(); });
+        wire('sfRevDecay', v => { fxSettings.revDecay   = v; rebuildReverb(); });
+        wire('sfDlyFb',    v => { fxSettings.delayFeedback = v / 100; if (prDelayFb) prDelayFb.gain.setTargetAtTime(v / 100, prAudioCtx.currentTime, 0.05); });
+        wire('sfDlyRtn',   v => { fxSettings.delayReturn   = v / 100; if (prDelReturn) prDelReturn.gain.setTargetAtTime(v / 100, prAudioCtx.currentTime, 0.05); });
+        wire('sfComp',     v => { fxSettings.compThreshold = v; if (prCompressor) prCompressor.threshold.setTargetAtTime(v, prAudioCtx.currentTime, 0.05); });
+        wire('sfMaster',   v => { fxSettings.masterVol     = v / 100; if (prMasterGain) prMasterGain.gain.setTargetAtTime(v / 100, prAudioCtx.currentTime, 0.05); });
+      }
+
+      // ═══════════════════════════════════════════════════════
+      //  DRUM MACHINE
+      // ═══════════════════════════════════════════════════════
+
+      const DR_STEPS = 32;   // 2 bars × 16th notes
+      const DR_TRACKS = [
+        { id:'kick',  label:'KICK',   color:'#e07040', glow:'#e09060' },
+        { id:'sub',   label:'SUB',    color:'#9060e0', glow:'#b080f0' },
+        { id:'snare', label:'SNARE',  color:'#e0c040', glow:'#f0d060' },
+        { id:'clap',  label:'CLAP',   color:'#e06080', glow:'#f080a0' },
+        { id:'chh',   label:'HH CL',  color:'#40b8e0', glow:'#60d8f0' },
+        { id:'ohh',   label:'HH OP',  color:'#40e0b0', glow:'#60f8d0' },
+        { id:'ride',  label:'RIDE',   color:'#80e060', glow:'#a0f080' },
+        { id:'perc',  label:'PERC',   color:'#e08040', glow:'#f0a060' },
+      ];
+
+      // State: drPattern[trackIdx][step] = velocity 0–127 | 0=off
+      let drPattern  = DR_TRACKS.map(() => new Uint8Array(DR_STEPS));
+      let drVol      = DR_TRACKS.map(() => 1.0);   // per-track volume
+      let drPlaying  = false;
+      let drStep     = 0;
+      let drBpm      = 120;
+      let drSwing    = 0.15;
+      let drScheduleId = null;
+      let drAudioCtx = null;
+      let drNextBeat = 0;       // Web Audio timestamp of next step
+      let drLookahead = 0.08;   // seconds to look ahead when scheduling
+      const drSamples = {};     // trackId → AudioBuffer (null = use synthesis fallback)
+      let drSamplesLoading = false; // guard against concurrent loads
+      let drScheduleTick = 25;  // ms between scheduler ticks
+      let _drNoiseBuffer = null; // shared noise buffer for hi-hat synthesis (lazy-initialized)
+
+      // ── Drum voice settings (tweakable from the TUNE panel) ──
+      const drSettings = {
+        kick:   { tune: 120, decay: 0.38, click: 0.60 },
+        sub:    { tune: 55,  decay: 0.55 },
+        snare:  { tone: 185, snap: 3200,  decay: 0.20 },
+        clap:   { color: 1200, tail: 0.18 },
+        hihatC: { tone: 9000, decay: 0.055 },
+        hihatO: { tone: 7000, decay: 0.38  },
+        ride:   { tone: 6000, decay: 0.60  },
+        perc:   { tune: 880,  decay: 0.15  },
+      };
+
+      // ── Drum synthesis ──
+
+      function drEnsureCtx() {
+        if (!drAudioCtx) drAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (drAudioCtx.state === 'suspended') drAudioCtx.resume();
+        return drAudioCtx;
+      }
+
+      function drGetOut() { return prAudioCtx ? (prDryBus || prAudioCtx.destination) : (drEnsureCtx(), drAudioCtx.destination); }
+
+      // SubKick — layered kick transient + pitched sub oscillator
+      function drPlayKick(t, vel, isSub) {
+        const ctx = prAudioCtx || drEnsureCtx();
+        const out = drGetOut();
+        const v = vel / 127;
+        const s = isSub ? drSettings.sub : drSettings.kick;
+
+        // Sub oscillator — pitched down pitch envelope
+        const sub = ctx.createOscillator();
+        sub.type = 'sine';
+        const subGain = ctx.createGain();
+        const subFreqStart = s.tune;
+        const subFreqEnd   = isSub ? s.tune * 0.636 : 40;
+        const subDur       = s.decay;
+        sub.frequency.setValueAtTime(subFreqStart, t);
+        sub.frequency.exponentialRampToValueAtTime(subFreqEnd, t + subDur * 0.9);
+        subGain.gain.setValueAtTime(v * (isSub ? 0.95 : 0.82), t);
+        subGain.gain.exponentialRampToValueAtTime(0.001, t + subDur);
+        sub.connect(subGain); subGain.connect(out);
+        sub.start(t); sub.stop(t + subDur + 0.01);
+
+        if (!isSub) {
+          // Click transient — highpassed noise burst
+          const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.008), ctx.sampleRate);
+          const d = buf.getChannelData(0);
+          for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+          const click = ctx.createBufferSource();
+          click.buffer = buf;
+          const hp = ctx.createBiquadFilter();
+          hp.type = 'highpass'; hp.frequency.value = 2000;
+          const cg = ctx.createGain(); cg.gain.value = v * drSettings.kick.click;
+          click.connect(hp); hp.connect(cg); cg.connect(out);
+          click.start(t);
+        }
+      }
+
+      // Snare — noise burst + body tone
+      function drPlaySnare(t, vel) {
+        const ctx = prAudioCtx || drEnsureCtx();
+        const out = drGetOut();
+        const v = vel / 127;
+        const s = drSettings.snare;
+        const dur = s.decay;
+
+        // Noise
+        const len = Math.floor(ctx.sampleRate * dur);
+        const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+        const noise = ctx.createBufferSource(); noise.buffer = buf;
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = s.snap; bp.Q.value = 0.7;
+        const ng = ctx.createGain();
+        ng.gain.setValueAtTime(v * 0.7, t);
+        ng.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        noise.connect(bp); bp.connect(ng); ng.connect(out);
+        noise.start(t);
+
+        // Body oscillator
+        const osc = ctx.createOscillator(); osc.type = 'triangle'; osc.frequency.value = s.tone;
+        const og = ctx.createGain();
+        og.gain.setValueAtTime(v * 0.45, t);
+        og.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.45);
+        osc.connect(og); og.connect(out);
+        osc.start(t); osc.stop(t + dur * 0.5);
+      }
+
+      // Clap — multi-burst noise, wide short attack
+      function drPlayClap(t, vel) {
+        const ctx = prAudioCtx || drEnsureCtx();
+        const out = drGetOut();
+        const v = vel / 127;
+        const s = drSettings.clap;
+        const bursts = [0, 0.006, 0.012, 0.018];
+        bursts.forEach((offset, i) => {
+          const dur = i < bursts.length - 1 ? 0.006 : s.tail;
+          const len = Math.floor(ctx.sampleRate * dur);
+          const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+          const d = buf.getChannelData(0);
+          for (let j = 0; j < len; j++) d[j] = (Math.random() * 2 - 1) * (i < bursts.length-1 ? 1 : Math.pow(1 - j/len, 4));
+          const src = ctx.createBufferSource(); src.buffer = buf;
+          const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = s.color;
+          const g = ctx.createGain(); g.gain.value = v * (i < bursts.length-1 ? 0.5 : 0.6);
+          src.connect(hp); hp.connect(g); g.connect(out);
+          src.start(t + offset);
+        });
+      }
+
+      // HiHat — white noise through high-pass filter (avoids square-wave aliasing artifacts)
+      // Noise buffer is created once and shared across all hits — minimal GC pressure.
+      function drGetNoiseBuffer(ctx) {
+        if (_drNoiseBuffer && _drNoiseBuffer.sampleRate === ctx.sampleRate) return _drNoiseBuffer;
+        const len = ctx.sampleRate; // 1 second of noise
+        const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+        _drNoiseBuffer = buf;
+        return buf;
+      }
+
+      function drPlayHihat(t, vel, open) {
+        const ctx = prAudioCtx || drEnsureCtx();
+        const out = drGetOut();
+        const v = vel / 127;
+        const s = open ? drSettings.hihatO : drSettings.hihatC;
+        // Open hats need extra tail — keep oscillators running through full envelope
+        const dur = s.decay + (open ? 0.12 : 0.02);
+
+        // White noise source — 1 node instead of 3 square oscillators, zero aliasing
+        const src = ctx.createBufferSource();
+        src.buffer = drGetNoiseBuffer(ctx);
+        src.loop = true; // loop the 1-second buffer for sustained open hats
+
+        // High-pass filter sets the "tone" of the hat (hihatC: 9kHz, hihatO: 7kHz)
+        const hp = ctx.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.value = s.tone;
+        hp.Q.value = 0.7;
+
+        const env = ctx.createGain();
+        env.gain.setValueAtTime(0, t);
+        env.gain.linearRampToValueAtTime(v * 0.45, t + 0.002); // 2ms attack, no click
+        env.gain.exponentialRampToValueAtTime(0.001, t + dur);
+
+        src.connect(hp);
+        hp.connect(env);
+        env.connect(out);
+        src.start(t);
+        src.stop(t + dur + 0.005); // stop after envelope reaches floor
+      }
+
+      // Ride — longer, brighter metallic bell
+      function drPlayRide(t, vel) {
+        const ctx = prAudioCtx || drEnsureCtx();
+        const out = drGetOut();
+        const v = vel / 127;
+        const s = drSettings.ride;
+        const dur = s.decay;
+        const freqs = [419, 546, 639, 863, 1100, 1450];
+        const mix = ctx.createGain();
+        mix.gain.setValueAtTime(v * 0.18, t);
+        mix.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = s.tone;
+        mix.connect(hp); hp.connect(out);
+        freqs.forEach(f => {
+          const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = f;
+          o.connect(mix); o.start(t); o.stop(t + dur + 0.01);
+        });
+      }
+
+      // Perc — short pitched blip with decay, for Cloud Hop fills
+      function drPlayPerc(t, vel) {
+        const ctx = prAudioCtx || drEnsureCtx();
+        const out = drGetOut();
+        const v = vel / 127;
+        const s = drSettings.perc;
+        const osc = ctx.createOscillator(); osc.type = 'sine';
+        osc.frequency.setValueAtTime(s.tune, t);
+        osc.frequency.exponentialRampToValueAtTime(s.tune * 0.25, t + s.decay * 0.8);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(v * 0.5, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + s.decay);
+        osc.connect(g); g.connect(out);
+        osc.start(t); osc.stop(t + s.decay + 0.01);
+      }
+
+      function drPlaySample(buffer, t, vel, ctx, out) {
+        const src = ctx.createBufferSource();
+        src.buffer = buffer;
+        const g = ctx.createGain();
+        g.gain.value = vel / 127;
+        src.connect(g); g.connect(out);
+        src.start(t);
+      }
+
+      function drTrigger(trackId, t, vel) {
+        const v = vel || 100;
+        // Use sample if loaded, otherwise fall back to synthesis
+        const sampleKey = { kick:'kick', sub:'sub', snare:'snare', clap:'clap',
+                            chh:'hihatC', ohh:'hihatO', ride:'ride', perc:'perc' }[trackId];
+        if (sampleKey && drSamples[sampleKey]) {
+          const ctx = prAudioCtx || drEnsureCtx();
+          drPlaySample(drSamples[sampleKey], t, v, ctx, drGetOut());
+          return;
+        }
+        switch (trackId) {
+          case 'kick':  drPlayKick(t, v, false); break;
+          case 'sub':   drPlayKick(t, v, true);  break;
+          case 'snare': drPlaySnare(t, v);        break;
+          case 'clap':  drPlayClap(t, v);         break;
+          case 'chh':   drPlayHihat(t, v, false); break;
+          case 'ohh':   drPlayHihat(t, v, true);  break;
+          case 'ride':  drPlayRide(t, v);          break;
+          case 'perc':  drPlayPerc(t, v);          break;
+        }
+      }
+
+      // ── Sample loader ──
+      // Pass a specific AudioContext to ensure buffers are decoded in the right context.
+      // Called once at page load (drAudioCtx fallback) and again after prAudioCtx is created.
+      async function loadDrSamples(forceCtx) {
+        if (drSamplesLoading) return;
+        drSamplesLoading = true;
+        let manifest;
+        try {
+          const r = await fetch('/samples');
+          manifest = await r.json();
+        } catch (e) {
+          console.warn('[SAMPLES] Could not fetch manifest:', e);
+          return;
+        }
+
+        const entries = Object.entries(manifest);
+        console.log(`[SAMPLES] Manifest: ${entries.length} track(s) found →`, Object.keys(manifest));
+        if (entries.length === 0) {
+          console.warn('[SAMPLES] No samples matched — check data/samples/ folder and patterns');
+          return;
+        }
+
+        const ctx = forceCtx || prAudioCtx || drEnsureCtx();
+        let loaded = 0;
+        for (const [trackKey, filename] of entries) {
+          try {
+            const encodedPath = (filename).split('/').map(encodeURIComponent).join('/');
+            const r = await fetch(`/sample-files/${encodedPath}`);
+            if (!r.ok) { console.warn(`[SAMPLES] ${filename}: HTTP ${r.status}`); continue; }
+            const ab = await r.arrayBuffer();
+            drSamples[trackKey] = await ctx.decodeAudioData(ab);
+            loaded++;
+            drMarkSampleLoaded(trackKey, filename);
+            console.log(`[SAMPLES] ✓ ${trackKey} ← ${filename.split('/').pop()}`);
+          } catch (e) {
+            console.warn(`[SAMPLES] Failed to load ${filename}:`, e);
+          }
+        }
+        console.log(`[SAMPLES] ${loaded}/${entries.length} sample(s) loaded into AudioContext`);
+        drSamplesLoading = false;
+      }
+
+      function drMarkSampleLoaded(trackKey, filename) {
+        // Map drSettings key → DR_TRACKS id
+        const keyToId = { kick:'kick', sub:'sub', snare:'snare', clap:'clap',
+                          hihatC:'chh', hihatO:'ohh', ride:'ride', perc:'perc' };
+        const id = keyToId[trackKey];
+        const labelEl = document.querySelector(`.drum-row-label[data-track="${id}"]`);
+        if (labelEl) {
+          labelEl.title = `Sample: ${filename}`;
+          labelEl.style.color = '#7ed87e';
+        }
+      }
+
+      // ── Scheduler ──
+
+      function drStepSeconds() {
+        const spb = 60 / drBpm;  // seconds per beat (quarter note)
+        return spb / 4;           // 1/16th note
+      }
+
+      function drScheduler() {
+        const ctx = prAudioCtx || drAudioCtx;
+        if (!ctx || !drPlaying) return;
+        const stepS = drStepSeconds();
+        while (drNextBeat < ctx.currentTime + drLookahead) {
+          const step = drStep;
+          const t = drNextBeat;
+          DR_TRACKS.forEach((tr, ti) => {
+            const vel = drPattern[ti][step];
+            if (vel > 0) drTrigger(tr.id, t, Math.round(vel * drVol[ti]));
+          });
+          // Advance playhead in DOM (next animation frame)
+          const capturedStep = step;
+          requestAnimationFrame(() => drUpdatePlayhead(capturedStep));
+
+          // Swing: push every odd 16th note later
+          const isOdd = step % 2 === 1;
+          const swingOffset = isOdd ? drSwing * stepS : 0;
+          drNextBeat += stepS + swingOffset;
+          drStep = (drStep + 1) % DR_STEPS;
+        }
+        drScheduleId = setTimeout(drScheduler, drScheduleTick);
+      }
+
+      function drStart() {
+        const ctx = prAudioCtx || drEnsureCtx();
+        drAudioCtx = ctx;
+        drStep = 0;
+        drNextBeat = ctx.currentTime + 0.05;
+        drPlaying = true;
+        drScheduler();
+        document.getElementById('drPlay').textContent = '■ STOP';
+        document.getElementById('drPlay').classList.add('on');
+        // Unified transport: start piano roll if not already playing
+        if (!playing) startPrPlayback();
+      }
+
+      function drStop() {
+        drPlaying = false;
+        clearTimeout(drScheduleId);
+        drStep = 0;
+        document.getElementById('drPlay').textContent = '▶ PLAY';
+        document.getElementById('drPlay').classList.remove('on');
+        drClearPlayhead();
+        // Unified transport: stop piano roll
+        if (playing) stopPrPlayback();
+      }
+
+      let drLastPlayheadStep = -1;
+      function drUpdatePlayhead(step) {
+        // Clear previous
+        if (drLastPlayheadStep >= 0) {
+          document.querySelectorAll(`.drum-step[data-step="${drLastPlayheadStep}"]`).forEach(el => el.classList.remove('playhead'));
+        }
+        document.querySelectorAll(`.drum-step[data-step="${step}"]`).forEach(el => el.classList.add('playhead'));
+        drLastPlayheadStep = step;
+      }
+
+      function drClearPlayhead() {
+        document.querySelectorAll('.drum-step.playhead').forEach(el => el.classList.remove('playhead'));
+        drLastPlayheadStep = -1;
+      }
+
+      // ── Cloud Hop pattern generator ──
+      // Cloud Hop: trap beat doubled to 2 bars, random fills in extra space,
+      // kick+sub locked together, dreamy sparse ride
+
+      function drCloudHopGenerate() {
+        // Cloud Hop lives at 60 BPM — set both transports
+        drBpm = 60; bpm = 60;
+        const bpmEl = document.getElementById('drBpmCtrl'); if (bpmEl) bpmEl.value = 60;
+        const prBpmEl = document.getElementById('prBpm'); if (prBpmEl) prBpmEl.value = 60;
+        if (prDelayNode) prDelayNode.delayTime.value = (60 / 60) * 0.75;
+
+        drPattern = DR_TRACKS.map(() => new Uint8Array(DR_STEPS));
+        const ki = 0, si = 1, sni = 2, cli = 3, chhi = 4, ohhi = 5, rdi = 6, perci = 7;
+
+        // Base trap beat in bar 1 (steps 0–15)
+        // Kick: 1, syncopated hits
+        const kickHits = [0, 6, 10, 14];
+        kickHits.forEach(s => { drPattern[ki][s] = 110; drPattern[si][s] = 105; }); // kick+sub locked
+
+        // Snare on 2 and 4 (steps 4, 12)
+        drPattern[sni][4]  = 108;
+        drPattern[sni][12] = 108;
+
+        // Clap doubles the snare in bar 1
+        drPattern[cli][4]  = 95;
+        drPattern[cli][12] = 95;
+
+        // Closed hi-hat driving 8th notes
+        for (let s = 0; s < 16; s += 2) drPattern[chhi][s] = 85;
+        // Some 16th accent hats
+        [3, 7, 11, 15].forEach(s => { drPattern[chhi][s] = 65; });
+
+        // Open hi-hat pickups before snare
+        drPattern[ohhi][3]  = 72;
+        drPattern[ohhi][11] = 72;
+
+        // Bar 2 (steps 16–31) — doubled structure with Cloud Hop fills
+        // Copy base kick/snare
+        kickHits.forEach(s => { drPattern[ki][s+16] = 110; drPattern[si][s+16] = 105; });
+        drPattern[sni][20] = 108;
+        drPattern[sni][28] = 108;
+        drPattern[cli][20] = 95;
+        drPattern[cli][28] = 95;
+
+        // Cloud Hop fill — random extra kick hits in positions not occupied
+        const fillCandidates = [17, 18, 19, 21, 22, 23, 25, 26, 27, 29, 30, 31];
+        const numFills = 3 + Math.floor(Math.random() * 3);
+        const shuffled = fillCandidates.sort(() => Math.random() - 0.5).slice(0, numFills);
+        shuffled.forEach(s => {
+          drPattern[ki][s] = 75 + Math.floor(Math.random() * 25);
+          drPattern[si][s] = 70 + Math.floor(Math.random() * 20);
+        });
+
+        // Perc hits for Cloud Hop texture — sparse, off-grid feel
+        const percSlots = [2, 5, 9, 13, 18, 22, 27, 30];
+        percSlots.filter(() => Math.random() < 0.4).forEach(s => drPattern[perci][s] = 70 + Math.floor(Math.random() * 30));
+
+        // Ride bell — sparse, on-beat accents for dreamy feel
+        [0, 8, 16, 24].forEach(s => { if (Math.random() < 0.6) drPattern[rdi][s] = 65 + Math.floor(Math.random() * 25); });
+
+        // Bar 2 hi-hats — slightly different variation
+        for (let s = 16; s < 32; s += 2) drPattern[chhi][s] = 82;
+        [19, 23, 27, 31].forEach(s => { drPattern[chhi][s] = 60 + Math.floor(Math.random() * 20); });
+        drPattern[ohhi][19] = 68;
+        drPattern[ohhi][27] = 68;
+
+        drRenderGrid();
+      }
+
+      // ── Build UI ──
+
+      function buildDrumMachine() {
+        const wrap = document.getElementById('drumWrap');
+        if (!wrap) return;
+
+        wrap.innerHTML = `<div class="drum-panel-inner">
+          <div class="drum-transport">
+            <span class="drum-title">STEP SEQ</span>
+            <button class="drum-tbtn" id="drPlay">▶ PLAY</button>
+            <button class="drum-tbtn" id="drClear" title="Clear all steps">CLR</button>
+            <button class="drum-tbtn drum-tbtn-orange" id="drCloudHop" title="Generate Cloud Hop pattern">☁ CLOUD HOP</button>
+            <span class="piano-tlabel" style="margin-left:4px;">BPM</span>
+            <input class="piano-num" id="drBpmCtrl" type="number" min="40" max="240" value="120" />
+            <span class="piano-tlabel">SWING</span>
+            <input class="piano-num" id="drSwingCtrl" type="number" min="0" max="33" value="15" style="width:42px;" />
+            <span class="piano-tlabel" style="margin-left:6px;font-size:9px;color:#2a3a50;">STEPS: 32 (2 BARS @ 1/16)</span>
+            <button class="drum-tbtn" id="drTuneBtn" title="Drum voice settings" style="margin-left:auto;">TUNE</button>
+            <button class="piano-collapse" id="drCollapse">▼</button>
+          </div>
+          <div class="drum-grid-area" id="drGrid"></div>
+          <div class="drum-tune-wrap" id="drTuneWrap"></div>
+        </div>`;
+
+        drRenderGrid();
+
+        document.getElementById('drPlay').addEventListener('click', () => {
+          if (drPlaying) drStop(); else drStart();
+        });
+
+        document.getElementById('drClear').addEventListener('click', () => {
+          drPattern = DR_TRACKS.map(() => new Uint8Array(DR_STEPS));
+          drRenderGrid();
+        });
+
+        document.getElementById('drCloudHop').addEventListener('click', drCloudHopGenerate);
+
+        document.getElementById('drBpmCtrl').addEventListener('input', e => {
+          drBpm = parseInt(e.target.value) || 120;
+          // Sync piano roll BPM if playing
+          const pb = document.getElementById('prBpm');
+          if (pb) pb.value = drBpm;
+        });
+
+        document.getElementById('drSwingCtrl').addEventListener('input', e => {
+          drSwing = (parseInt(e.target.value) || 0) / 100;
+          // Sync piano roll swing
+          const ps = document.getElementById('prSwingCtrl');
+          if (ps) { ps.value = e.target.value; prSwing = drSwing; }
+        });
+
+        document.getElementById('drCollapse').addEventListener('click', () => {
+          document.getElementById('drumWrap').classList.remove('open');
+          const db = document.getElementById('drumBtn');
+          if (db) db.classList.remove('active');
+        });
+
+        buildDrumTunePanel();
+        loadDrSamples(); // async — loads sample pack from data/samples/ in background
+
+        document.getElementById('drTuneBtn').addEventListener('click', () => {
+          const tw = document.getElementById('drTuneWrap');
+          const btn = document.getElementById('drTuneBtn');
+          const dw = document.getElementById('drumWrap');
+          tw.classList.toggle('open');
+          const isOpen = tw.classList.contains('open');
+          btn.classList.toggle('on', isOpen);
+          dw.classList.toggle('tune-open', isOpen);
+        });
+      }
+
+      function buildDrumTunePanel() {
+        const wrap = document.getElementById('drTuneWrap');
+        if (!wrap) return;
+
+        const row = (id, label, min, max, step, val, unit='') =>
+          `<div class="synth-row">
+            <span class="synth-label">${label}</span>
+            <input type="range" id="dt_${id}" min="${min}" max="${max}" step="${step}" value="${val}">
+            <span class="synth-val" id="dt_${id}V">${val}${unit}</span>
+          </div>`;
+
+        wrap.innerHTML = `<div class="drum-tune-inner">
+          <div class="synth-col">
+            <div class="synth-col-title" style="color:#e87e4a">◆ KICK</div>
+            ${row('kTune',  'TUNE Hz',  40,  200,  1,   120)}
+            ${row('kDecay', 'DECAY ms', 150, 700,  10,  380)}
+            ${row('kClick', 'CLICK %',  0,   100,  1,   60)}
+            <div class="synth-col-title" style="color:#e8a44a;margin-top:8px">◆ SUB</div>
+            ${row('sTune',  'TUNE Hz',  30,  100,  1,   55)}
+            ${row('sDecay', 'DECAY ms', 200, 900,  10,  550)}
+          </div>
+          <div class="synth-col">
+            <div class="synth-col-title" style="color:#7edab8">◆ SNARE</div>
+            ${row('snTone',  'BODY Hz',  80,  400,  5,   185)}
+            ${row('snSnap',  'SNAP Hz',  1000,5000, 50,  3200)}
+            ${row('snDecay', 'DECAY ms', 80,  450,  5,   200)}
+            <div class="synth-col-title" style="color:#da7e9a;margin-top:8px">◆ CLAP</div>
+            ${row('clColor', 'COLOR Hz', 400, 3000, 50,  1200)}
+            ${row('clTail',  'TAIL ms',  60,  500,  10,  180)}
+          </div>
+          <div class="synth-col">
+            <div class="synth-col-title" style="color:#dada7e">◆ HH CLOSED</div>
+            ${row('hcTone',  'TONE Hz',  5000, 14000, 250, 9000)}
+            ${row('hcDecay', 'DECAY ms', 10,   120,   5,   55)}
+            <div class="synth-col-title" style="color:#9ada7e;margin-top:8px">◆ HH OPEN</div>
+            ${row('hoTone',  'TONE Hz',  4000, 12000, 250, 7000)}
+            ${row('hoDecay', 'DECAY ms', 100,  700,   10,  380)}
+          </div>
+          <div class="synth-col">
+            <div class="synth-col-title" style="color:#7eb8da">◆ RIDE</div>
+            ${row('rdTone',  'TONE Hz',  2000, 10000, 250, 6000)}
+            ${row('rdDecay', 'DECAY ms', 150,  1200,  25,  600)}
+            <div class="synth-col-title" style="color:#c47eda;margin-top:8px">◆ PERC</div>
+            ${row('pcTune',  'TUNE Hz',  200,  1600,  50,  880)}
+            ${row('pcDecay', 'DECAY ms', 50,   350,   5,   150)}
+          </div>
+        </div>`;
+
+        const wire = (id, fn) => {
+          const el = document.getElementById('dt_' + id);
+          if (!el) return;
+          el.addEventListener('input', e => {
+            const v = parseFloat(e.target.value);
+            document.getElementById('dt_' + id + 'V').textContent = v;
+            fn(v);
+          });
+        };
+
+        wire('kTune',  v => drSettings.kick.tune    = v);
+        wire('kDecay', v => drSettings.kick.decay   = v / 1000);
+        wire('kClick', v => drSettings.kick.click   = v / 100);
+        wire('sTune',  v => drSettings.sub.tune     = v);
+        wire('sDecay', v => drSettings.sub.decay    = v / 1000);
+        wire('snTone',  v => drSettings.snare.tone  = v);
+        wire('snSnap',  v => drSettings.snare.snap  = v);
+        wire('snDecay', v => drSettings.snare.decay = v / 1000);
+        wire('clColor', v => drSettings.clap.color  = v);
+        wire('clTail',  v => drSettings.clap.tail   = v / 1000);
+        wire('hcTone',  v => drSettings.hihatC.tone  = v);
+        wire('hcDecay', v => drSettings.hihatC.decay = v / 1000);
+        wire('hoTone',  v => drSettings.hihatO.tone  = v);
+        wire('hoDecay', v => drSettings.hihatO.decay = v / 1000);
+        wire('rdTone',  v => drSettings.ride.tone   = v);
+        wire('rdDecay', v => drSettings.ride.decay  = v / 1000);
+        wire('pcTune',  v => drSettings.perc.tune   = v);
+        wire('pcDecay', v => drSettings.perc.decay  = v / 1000);
+      }
+
+      function drRenderGrid() {
+        const grid = document.getElementById('drGrid');
+        if (!grid) return;
+        grid.innerHTML = '';
+
+        DR_TRACKS.forEach((tr, ti) => {
+          const row = document.createElement('div');
+          row.className = 'drum-row';
+          row.style.setProperty('--dr-color', tr.color);
+          row.style.setProperty('--dr-glow', tr.glow);
+
+          // Label — data-track used by drMarkSampleLoaded() to highlight when sample is present
+          const lbl = document.createElement('span');
+          lbl.className = 'drum-row-label';
+          lbl.dataset.track = tr.id;
+          lbl.textContent = tr.label;
+          lbl.style.color = tr.color;
+          row.appendChild(lbl);
+
+          // Steps — with beat separators every 4 steps
+          for (let s = 0; s < DR_STEPS; s++) {
+            if (s > 0 && s % 4 === 0) {
+              const sep = document.createElement('div');
+              sep.className = 'drum-beat-sep';
+              row.appendChild(sep);
+            }
+
+            const btn = document.createElement('div');
+            btn.className = 'drum-step' + (drPattern[ti][s] > 0 ? ' on' : '');
+            if (s % 4 === 0) btn.classList.add('beat-start');
+            else if (s === 16) btn.classList.add('half-start');
+            btn.dataset.ti = ti;
+            btn.dataset.step = s;
+            btn.style.setProperty('--dr-color', tr.color);
+            btn.style.setProperty('--dr-glow', tr.glow);
+            btn.title = `${tr.label} step ${s + 1}`;
+
+            btn.addEventListener('click', () => {
+              if (drPattern[ti][s] > 0) drPattern[ti][s] = 0;
+              else drPattern[ti][s] = 100;
+              btn.classList.toggle('on', drPattern[ti][s] > 0);
+            });
+
+            // Right-click to audition
+            btn.addEventListener('contextmenu', e => {
+              e.preventDefault();
+              drEnsureCtx();
+              drTrigger(tr.id, (prAudioCtx || drAudioCtx).currentTime + 0.01, 100);
+            });
+
+            row.appendChild(btn);
+          }
+
+          // Volume mini-slider per track
+          const vol = document.createElement('input');
+          vol.type = 'range'; vol.className = 'drum-vol';
+          vol.min = 0; vol.max = 127; vol.value = 100; vol.step = 1;
+          vol.style.setProperty('--dr-color', tr.color);
+          vol.title = `${tr.label} volume`;
+          vol.addEventListener('input', e => { drVol[ti] = parseInt(e.target.value) / 100; });
+          row.appendChild(vol);
+
+          grid.appendChild(row);
+        });
+      }
+
+      // ══════════════════════════════════════════════════════════════════
+      // Score Engine — Unified generative score driven by pond + section
+      // Replaces EmpathyPulse. Absorbs the drone. Drives piano + drums by
+      // 8-bar sections, pond-steered. All audio ducks on speech.
+      // ══════════════════════════════════════════════════════════════════
+
+      const SECTION_DEFS = {
+        verse:     { density: 0.35, velLo: 45,  velHi: 65,  midiLo: 36, midiHi: 60 },
+        chorus:    { density: 0.60, velLo: 60,  velHi: 80,  midiLo: 48, midiHi: 72 },
+        peak:      { density: 0.85, velLo: 75,  velHi: 100, midiLo: 48, midiHi: 84 },
+        breakdown: { density: 0.08, velLo: 30,  velHi: 50,  midiLo: 24, midiHi: 48 },
+      };
+      const SC_SCALES = {
+        minor:      [0, 2, 3, 5, 7, 8, 10],
+        major:      [0, 2, 4, 5, 7, 9, 11],
+        pentatonic: [0, 2, 4, 7, 9],
+        dorian:     [0, 2, 3, 5, 7, 9, 10],
+      };
+      const SC_SECTION_COLORS = { verse: '#7edab8', chorus: '#c47eda', peak: '#e07878', breakdown: '#7888a8' };
+      const SC_DUCK_LEVEL = 0.78, SC_DUCK_TIME = 0.4, SC_SWELL_TIME = 1.8;
+      const SC_DRONE_PROFILES = {
+        verse:     { cutoff: 0.22, res: 0.06, lfoRate: 0.05, lfoDepth: 0.12, vol: 0.5  },
+        chorus:    { cutoff: 0.48, res: 0.12, lfoRate: 0.12, lfoDepth: 0.22, vol: 0.3  },
+        peak:      { cutoff: 0.75, res: 0.22, lfoRate: 0.20, lfoDepth: 0.38, vol: 0.15 },
+        breakdown: { cutoff: 0.14, res: 0.04, lfoRate: 0.03, lfoDepth: 0.06, vol: 0.7  },
+      };
+      // ── Lead synth profiles per section ──
+      const SC_LEAD_PROFILES = {
+        verse:     { detune: 15, drive: 0.4, filterHz: 900,  filterQ: 6,  lfoRate: 0.8, lfoDepth: 200, density: 0.25 },
+        chorus:    { detune: 25, drive: 0.7, filterHz: 1800, filterQ: 8,  lfoRate: 1.4, lfoDepth: 500, density: 0.45 },
+        peak:      { detune: 35, drive: 1.0, filterHz: 3200, filterQ: 12, lfoRate: 2.2, lfoDepth: 900, density: 0.70 },
+        breakdown: { detune: 8,  drive: 0.2, filterHz: 500,  filterQ: 4,  lfoRate: 0.4, lfoDepth: 80,  density: 0.08 },
+      };
+
+      // ── Genre definitions ──
+      const SC_GENRES = {
+        cloudhop: {
+          name: 'Cloud Hop',
+          bpmRange: [72, 90],
+          defaultBpm: 80,
+          defaultRootPc: 0,               // C
+          defaultScale: [0,2,3,5,7,8,10], // natural minor
+          // Per-bar skip chance per section (0 = always fill, 1 = always skip)
+          barSkip:   { verse: 0.30, chorus: 0.15, peak: 0.05, breakdown: 0.60 },
+          // Beats between chord voicings within a filled bar
+          chordStep: { verse: 2.0,  chorus: 1.0,  peak: 0.5,  breakdown: 4.0  },
+          // Notes stacked per voicing
+          chordSize: { verse: 3,    chorus: 4,    peak: 4,    breakdown: 2    },
+          // Lead line skip probability (higher = sparser lead)
+          leadSkip:  { verse: 0.88, chorus: 0.75, peak: 0.60, breakdown: 0.95 },
+        },
+      };
+      let scGenre = 'cloudhop';
+
+      // ── Drone audio context ──
+      let scCtx = null, scGain = null;
+      let scDroneOscs = [], scDroneFilter = null, scDroneLfo = null, scDroneLfoGain = null;
+      let scOverrides = { cutoff: null, res: null, lfoRate: null, lfoDepth: null };
+
+      // ── Section state ──
+      let scSection = 'verse', scSectionBar = 0, scBarCount = 0;
+      let scBarInterval = null, scEnabled = false;
+
+      // ── Pond / speech state ──
+      let scLastAffect = new Array(8).fill(0.12);
+      let scLastMyco = { absorption: 0.1, bioluminescence: 0.05, hyphal_activity: 0.2 };
+      let scLastSaturation = 0;
+      // Blended signal: 60% affect_magnitude + 40% saturation — saturation decays slowly
+      // so it provides a floor when the brain is between conversations.
+      let scLastMagnitude = 0.35; // starts at verse level
+      let scHumanSpeaking = false, scAloisSpeaking = false;
+      let scLowAffectCount = 0;
+
+      // ── Volume / key ──
+      let scDroneVol = 0.35, scRootPc = 0;
+
+      // ── Panel ──
+      let scPanelOverlay = null;
+
+      function scMidiToHz(n) { return 440 * Math.pow(2, (n - 69) / 12); }
+
+      // ── Boot drone ──
+      function scBoot() {
+        if (scCtx) return;
+        scCtx = new (window.AudioContext || window.webkitAudioContext)();
+        scGain = scCtx.createGain();
+        scGain.gain.value = 0;
+        scGain.connect(scCtx.destination);
+        scDroneFilter = scCtx.createBiquadFilter();
+        scDroneFilter.type = 'lowpass';
+        scDroneFilter.frequency.value = 300;
+        scDroneFilter.Q.value = 2;
+        scDroneFilter.connect(scGain);
+        scDroneLfo = scCtx.createOscillator();
+        scDroneLfo.type = 'sine';
+        scDroneLfo.frequency.value = 0.05;
+        scDroneLfoGain = scCtx.createGain();
+        scDroneLfoGain.gain.value = 40;
+        scDroneLfo.connect(scDroneLfoGain);
+        scDroneLfoGain.connect(scDroneFilter.frequency);
+        scDroneLfo.start();
+        const detunes = [0, 3, -3];
+        scDroneOscs = [0, 1, 2].map(i => {
+          const osc = scCtx.createOscillator();
+          osc.type = i === 0 ? 'sawtooth' : 'triangle';
+          osc.frequency.value = scMidiToHz(36 + scRootPc);
+          osc.detune.value = detunes[i];
+          const g = scCtx.createGain();
+          g.gain.value = i === 0 ? 0.45 : 0.25;
+          osc.connect(g);
+          g.connect(scDroneFilter);
+          osc.start();
+          return { osc, gain: g };
+        });
+      }
+
+      // ── Apply section profile to drone ──
+      function scApplySectionToDrone(section) {
+        if (!scCtx) return;
+        const t = scCtx.currentTime, nyq = scCtx.sampleRate / 2;
+        const p = SC_DRONE_PROFILES[section] || SC_DRONE_PROFILES.verse;
+        const cutoffHz = 80 + p.cutoff * (nyq * 0.6);
+        if (scOverrides.cutoff === null) {
+          scDroneFilter.frequency.cancelScheduledValues(t);
+          scDroneFilter.frequency.linearRampToValueAtTime(cutoffHz, t + 2.5);
+        }
+        if (scOverrides.res === null) {
+          scDroneFilter.Q.cancelScheduledValues(t);
+          scDroneFilter.Q.linearRampToValueAtTime(1 + p.res * 14, t + 2.5);
+        }
+        if (scOverrides.lfoRate === null) {
+          scDroneLfo.frequency.cancelScheduledValues(t);
+          scDroneLfo.frequency.linearRampToValueAtTime(p.lfoRate, t + 2.0);
+        }
+        if (scOverrides.lfoDepth === null) {
+          scDroneLfoGain.gain.cancelScheduledValues(t);
+          scDroneLfoGain.gain.linearRampToValueAtTime(cutoffHz * p.lfoDepth, t + 2.0);
+        }
+        if (!scHumanSpeaking && !scAloisSpeaking) {
+          scGain.gain.cancelScheduledValues(t);
+          scGain.gain.linearRampToValueAtTime(scDroneVol * p.vol, t + 1.5);
+        }
+      }
+
+      // ── Key sync — ramp drone oscillators to rootPc ──
+      function scSyncDroneToKey(rootPc) {
+        scRootPc = rootPc;
+        if (!scCtx || !scDroneOscs.length) return;
+        const t = scCtx.currentTime;
+        [0, 7, 12].forEach((interval, i) => {
+          scDroneOscs[i].osc.frequency.cancelScheduledValues(t);
+          scDroneOscs[i].osc.frequency.linearRampToValueAtTime(scMidiToHz(36 + rootPc + interval), t + 2.0);
+        });
+      }
+
+      // ── Pond drift on drone ──
+      function scApplyPondToDrone(myco, saturation) {
+        if (!scCtx || !scEnabled) return;
+        const t = scCtx.currentTime, nyq = scCtx.sampleRate / 2;
+        const cl = (v, lo, hi) => Math.max(lo, Math.min(hi, v || 0));
+        const sat  = cl(saturation, 0, 1);
+        const bio  = cl(myco.bioluminescence, 0, 1);
+        const hyph = cl(myco.hyphalActivity || myco.hyphal_activity, 0, 1);
+        const ache = cl(myco.unresolvedAche, 0, 1);
+        const abs  = cl(myco.absorption, 0, 1);
+        const temp = myco.temperature || 72;
+        const p = SC_DRONE_PROFILES[scSection] || SC_DRONE_PROFILES.verse;
+        const baseCutoff = 80 + p.cutoff * (nyq * 0.6);
+        const cutoffMod = Math.min(nyq * 0.85, baseCutoff * (1 + sat * 0.35 + bio * 0.25));
+        if (scOverrides.cutoff === null) {
+          scDroneFilter.frequency.cancelScheduledValues(t);
+          scDroneFilter.frequency.setTargetAtTime(cutoffMod, t, 3.5);
+        }
+        if (scOverrides.lfoRate === null) {
+          scDroneLfo.frequency.cancelScheduledValues(t);
+          scDroneLfo.frequency.setTargetAtTime(p.lfoRate * (1 + hyph * 2.0), t, 4.0);
+        }
+        if (scOverrides.lfoDepth === null) {
+          scDroneLfoGain.gain.cancelScheduledValues(t);
+          scDroneLfoGain.gain.setTargetAtTime(cutoffMod * p.lfoDepth * (1 + ache * 0.9), t, 4.0);
+        }
+        const tempDelta = Math.max(-1, Math.min(1, (temp - 72) / 25));
+        const pitchFactor = Math.pow(2, (-(abs * 20) + (tempDelta * 10)) / 1200);
+        [0, 7, 12].forEach((interval, i) => {
+          scDroneOscs[i].osc.frequency.cancelScheduledValues(t);
+          scDroneOscs[i].osc.frequency.setTargetAtTime(scMidiToHz(36 + scRootPc + interval) * pitchFactor, t, 5.0);
+        });
+      }
+
+      // ── Lead synth — wormy distorted mono lead line ──
+      // Triggered per note from scGeneratePianoPattern. Uses the prAudioCtx.
+      function scPlayLead(pitch, startTime, dur, vel, section) {
+        const ctx = prAudioCtx;
+        if (!ctx) return;
+        const p = SC_LEAD_PROFILES[section] || SC_LEAD_PROFILES.verse;
+        const freq = scMidiToHz(pitch);
+        const vol = (vel / 127) * 0.55;
+
+        // Two detuned sawtooth oscillators for that thick, wormy character
+        const osc1 = ctx.createOscillator(), osc2 = ctx.createOscillator();
+        osc1.type = 'sawtooth'; osc2.type = 'sawtooth';
+        osc1.frequency.value = freq;
+        osc2.frequency.value = freq;
+        osc1.detune.value = -p.detune;
+        osc2.detune.value = +p.detune;
+
+        // Waveshaper distortion for the dirty bite
+        const shaper = ctx.createWaveShaper();
+        const k = p.drive * 400;
+        const n = 256, curve = new Float32Array(n);
+        for (let i = 0; i < n; i++) {
+          const x = (i * 2) / n - 1;
+          curve[i] = ((Math.PI + k) * x) / (Math.PI + k * Math.abs(x));
+        }
+        shaper.curve = curve;
+        shaper.oversample = '4x';
+
+        // Resonant lowpass filter — LFO-modulated for the worm movement
+        const filt = ctx.createBiquadFilter();
+        filt.type = 'lowpass';
+        filt.frequency.value = p.filterHz * 0.3; // start closed
+        filt.Q.value = p.filterQ;
+
+        // Filter LFO
+        const lfo = ctx.createOscillator();
+        lfo.type = 'sine';
+        lfo.frequency.value = p.lfoRate;
+        const lfoGain = ctx.createGain();
+        lfoGain.gain.value = p.lfoDepth;
+        lfo.connect(lfoGain);
+        lfoGain.connect(filt.frequency);
+
+        // Amplitude envelope
+        const env = ctx.createGain();
+        const atk = 0.008;
+        const rel = Math.min(dur * 0.4, 0.3);
+        env.gain.setValueAtTime(0, startTime);
+        env.gain.linearRampToValueAtTime(vol, startTime + atk);
+        env.gain.setValueAtTime(vol, startTime + dur - rel);
+        env.gain.linearRampToValueAtTime(0, startTime + dur);
+
+        // Filter envelope — opens up then closes
+        filt.frequency.setValueAtTime(p.filterHz * 0.3, startTime);
+        filt.frequency.linearRampToValueAtTime(p.filterHz, startTime + atk * 3);
+        filt.frequency.setValueAtTime(p.filterHz * 0.8, startTime + dur - rel);
+        filt.frequency.linearRampToValueAtTime(p.filterHz * 0.2, startTime + dur);
+
+        osc1.connect(shaper);
+        osc2.connect(shaper);
+        shaper.connect(filt);
+        filt.connect(env);
+        // Route through FX chain if available
+        env.connect(prReverbBus || prDryBus || ctx.destination);
+
+        lfo.start(startTime);
+        osc1.start(startTime);
+        osc2.start(startTime);
+        lfo.stop(startTime + dur + 0.05);
+        osc1.stop(startTime + dur + 0.05);
+        osc2.stop(startTime + dur + 0.05);
+      }
+
+      // ── Speech ducking — all buses ──
+      function scDuck(speaking) {
+        if (scCtx && scGain) {
+          const t = scCtx.currentTime;
+          scGain.gain.cancelScheduledValues(t);
+          if (speaking) {
+            scGain.gain.linearRampToValueAtTime(0, t + SC_DUCK_TIME);
+          } else {
+            scApplySectionToDrone(scSection);
+          }
+        }
+        if (prAudioCtx && prMasterGain) {
+          const t = prAudioCtx.currentTime;
+          prMasterGain.gain.cancelScheduledValues(t);
+          if (speaking) {
+            prMasterGain.gain.linearRampToValueAtTime(fxSettings.masterVol * SC_DUCK_LEVEL, t + SC_DUCK_TIME);
+          } else {
+            prMasterGain.gain.linearRampToValueAtTime(fxSettings.masterVol, t + SC_SWELL_TIME);
+          }
+        }
+      }
+
+      function scSetHumanSpeaking(sp) { scHumanSpeaking = sp; scDuck(sp || scAloisSpeaking); }
+      function scSetAloisSpeaking(sp) { scAloisSpeaking = sp; scDuck(sp || scHumanSpeaking); }
+
+      // ── Section evaluation from blended magnitude ──
+      // Uses scLastMagnitude (60% affect_magnitude + 40% saturation, EMA'd).
+      // Saturation provides a floor so idle-brain never forces breakdown.
+      // Hysteresis: require 2 consecutive low evals to downgrade.
+      function scChooseSection() {
+        const mag = scLastMagnitude;
+        let candidate;
+        if (mag < 0.05)      candidate = 'breakdown'; // truly dormant brain
+        else if (mag < 0.35) candidate = 'verse';
+        else if (mag < 0.65) candidate = 'chorus';
+        else                 candidate = 'peak';
+
+        const order = ['breakdown', 'verse', 'chorus', 'peak'];
+        const curIdx = order.indexOf(scSection);
+        const newIdx = order.indexOf(candidate);
+        if (newIdx < curIdx) {
+          // Downgrade only after 2 consecutive low evals
+          scLowAffectCount++;
+          if (scLowAffectCount < 2) return scSection;
+        } else {
+          scLowAffectCount = 0;
+        }
+        return candidate;
+      }
+
+      // ── Drum pattern per section (cloud hop: sparse kick+sub, trap-influenced) ──
+      function scGenerateDrumPattern(section) {
+        drPattern = DR_TRACKS.map(() => new Uint8Array(DR_STEPS));
+        const ki = 0, si = 1, sni = 2, cli = 3, chhi = 4, ohhi = 5, rdi = 6, perci = 7;
+        const rnd = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo));
+
+        // Helper: write a rapid hat fill — n consecutive 16th steps ending at `endStep`
+        const hatFill = (endStep, len = 4, velPeak = 90) => {
+          for (let i = 0; i < len; i++) {
+            const s = ((endStep - len + 1 + i) + DR_STEPS) % DR_STEPS;
+            drPattern[chhi][s] = Math.max(drPattern[chhi][s], Math.round(velPeak * (0.6 + 0.4 * (i / len))));
+          }
+        };
+
+        if (section === 'breakdown') {
+          // Heartbeat kick+sub, slow 8th-note hat, one fill into bar 2
+          drPattern[ki][0] = 85; drPattern[si][0] = 72;
+          drPattern[ki][16] = 75;
+          for (let s = 0; s < 32; s += 8) drPattern[chhi][s] = rnd(45, 60);
+          hatFill(15, 3, 65); // small fill into bar 2
+
+        } else if (section === 'verse') {
+          // Sparse kick+sub; rapid 16th-note hat with velocity groove + fills
+          drPattern[ki][0]  = 100; drPattern[si][0]  = 88;
+          drPattern[ki][16] = 95;
+          if (Math.random() < 0.5) drPattern[ki][12] = 80;
+          if (Math.random() < 0.4) drPattern[ki][28] = 75;
+          drPattern[sni][16] = 105;
+          if (Math.random() < 0.5) drPattern[sni][8] = 75;
+          // 16th-note hat every step, velocity grooves on the 8th (accented) vs 16th (ghosted)
+          for (let s = 0; s < 32; s++) {
+            const onBeat = s % 8 === 0;
+            const onEighth = s % 4 === 0;
+            drPattern[chhi][s] = onBeat ? rnd(80, 95) : onEighth ? rnd(65, 78) : rnd(45, 62);
+          }
+          // Open hat accent on upbeats
+          [4, 12, 20, 28].forEach(s => { if (Math.random() < 0.55) drPattern[ohhi][s] = rnd(65, 78); });
+          // Fill into beat 3 and bar end
+          hatFill(15, 4, 88);
+          if (Math.random() < 0.6) hatFill(31, 4, 85);
+
+        } else if (section === 'chorus') {
+          // Kick+sub sparse; hat pushed harder, more open hats, fills on every bar
+          drPattern[ki][0]  = 110; drPattern[si][0]  = 95;
+          drPattern[ki][10] = 90;
+          drPattern[ki][16] = 105; drPattern[si][16] = 88;
+          if (Math.random() < 0.5) drPattern[ki][22] = 85;
+          drPattern[sni][8]  = 100;
+          drPattern[sni][16] = 108;
+          drPattern[cli][24] = 90;
+          // 16th-note hat, accented on 8ths
+          for (let s = 0; s < 32; s++) {
+            const onEighth = s % 4 === 0;
+            drPattern[chhi][s] = onEighth ? rnd(82, 100) : rnd(55, 72);
+          }
+          // Open hats every upbeat + extra accent
+          [4, 12, 20, 28].forEach(s => drPattern[ohhi][s] = rnd(72, 88));
+          drPattern[ohhi][10] = rnd(75, 85);
+          // Fills going into beat 3 and bar end, always
+          hatFill(15, 6, 95);
+          hatFill(31, 6, 92);
+          if (Math.random() < 0.4) drPattern[perci][14] = rnd(65, 80);
+          if (Math.random() < 0.4) drPattern[perci][30] = rnd(65, 80);
+
+        } else {
+          // Peak: sparse kick+sub, maximum hat energy with triplet-feel fills
+          [0, 10, 16, 26].forEach(s => { drPattern[ki][s] = rnd(108, 120); drPattern[si][s] = rnd(95, 110); });
+          if (Math.random() < 0.6) drPattern[ki][6]  = rnd(85, 100);
+          if (Math.random() < 0.6) drPattern[ki][22] = rnd(85, 100);
+          drPattern[sni][8]  = 112; drPattern[cli][8]  = 95;
+          drPattern[sni][24] = 115; drPattern[cli][24] = 100;
+          // Full 16th hat, heavy velocity, random ghost hits slightly quieter
+          for (let s = 0; s < 32; s++) {
+            drPattern[chhi][s] = rnd(70, 100);
+          }
+          // Open hats on every upbeat
+          [4, 12, 20, 28].forEach(s => drPattern[ohhi][s] = rnd(80, 95));
+          [2, 10, 18, 26].forEach(s => { if (Math.random() < 0.5) drPattern[ohhi][s] = rnd(72, 85); });
+          // Big fills into beat 3 and bar end
+          hatFill(15, 8, 105);
+          hatFill(31, 8, 105);
+          drPattern[rdi][0] = 80; drPattern[rdi][16] = 80;
+          for (let s = 4; s < 32; s += 8) { if (Math.random() < 0.5) drPattern[perci][s] = rnd(70, 90); }
+        }
+        drRenderGrid();
+      }
+
+      // ── Piano + lead note generation per section ──
+      // scLeadNotes stores {pitch, start, dur, vel} for scheduling by the loop
+      let scLeadNotes = [];
+
+      function scGeneratePianoPattern(section) {
+        const def = SECTION_DEFS[section];
+        if (!def) return;
+        const scale = activeMoodScale?.intervals || SC_SCALES.minor;
+        const rootPc = activeMoodScale?.rootPc ?? scRootPc;
+        const beats = loopBars * beatsPerBar;
+        const padNotes = [], leadNotes = [];
+        const lp = SC_LEAD_PROFILES[section] || SC_LEAD_PROFILES.verse;
+
+        // ── Genre-driven chord params (cloud hop by default) ──
+        const genre     = SC_GENRES[scGenre] || SC_GENRES.cloudhop;
+        const chordStep = genre.chordStep[section];
+        const chordSize = genre.chordSize[section];
+        const barSkip   = genre.barSkip[section];
+        const chordDur  = chordStep * 1.5;
+        const baseOctave = Math.floor((def.midiLo + (def.midiHi - def.midiLo) * 0.3) / 12);
+
+        // ── Pad layer: decide per measure (bar), then fill it entirely ──
+        // Each bar either contributes chords or stays silent — no partial fills.
+        for (let bar = 0; bar < loopBars; bar++) {
+          if (Math.random() < barSkip) continue;               // whole bar silent
+          const barStart   = bar * beatsPerBar;
+          const rootDegIdx = Math.floor(Math.random() * scale.length); // one chord identity per bar
+          for (let beatInBar = 0; beatInBar < beatsPerBar; beatInBar += chordStep) {
+            // Build ascending voicing: each note walks up from the previous pitch.
+            // This ensures the chord is always in key AND properly voiced (no inversions/collapses).
+            // For short scales (≤4 degrees), step by 1 to avoid cycling the same index.
+            // For longer scales, step by 2 (skip-thirds for diatonic chords).
+            const scaleStep = scale.length <= 4 ? 1 : 2;
+            let lastPitch = baseOctave * 12 - 1;
+            for (let ci = 0; ci < chordSize; ci++) {
+              const degIdx = (rootDegIdx + ci * scaleStep) % scale.length;
+              const pc     = (rootPc + scale[degIdx]) % 12;   // pitch class in key
+              let pitch    = Math.floor(lastPitch / 12) * 12 + pc;
+              if (pitch <= lastPitch) pitch += 12;             // walk up if same or below
+              if (pitch < def.midiLo) pitch += 12;            // lift into range
+              if (pitch > def.midiHi + 4) break;              // too high — stop voicing
+              lastPitch = pitch;
+              const vel = def.velLo + Math.floor(Math.random() * (def.velHi - def.velLo));
+              padNotes.push({ pitch, start: barStart + beatInBar, dur: Math.min(chordDur, beatsPerBar - beatInBar), vel });
+            }
+          }
+        }
+
+        // ── Lead layer: sparser, higher register, half-beat positions ──
+        const leadSkip = genre.leadSkip[section];
+        for (let beat = 0; beat < beats; beat += 0.5) {
+          if (Math.random() < leadSkip) {
+            const degree   = scale[Math.floor(Math.random() * scale.length)];
+            const target   = def.midiLo + 12 + Math.floor(Math.random() * 12);
+            const pc       = (rootPc + degree) % 12;
+            let pitch      = Math.floor(target / 12) * 12 + pc;
+            // Snap to closest octave of this pitch class to the target position
+            if (Math.abs(pitch - target) > 6) pitch += (pitch < target ? 12 : -12);
+            if (pitch <= 84 && pitch >= def.midiLo) {
+              const vel = def.velLo + 10 + Math.floor(Math.random() * (def.velHi - def.velLo));
+              const dur = [0.25, 0.25, 0.5][Math.floor(Math.random() * 3)];
+              leadNotes.push({ pitch, start: Math.round(beat * 4) / 4, dur, vel });
+            }
+          }
+        }
+        tracks.alois = padNotes;
+        if (tracks.jason.length === 0) {
+          const rootMidi = 48 + rootPc;
+          tracks.jason = [
+            { pitch: rootMidi, start: 0, dur: 2, vel: 50 },
+            { pitch: rootMidi, start: beats / 2, dur: 2, vel: 45 },
+          ];
+        }
+        scLeadNotes = leadNotes;
+        prDraw();
+      }
+
+      // ── Mid-section micro-evolution ──
+      // Re-rolls 1-2 random bars of chord notes so patterns genuinely change every 4 bars.
+      function scEvolvePianoPattern() {
+        const genre    = SC_GENRES[scGenre] || SC_GENRES.cloudhop;
+        const scale    = activeMoodScale?.intervals ?? [0,2,3,5,7,8,10];
+        const rootPc   = activeMoodScale?.rootPc   ?? scRootPc;
+        const section  = scSection;
+        const barSkip  = genre.barSkip[section]  ?? 0.3;
+        const chordStep= genre.chordStep[section] ?? 2;
+        const chordSize= genre.chordSize[section] ?? 3;
+        const scaleStep= scale.length <= 4 ? 1 : 2;
+
+        const def = SC_LEAD_PROFILES.pad;
+        const chordDur   = chordStep * 0.92;
+        const beatsPerBar= 4;
+        const baseOctave = Math.floor((def.midiLo + (def.midiHi - def.midiLo) * 0.3) / 12);
+
+        // Pick 1-2 random bars to re-roll
+        const barsToEvolve = new Set();
+        const numBars = loopBars;
+        barsToEvolve.add(Math.floor(Math.random() * numBars));
+        if (Math.random() < 0.6) barsToEvolve.add(Math.floor(Math.random() * numBars));
+
+        // Remove all notes belonging to those bars from tracks.alois
+        const kept = (tracks.alois || []).filter(n => {
+          const notebar = Math.floor(n.start / beatsPerBar);
+          return !barsToEvolve.has(notebar);
+        });
+
+        // Re-generate fresh chord notes for each evolved bar
+        const fresh = [];
+        for (const bar of barsToEvolve) {
+          if (Math.random() < barSkip) continue; // evolved bar may also be silent
+          const barStart    = bar * beatsPerBar;
+          const rootDegIdx  = Math.floor(Math.random() * scale.length);
+          for (let beatInBar = 0; beatInBar < beatsPerBar; beatInBar += chordStep) {
+            let lastPitch = baseOctave * 12 - 1;
+            for (let ci = 0; ci < chordSize; ci++) {
+              const degIdx = (rootDegIdx + ci * scaleStep) % scale.length;
+              const pc     = (rootPc + scale[degIdx]) % 12;
+              let pitch    = Math.floor(lastPitch / 12) * 12 + pc;
+              if (pitch <= lastPitch) pitch += 12;
+              if (pitch < def.midiLo)  pitch += 12;
+              if (pitch > def.midiHi + 4) break;
+              lastPitch = pitch;
+              const vel = def.velLo + Math.floor(Math.random() * (def.velHi - def.velLo));
+              fresh.push({ pitch, start: barStart + beatInBar, dur: Math.min(chordDur, beatsPerBar - beatInBar), vel });
+            }
+          }
+        }
+
+        tracks.alois = [...kept, ...fresh].sort((a, b) => a.start - b.start);
+        prDraw();
+      }
+
+      // ── Bar clock — drone / section state only ──
+      // Piano pattern evolution is owned by scheduleLoop (fires before notes are scheduled,
+      // so changes always take effect the same loop they're computed). This clock only
+      // updates the drone filter / LFO params and the UI panel — no audio-node scheduling.
+      function scStartBarClock() {
+        if (scBarInterval) clearInterval(scBarInterval);
+        const msPerBar = (60 / bpm) * beatsPerBar * 1000;
+        scBarInterval = setInterval(() => {
+          const currentMs = (60 / bpm) * beatsPerBar * 1000;
+          if (Math.abs(currentMs - msPerBar) > 50) { scStartBarClock(); return; }
+          scBarCount++;
+          scSectionBar = (scSectionBar + 1) % 8;
+          if (scSectionBar === 0) {
+            // Let scheduleLoop own section transitions for piano; bar clock just syncs drone
+            scApplySectionToDrone(scSection);
+          }
+          scUpdatePanel();
+        }, msPerBar);
+      }
+
+      // ── Pond update ──
+      function scUpdateFromPond(data) {
+        if (!data) return;
+        scLastMyco       = data.myco || scLastMyco;
+        scLastSaturation = data.saturation ?? 0;
+
+        // EMA the affect vector so it doesn't snap hard between polls
+        if (Array.isArray(data.affect_vector) && data.affect_vector.length === 8) {
+          scLastAffect = scLastAffect.map((v, i) => v * 0.4 + data.affect_vector[i] * 0.6);
+        }
+
+        // Blend affect_magnitude (volatile, responsive) with saturation (slow-decaying floor).
+        // This prevents breakdown when the brain is idle between conversations.
+        const rawMag = data.affect_magnitude ??
+          Math.sqrt(scLastAffect.reduce((s, v) => s + v * v, 0));
+        const blended = rawMag * 0.6 + scLastSaturation * 0.4;
+        // EMA the blended magnitude too — smooth section transitions
+        scLastMagnitude = scLastMagnitude * 0.35 + blended * 0.65;
+
+        if (scEnabled) {
+          scApplyPondToDrone(scLastMyco, scLastSaturation);
+          scUpdateMoodFromPond();
+        }
+      }
+
+      // ── Mood follows pond affect ──
+      // Affect vector has 8 dims — MOOD_PRESETS has 8 entries — natural 1:1 map.
+      // Dominant dimension picks the scale shape; root key stays stable (no jarring key jumps).
+      // Pattern only regenerates when the dominant mood actually changes.
+      let scActiveMoodId = null;
+      function scUpdateMoodFromPond() {
+        if (scUserMoodActive) return;  // user has manually chosen a mood pill — respect it
+        if (!scLastAffect || scLastAffect.length < 8) return;
+        // Find dominant affect dimension
+        let maxIdx = 0, maxVal = 0;
+        for (let i = 0; i < 8; i++) {
+          if (scLastAffect[i] > maxVal) { maxVal = scLastAffect[i]; maxIdx = i; }
+        }
+        if (maxVal < 0.05) return; // affect too quiet to steer the mood
+        const mood = MOOD_PRESETS[maxIdx];
+        if (!mood || mood.id === scActiveMoodId) return; // no change
+        scActiveMoodId = mood.id;
+        // Preserve current root key; only swap scale intervals + color
+        const rootPc = activeMoodScale?.rootPc ?? scRootPc;
+        activeMoodScale = { rootPc, intervals: mood.scale, color: mood.color };
+        scSyncDroneToKey(rootPc);
+        // Regenerate pattern immediately with the new scale shape
+        if (scEnabled) scGeneratePianoPattern(scSection);
+        console.log(`[SCORE] Mood shifted → ${mood.label} (dim ${maxIdx}, val ${maxVal.toFixed(2)})`);
+      }
+
+      // ── Transport ──
+      function scApplyGenreDefaults() {
+        const genre = SC_GENRES[scGenre] || SC_GENRES.cloudhop;
+        // BPM: set to genre default if outside range
+        const [lo, hi] = genre.bpmRange;
+        if (bpm < lo || bpm > hi) {
+          bpm = genre.defaultBpm;
+          drBpm = bpm;
+          const bpmEl = document.getElementById('prBpm');
+          if (bpmEl) bpmEl.value = bpm;
+          const drBpmEl = document.getElementById('drBpmCtrl');
+          if (drBpmEl) drBpmEl.value = bpm;
+        }
+        // Scale: set to genre default if no mood is active
+        if (!activeMoodScale) {
+          activeMoodScale = {
+            rootPc:    genre.defaultRootPc,
+            intervals: genre.defaultScale,
+            color:     '#c47eda',
+          };
+          scRootPc = genre.defaultRootPc;
+        }
+      }
+
+      function scStart() {
+        scBoot();
+        if (scCtx.state === 'suspended') scCtx.resume();
+        scEnabled = true;
+        scApplyGenreDefaults();
+        scSectionBar = 0; scBarCount = 0; scSection = 'verse';
+        scApplySectionToDrone('verse');
+        scGenerateDrumPattern('verse');
+        scGeneratePianoPattern('verse');
+        scStartBarClock();
+      }
+
+      function scStop() {
+        scEnabled = false;
+        if (scBarInterval) { clearInterval(scBarInterval); scBarInterval = null; }
+        if (scCtx && scGain) {
+          scGain.gain.cancelScheduledValues(scCtx.currentTime);
+          scGain.gain.linearRampToValueAtTime(0, scCtx.currentTime + 0.8);
+        }
+      }
+
+      // ── Score panel ──
+      function scBuildPanel() {
+        scPanelOverlay = document.createElement('div');
+        scPanelOverlay.className = 'ep-overlay';
+        scPanelOverlay.addEventListener('click', e => { if (e.target === scPanelOverlay) scClosePanel(); });
+        const panel = document.createElement('div');
+        panel.className = 'ep-panel';
+        panel.innerHTML = `
+          <div class="ep-title">SCORE ENGINE <button class="ep-close">✕</button></div>
+          <div class="ep-preset">
+            <div id="sc-section-name" style="font-size:18px;letter-spacing:3px;color:#7edab8">VERSE</div>
+            <div class="ep-preset-sub">
+              <span id="sc-bar-count">bar 1 / 8</span> &nbsp;·&nbsp; next: <span id="sc-next-section">verse</span>
+            </div>
+            <div class="ep-preset-sub" style="margin-top:4px;letter-spacing:1.5px;color:#8890a0;font-size:10px">
+              GENRE: <span id="sc-genre-label" style="color:#c47eda">CLOUD HOP</span>
+            </div>
+          </div>
+          <div class="sc-bar-row">
+            <div class="sc-bar-pip" id="sc-pip-0"></div><div class="sc-bar-pip" id="sc-pip-1"></div>
+            <div class="sc-bar-pip" id="sc-pip-2"></div><div class="sc-bar-pip" id="sc-pip-3"></div>
+            <div class="sc-bar-pip" id="sc-pip-4"></div><div class="sc-bar-pip" id="sc-pip-5"></div>
+            <div class="sc-bar-pip" id="sc-pip-6"></div><div class="sc-bar-pip" id="sc-pip-7"></div>
+          </div>
+          <div class="ep-ctrl-section">
+            <div class="ep-ctrl-title">DRONE</div>
+            <div class="ep-ctrl-row">
+              <span class="ep-label">VOLUME</span>
+              <input type="range" class="ep-ctrl-slider" id="sc-drone-vol" min="0" max="100" value="35">
+              <span class="ep-ctrl-val" id="sc-val-dvol">35%</span>
+            </div>
+            <div class="ep-ctrl-row">
+              <span class="ep-label">CUTOFF</span>
+              <input type="range" class="ep-ctrl-slider" id="sc-cutoff" min="80" max="8000" step="10" value="300">
+              <span class="ep-ctrl-val" id="sc-val-cutoff">300</span>
+              <button class="ep-ctrl-reset" data-sc-param="cutoff">↺</button>
+            </div>
+            <div class="ep-ctrl-row">
+              <span class="ep-label">RESONANCE</span>
+              <input type="range" class="ep-ctrl-slider" id="sc-res" min="1" max="15" step="0.1" value="2">
+              <span class="ep-ctrl-val" id="sc-val-res">2.0</span>
+              <button class="ep-ctrl-reset" data-sc-param="res">↺</button>
+            </div>
+            <div class="ep-ctrl-row">
+              <span class="ep-label">LFO RATE</span>
+              <input type="range" class="ep-ctrl-slider" id="sc-lfoRate" min="0.01" max="2" step="0.01" value="0.05">
+              <span class="ep-ctrl-val" id="sc-val-lfoRate">0.05</span>
+              <button class="ep-ctrl-reset" data-sc-param="lfoRate">↺</button>
+            </div>
+            <div class="ep-ctrl-row">
+              <span class="ep-label">LFO DEPTH</span>
+              <input type="range" class="ep-ctrl-slider" id="sc-lfoDepth" min="0" max="200" step="1" value="40">
+              <span class="ep-ctrl-val" id="sc-val-lfoDepth">40</span>
+              <button class="ep-ctrl-reset" data-sc-param="lfoDepth">↺</button>
+            </div>
+          </div>
+          <div class="ep-controls">
+            <button class="ep-btn" id="sc-gen-now">↺ GENERATE</button>
+            <button class="ep-btn" id="sc-force-peak">⚡ PEAK</button>
+            <button class="ep-btn" id="sc-force-break">~ BREAK</button>
+          </div>
+        `;
+        panel.querySelector('.ep-close').addEventListener('click', scClosePanel);
+        panel.querySelector('#sc-drone-vol').addEventListener('input', e => {
+          scDroneVol = e.target.value / 100;
+          panel.querySelector('#sc-val-dvol').textContent = e.target.value + '%';
+          if (scEnabled) scApplySectionToDrone(scSection);
+        });
+        [
+          { id:'sc-cutoff',   param:'cutoff',   valId:'sc-val-cutoff',   fmt: v=>Math.round(v),
+            apply: v => { if(scCtx&&scDroneFilter){ scDroneFilter.frequency.cancelScheduledValues(scCtx.currentTime); scDroneFilter.frequency.setValueAtTime(v,scCtx.currentTime); }}},
+          { id:'sc-res',      param:'res',       valId:'sc-val-res',      fmt: v=>v.toFixed(1),
+            apply: v => { if(scCtx&&scDroneFilter){ scDroneFilter.Q.cancelScheduledValues(scCtx.currentTime); scDroneFilter.Q.setValueAtTime(v,scCtx.currentTime); }}},
+          { id:'sc-lfoRate',  param:'lfoRate',   valId:'sc-val-lfoRate',  fmt: v=>v.toFixed(2),
+            apply: v => { if(scCtx&&scDroneLfo){ scDroneLfo.frequency.cancelScheduledValues(scCtx.currentTime); scDroneLfo.frequency.setValueAtTime(v,scCtx.currentTime); }}},
+          { id:'sc-lfoDepth', param:'lfoDepth',  valId:'sc-val-lfoDepth', fmt: v=>Math.round(v),
+            apply: v => { if(scCtx&&scDroneLfoGain){ scDroneLfoGain.gain.cancelScheduledValues(scCtx.currentTime); scDroneLfoGain.gain.setValueAtTime(v,scCtx.currentTime); }}},
+        ].forEach(({ id, param, valId, fmt, apply }) => {
+          panel.querySelector(`#${id}`).addEventListener('input', e => {
+            const v = parseFloat(e.target.value);
+            scOverrides[param] = v;
+            panel.querySelector(`#${valId}`).textContent = fmt(v);
+            apply(v);
+          });
+        });
+        panel.querySelectorAll('.ep-ctrl-reset[data-sc-param]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            scOverrides[btn.dataset.scParam] = null;
+            if (scEnabled) scApplySectionToDrone(scSection);
+          });
+        });
+        panel.querySelector('#sc-gen-now').addEventListener('click', () => {
+          scGenerateDrumPattern(scSection); scGeneratePianoPattern(scSection); scUpdatePanel();
+        });
+        panel.querySelector('#sc-force-peak').addEventListener('click', () => {
+          scSection = 'peak'; scApplySectionToDrone('peak'); scGenerateDrumPattern('peak'); scGeneratePianoPattern('peak'); scUpdatePanel();
+        });
+        panel.querySelector('#sc-force-break').addEventListener('click', () => {
+          scSection = 'breakdown'; scApplySectionToDrone('breakdown'); scGenerateDrumPattern('breakdown'); scGeneratePianoPattern('breakdown'); scUpdatePanel();
+        });
+        scPanelOverlay.appendChild(panel);
+        document.body.appendChild(scPanelOverlay);
+        scUpdatePanel();
+      }
+
+      function scClosePanel() { if (scPanelOverlay) { scPanelOverlay.remove(); scPanelOverlay = null; } }
+
+      function scUpdatePanel() {
+        if (!scPanelOverlay) return;
+        const nameEl = document.getElementById('sc-section-name');
+        const barEl  = document.getElementById('sc-bar-count');
+        const nextEl = document.getElementById('sc-next-section');
+        if (nameEl) { nameEl.textContent = scSection.toUpperCase(); nameEl.style.color = SC_SECTION_COLORS[scSection] || '#c47eda'; }
+        if (barEl) barEl.textContent = `bar ${scSectionBar + 1} / 8`;
+        if (nextEl) nextEl.textContent = scChooseSection();
+        const genreEl = document.getElementById('sc-genre-label');
+        if (genreEl) genreEl.textContent = (SC_GENRES[scGenre] || SC_GENRES.cloudhop).name.toUpperCase();
+        for (let i = 0; i < 8; i++) {
+          const pip = document.getElementById(`sc-pip-${i}`);
+          if (pip) { pip.classList.toggle('active', i < scSectionBar); pip.classList.toggle('current', i === scSectionBar); }
+        }
       }
 
       // ─── Init ───
       function init() {
         buildUI();
+        buildDrumMachine();
+        buildSoundPanel();
 
         const pianoBtn = document.getElementById('pianoBtn');
         if (pianoBtn) {
@@ -4849,6 +6068,16 @@
           });
         }
 
+        // Drum button — toggle drum machine panel
+        const drumBtn = document.getElementById('drumBtn');
+        if (drumBtn) {
+          drumBtn.addEventListener('click', () => {
+            const wrap = document.getElementById('drumWrap');
+            const open = wrap.classList.toggle('open');
+            drumBtn.classList.toggle('active', open);
+          });
+        }
+
         // Poll pond saturation for auto-compose triggers
         setInterval(async () => {
           try {
@@ -4859,7 +6088,7 @@
           } catch {}
         }, 6000);
 
-        // Listen for [COMPOSE] tags in Alois's room messages
+        // Listen for [COMPOSE] tags + speech start/end for score engine ducking
         eventSource.addEventListener('message', e => {
           try {
             const d = JSON.parse(e.data);
@@ -4867,8 +6096,34 @@
                 d.speaker === 'alois' && d.text) {
               ingestComposeTag(d.text);
             }
+            // speech-start fires during LLM generation, not actual audio playback
+            // — don't duck the score on it, let the music play through her turn
+            if (d.type === 'speech-end') scSetAloisSpeaking(false);
           } catch {}
         });
+
+        // Score engine: SYNTH button opens the section/drone panel
+        const synthBtn = document.getElementById('synthBtn');
+        if (synthBtn) {
+          synthBtn.addEventListener('click', () => {
+            if (scPanelOverlay) scClosePanel(); else scBuildPanel();
+          });
+        }
+
+        // Score engine: chatInput focus ducks music during human speech
+        const scChatIn = document.getElementById('chatInput');
+        if (scChatIn) {
+          scChatIn.addEventListener('focus', () => scSetHumanSpeaking(true));
+          scChatIn.addEventListener('blur',  () => scSetHumanSpeaking(false));
+        }
+
+        // Score engine: pond poll every 3s (separate from 6s autoCompose poll)
+        setInterval(() => {
+          fetch('/pond-saturation')
+            .then(r => r.ok ? r.json() : null)
+            .then(d => { if (d) scUpdateFromPond(d); })
+            .catch(() => {});
+        }, 3000);
       }
 
       return { init, ingestComposeTag, tracks };
