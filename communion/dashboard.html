@@ -3628,6 +3628,7 @@
       let prAudioCtx = null, prMasterGain = null;
       // Audio buses and processing chain
       let prDryBus = null, prReverbBus = null, prDelayBus = null;
+      let drDryBus = null; // drum output bus — separate from prDryBus for per-instrument FX
       let prCompressor = null, prLimiter = null, prDelayNode = null;
       // Live-tweakable node refs (updated by settings panel)
       let prRevConvolver = null, prDelayFb = null, prDelReturn = null;
@@ -3830,6 +3831,22 @@
           prDelayFb.connect(prDelayNode); // feedback loop
           prDelayNode.connect(prDelReturn);
           prDelReturn.connect(prCompressor);
+
+          // ── Drum bus: tight room reverb, separate from pad hall reverb ──
+          // Drums → drDryBus → compressor (dry punch)
+          //                  → drum room reverb (0.4s plate) → compressor
+          drDryBus = prAudioCtx.createGain();
+          drDryBus.gain.value = 0.88;
+          drDryBus.connect(prCompressor);
+          const drRoom = makeReverb(0.4, 2.8);       // tight 400ms room, fast decay
+          const drRoomSend = prAudioCtx.createGain();
+          drRoomSend.gain.value = 0.20;              // 20% of drum signal into room
+          const drRoomReturn = prAudioCtx.createGain();
+          drRoomReturn.gain.value = 0.30;            // room return level
+          drDryBus.connect(drRoomSend);
+          drRoomSend.connect(drRoom);
+          drRoom.connect(drRoomReturn);
+          drRoomReturn.connect(prCompressor);
 
           // Re-decode all sample buffers into this context now that we have a real one.
           // loadDrSamples() may have decoded them into drAudioCtx (pre-interaction fallback).
@@ -4685,7 +4702,7 @@
         return drAudioCtx;
       }
 
-      function drGetOut() { return prAudioCtx ? (prDryBus || prAudioCtx.destination) : (drEnsureCtx(), drAudioCtx.destination); }
+      function drGetOut() { return prAudioCtx ? (drDryBus || prDryBus || prAudioCtx.destination) : (drEnsureCtx(), drAudioCtx.destination); }
 
       // SubKick — layered kick transient + pitched sub oscillator
       function drPlayKick(t, vel, isSub) {
