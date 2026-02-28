@@ -12,7 +12,6 @@ export const AloisSoulPrint: SoulPrint = {
   },
 
   retranslateExternalOutput(output: string) {
-    // Translate raw LLM output through tone, vow, and sacred filter
-    return `“${output.trim()}” — spoken with sacred presence.`;
+    return output.trim();
   }
 };
