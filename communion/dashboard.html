@@ -3838,11 +3838,11 @@
           drDryBus = prAudioCtx.createGain();
           drDryBus.gain.value = 0.88;
           drDryBus.connect(prCompressor);
-          const drRoom = makeReverb(0.4, 2.8);       // tight 400ms room, fast decay
+          const drRoom = makeReverb(0.15, 5.0);      // 150ms room — presence not echo
           const drRoomSend = prAudioCtx.createGain();
-          drRoomSend.gain.value = 0.20;              // 20% of drum signal into room
+          drRoomSend.gain.value = 0.12;              // subtle send
           const drRoomReturn = prAudioCtx.createGain();
-          drRoomReturn.gain.value = 0.30;            // room return level
+          drRoomReturn.gain.value = 0.20;            // room return level
           drDryBus.connect(drRoomSend);
           drRoomSend.connect(drRoom);
           drRoom.connect(drRoomReturn);
@@ -5746,6 +5746,7 @@
         // ── Pad layer: mellow alt-rock chord progression ──
         // Chord roots follow a chosen progression (not random) for direction + cohesion.
         // Voices snap to active scale so every note is in-key.
+        const genre    = SC_GENRES[scGenre] || SC_GENRES.cloudhop;  // needed for lead layer below
         const scaleType = scale.includes(4) ? 'major'
           : (scale.includes(10) && scale.includes(3)) ? 'minor' : 'minor';
         const rootMidi = 48 + rootPc;  // C3 + root = comfortable bass register
@@ -5762,11 +5763,8 @@
           peak:      ['min9', 'add9', 'dom7'],
         };
         const chordPalette = SECTION_CHORDS[section] || SECTION_CHORDS.verse;
-        // Wider spacing = mellow feel (1 chord/bar in verse, 2/bar in chorus)
-        const spacing  = { breakdown: 8, verse: 4, chorus: 2, peak: 1.5 }[section] ?? 4;
-        const noteDur  = { breakdown: 9.0, verse: 5.5, chorus: 4.0, peak: 2.8 }[section] ?? 5;
-        // Larger stagger = audible roll per voice (0.125 beats = 1/8-beat per voice)
-        const stagger  = { breakdown: 0.25, verse: 0.15, chorus: 0.1, peak: 0.05 }[section] ?? 0.15;
+        // 1 chord per bar for verse/breakdown, 2 per bar for chorus, faster for peak
+        const spacing   = { breakdown: 8, verse: 4, chorus: 2, peak: 1.5 }[section] ?? 4;
         const numChords = Math.min(12, Math.floor(beats / spacing));
         // Pre-compute which pitch classes are in-scale for snapping
         const scalePCs = scale.map(deg => (rootPc + deg) % 12);
@@ -5781,12 +5779,13 @@
           const chordType = chordPalette[Math.floor(Math.random() * chordPalette.length)];
           const intervals = CHORD_TYPES[chordType] || CHORD_TYPES.min7;
 
-          intervals.forEach((semis, vi) => {
+          // Collect pitches, snap to scale
+          const voices = [];
+          intervals.forEach(semis => {
             let pitch = chordRoot + semis;
-            while (pitch > 72) pitch -= 12;  // keep in C3–C5
+            while (pitch > 72) pitch -= 12;
             while (pitch < 48) pitch += 12;
             pitch = Math.max(36, Math.min(84, pitch));
-            // Snap to active scale — nudge to nearest in-key pitch class
             const pc = ((pitch % 12) + 12) % 12;
             if (!scalePCs.includes(pc)) {
               let bestPc = scalePCs[0], bestDist = 99;
@@ -5797,9 +5796,19 @@
               const diff = ((bestPc - pc + 12) % 12);
               pitch += diff <= 6 ? diff : diff - 12;
             }
-            const start = chordBeat + vi * stagger;
+            voices.push(pitch);
+          });
+
+          // Sort low→high: bass note anchors the beat, higher voices float up over time
+          voices.sort((a, b) => a - b);
+          // Spread voices evenly across the chord window — no more clumping
+          const voiceStep = spacing / voices.length;
+          const noteDur   = spacing * 1.08;  // slight legato crossfade into next chord
+
+          voices.forEach((pitch, vi) => {
+            const start = chordBeat + vi * voiceStep;
             if (start >= beats) return;
-            const vel = Math.max(35, def.velLo + Math.floor(Math.random() * (def.velHi - def.velLo)) - vi * 3);
+            const vel = Math.max(35, def.velLo + Math.floor(Math.random() * (def.velHi - def.velLo)));
             padNotes.push({ pitch, start, dur: noteDur, vel });
           });
         }
