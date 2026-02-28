@@ -4033,14 +4033,11 @@
           // Drums deferred to exact loopStart so they flip at beat-1, locked with piano.
           if (prLoopCount % 2 === 0 || sectionChanged) {
             scGeneratePianoPattern(scSection);
-            const msToStart = Math.max(0, (loopStart - prAudioCtx.currentTime) * 1000);
-            const capturedSection = scSection;
-            setTimeout(() => {
-              scGenerateDrumPattern(capturedSection);
-              // Re-anchor drum machine to bar 1 so it's phase-locked with the piano loop.
-              drStep = 0;
-              drNextBeat = (prAudioCtx || drAudioCtx).currentTime + 0.005;
-            }, msToStart);
+            scGenerateDrumPattern(scSection);
+            // Anchor drums to the same loopStart as the piano — no setTimeout jitter.
+            // The drum scheduler's while-loop won't fire these until currentTime reaches loopStart.
+            drStep = 0;
+            drNextBeat = loopStart;
             console.log(`[SCORE] regen @ loop ${prLoopCount} — section: ${scSection}`);
           }
         }
