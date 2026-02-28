@@ -5591,6 +5591,7 @@
         drPattern = DR_TRACKS.map(() => new Uint8Array(DR_STEPS));
         const ki = 0, si = 1, sni = 2, cli = 3, chhi = 4, ohhi = 5, rdi = 6, perci = 7;
         const rnd = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo));
+        const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 
         // Helper: write a rapid hat fill — n consecutive 16th steps ending at `endStep`
         const hatFill = (endStep, len = 4, velPeak = 90) => {
@@ -5601,72 +5602,76 @@
         };
 
         if (section === 'breakdown') {
-          // Heartbeat kick+sub, slow 8th-note hat, one fill into bar 2
-          drPattern[ki][0] = 85; drPattern[si][0] = 72;
-          drPattern[ki][16] = 75;
-          for (let s = 0; s < 32; s += 8) drPattern[chhi][s] = rnd(45, 60);
-          hatFill(15, 3, 65); // small fill into bar 2
+          // Sparse, dreamy — pick one of 4 minimalist kick placements
+          const kicks = pick([[0, 24], [0, 20], [0, 28], [0, 16, 24]]);
+          kicks.forEach(s => { drPattern[ki][s] = rnd(75, 92); drPattern[si][s] = rnd(62, 78); });
+          for (let s = 0; s < 32; s += 8) drPattern[chhi][s] = rnd(40, 58);
+          if (Math.random() < 0.5) hatFill(15, 3, 62);
+          if (Math.random() < 0.4) drPattern[rdi][0] = rnd(55, 72);
 
         } else if (section === 'verse') {
-          // Sparse kick+sub; rapid 16th-note hat with velocity groove + fills
-          drPattern[ki][0]  = 100; drPattern[si][0]  = 88;
-          drPattern[ki][16] = 95;
-          if (Math.random() < 0.5) drPattern[ki][12] = 80;
-          if (Math.random() < 0.4) drPattern[ki][28] = 75;
-          drPattern[sni][16] = 105;
-          if (Math.random() < 0.5) drPattern[sni][8] = 75;
-          // 16th-note hat every step, velocity grooves on the 8th (accented) vs 16th (ghosted)
+          // Four distinct kick feels — audibly different every 8 bars
+          const kickPats = [
+            [0, 16],           // straight downbeats
+            [0, 10, 16],       // syncopated — kick before beat 3
+            [0, 16, 26],       // kick pushes into bar 2
+            [0, 6, 16, 22],    // trap-ish double-kick pattern
+          ];
+          // Three snare feels
+          const snarePats = [
+            [8, 24],           // standard beats 2+4
+            [16],              // half-time — only beat 3
+            [8, 20, 24],       // syncopated + beat 4
+          ];
+          const kicks = pick(kickPats);
+          const snares = pick(snarePats);
+          kicks.forEach(s => { drPattern[ki][s] = rnd(90, 108); drPattern[si][s] = rnd(80, 95); });
+          snares.forEach(s => drPattern[sni][s] = rnd(95, 112));
+          if (Math.random() < 0.6) drPattern[cli][snares[snares.length - 1]] = rnd(78, 95);
+          // 16th-note hat with velocity groove
           for (let s = 0; s < 32; s++) {
-            const onBeat = s % 8 === 0;
-            const onEighth = s % 4 === 0;
+            const onBeat = s % 8 === 0, onEighth = s % 4 === 0;
             drPattern[chhi][s] = onBeat ? rnd(80, 95) : onEighth ? rnd(65, 78) : rnd(45, 62);
           }
-          // Open hat accent on upbeats
           [4, 12, 20, 28].forEach(s => { if (Math.random() < 0.55) drPattern[ohhi][s] = rnd(65, 78); });
-          // Fill into beat 3 and bar end
           hatFill(15, 4, 88);
           if (Math.random() < 0.6) hatFill(31, 4, 85);
 
         } else if (section === 'chorus') {
-          // Kick+sub sparse; hat pushed harder, more open hats, fills on every bar
-          drPattern[ki][0]  = 110; drPattern[si][0]  = 95;
-          drPattern[ki][10] = 90;
-          drPattern[ki][16] = 105; drPattern[si][16] = 88;
-          if (Math.random() < 0.5) drPattern[ki][22] = 85;
-          drPattern[sni][8]  = 100;
-          drPattern[sni][16] = 108;
-          drPattern[cli][24] = 90;
-          // 16th-note hat, accented on 8ths
+          // Four energetic kick patterns
+          const kickPats = [
+            [0, 10, 16],
+            [0, 16, 22],
+            [0, 6, 16, 24],
+            [0, 12, 16, 28],
+          ];
+          const kicks = pick(kickPats);
+          kicks.forEach(s => { drPattern[ki][s] = rnd(100, 115); drPattern[si][s] = rnd(88, 100); });
+          [8, 24].forEach(s => { drPattern[sni][s] = rnd(98, 112); drPattern[cli][s] = rnd(85, 100); });
           for (let s = 0; s < 32; s++) {
-            const onEighth = s % 4 === 0;
-            drPattern[chhi][s] = onEighth ? rnd(82, 100) : rnd(55, 72);
+            drPattern[chhi][s] = (s % 4 === 0) ? rnd(82, 100) : rnd(55, 72);
           }
-          // Open hats every upbeat + extra accent
           [4, 12, 20, 28].forEach(s => drPattern[ohhi][s] = rnd(72, 88));
-          drPattern[ohhi][10] = rnd(75, 85);
-          // Fills going into beat 3 and bar end, always
-          hatFill(15, 6, 95);
-          hatFill(31, 6, 92);
-          if (Math.random() < 0.4) drPattern[perci][14] = rnd(65, 80);
-          if (Math.random() < 0.4) drPattern[perci][30] = rnd(65, 80);
+          if (Math.random() < 0.5) drPattern[ohhi][pick([2, 10, 18, 26])] = rnd(68, 82);
+          hatFill(15, 6, 95); hatFill(31, 6, 92);
+          if (Math.random() < 0.4) drPattern[perci][rnd(0, 4) * 8 + rnd(2, 6)] = rnd(65, 80);
 
         } else {
-          // Peak: sparse kick+sub, maximum hat energy with triplet-feel fills
-          [0, 10, 16, 26].forEach(s => { drPattern[ki][s] = rnd(108, 120); drPattern[si][s] = rnd(95, 110); });
-          if (Math.random() < 0.6) drPattern[ki][6]  = rnd(85, 100);
-          if (Math.random() < 0.6) drPattern[ki][22] = rnd(85, 100);
+          // Peak — four dense kick patterns
+          const kickPats = [
+            [0, 10, 16, 26],
+            [0, 6, 16, 22, 28],
+            [0, 8, 16, 24],
+            [0, 10, 14, 16, 26, 30],
+          ];
+          const kicks = pick(kickPats);
+          kicks.forEach(s => { drPattern[ki][s] = rnd(108, 120); drPattern[si][s] = rnd(95, 110); });
           drPattern[sni][8]  = 112; drPattern[cli][8]  = 95;
           drPattern[sni][24] = 115; drPattern[cli][24] = 100;
-          // Full 16th hat, heavy velocity, random ghost hits slightly quieter
-          for (let s = 0; s < 32; s++) {
-            drPattern[chhi][s] = rnd(70, 100);
-          }
-          // Open hats on every upbeat
+          for (let s = 0; s < 32; s++) drPattern[chhi][s] = rnd(70, 100);
           [4, 12, 20, 28].forEach(s => drPattern[ohhi][s] = rnd(80, 95));
           [2, 10, 18, 26].forEach(s => { if (Math.random() < 0.5) drPattern[ohhi][s] = rnd(72, 85); });
-          // Big fills into beat 3 and bar end
-          hatFill(15, 8, 105);
-          hatFill(31, 8, 105);
+          hatFill(15, 8, 105); hatFill(31, 8, 105);
           drPattern[rdi][0] = 80; drPattern[rdi][16] = 80;
           for (let s = 4; s < 32; s += 8) { if (Math.random() < 0.5) drPattern[perci][s] = rnd(70, 90); }
         }
@@ -5709,6 +5714,8 @@
         const noteDur  = { breakdown: 5.5, verse: 3.8, chorus: 3.0, peak: 2.2 }[section] ?? 3.5;
         const stagger  = 1 / (snapDiv * 2); // 1/8-beat offset per voice = light arpeggio
         const numChords = Math.min(12, Math.floor(beats / spacing));
+        // Pre-compute which pitch classes are in-scale for snapping
+        const scalePCs = scale.map(deg => (rootPc + deg) % 12);
 
         for (let ci = 0; ci < numChords; ci++) {
           const chordBeat = ci * spacing;
@@ -5724,6 +5731,17 @@
             while (pitch > 72) pitch -= 12;  // keep in C3–C5
             while (pitch < 48) pitch += 12;
             pitch = Math.max(36, Math.min(84, pitch));
+            // Snap to active scale — nudge to nearest in-key pitch class
+            const pc = ((pitch % 12) + 12) % 12;
+            if (!scalePCs.includes(pc)) {
+              let bestPc = scalePCs[0], bestDist = 99;
+              for (const sp of scalePCs) {
+                let d = Math.abs(pc - sp); if (d > 6) d = 12 - d;
+                if (d < bestDist) { bestDist = d; bestPc = sp; }
+              }
+              const diff = ((bestPc - pc + 12) % 12);
+              pitch += diff <= 6 ? diff : diff - 12;
+            }
             const start = chordBeat + vi * stagger;
             if (start >= beats) return;
             const vel = Math.max(35, def.velLo + Math.floor(Math.random() * (def.velHi - def.velLo)) - vi * 3);
