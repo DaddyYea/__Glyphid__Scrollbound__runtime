@@ -3987,7 +3987,7 @@
 
         // Amp: fast attack, punchy decay to natural tail
         const env = ctx.createGain();
-        const tail = Math.min(durS * 0.82, 1.1);
+        const tail = Math.min(durS * 0.90, 0.55); // punchy decay, stops well before next hit
         env.gain.setValueAtTime(0, t0);
         env.gain.linearRampToValueAtTime(vol, t0 + 0.004);
         env.gain.exponentialRampToValueAtTime(vol * 0.38, t0 + 0.07);
@@ -5853,13 +5853,12 @@
       }
 
       // ── Piano + lead note generation per section ──
-      // Bass groove patterns — [beat_offset_within_chord, vel_factor]
-      // offset must be < spacing for the note to fall within the chord window
+      // Bass: single root hit per chord change, short punch — no fills, no overlap
       const BASS_GROOVES = {
         breakdown: [[0, 1.00]],
-        verse:     [[0, 1.00], [2.5, 0.70]],
-        chorus:    [[0, 1.00], [0.75, 0.65], [1.5, 0.80]],
-        peak:      [[0, 1.00], [0.5, 0.62], [1.0, 0.72], [2.0, 0.68]],
+        verse:     [[0, 1.00]],
+        chorus:    [[0, 1.00]],
+        peak:      [[0, 1.00]],
       };
 
       // scLeadNotes stores {pitch, start, dur, vel} for scheduling by the loop
@@ -5934,7 +5933,7 @@
               if (offset >= spacing) break;
               const start = chordBeat + offset;
               if (start >= beats) break;
-              const dur = Math.min(spacing - offset - 0.08, 0.95);
+              const dur = 0.55; // tight punch — no bleed into next hit
               bassNotes.push({ pitch: rootPitch, start, dur, vel: Math.round(bassVelBase * velFactor) });
             }
           }
@@ -5990,7 +5989,7 @@
               if (offset >= spacing) break;
               const start = chordBeat + offset;
               if (start >= beats) break;
-              const dur = Math.min(spacing - offset - 0.08, 0.95);
+              const dur = 0.55; // tight punch — no bleed into next hit
               bassNotes.push({ pitch: bassPitch, start, dur, vel: Math.round(bassVelBase * velFactor) });
             }
           }
