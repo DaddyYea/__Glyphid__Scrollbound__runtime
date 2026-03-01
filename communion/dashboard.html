@@ -4085,10 +4085,8 @@
             console.error('[SCORE] scGeneratePianoPattern error:', e);
           }
           scGenerateDrumPattern(scSection);
-          // Do NOT reset drStep/drNextBeat here — drum natural timing already puts step 0
-          // at loop boundaries (drum loop = 2 bars, piano loop = 4 bars, phase-locked at init).
-          // Resetting was double-scheduling step 0: natural wrap + explicit reset = two near-
-          // simultaneous sub hits, sounding like a loop/stutter inside a single hit.
+          drStep = 0;
+          drNextBeat = loopStart;
           console.log(`[SCORE] regen @ loop ${prLoopCount} — section: ${scSection}`);
         }
 
@@ -4769,17 +4767,25 @@
         const v = vel / 127;
         const s = isSub ? drSettings.sub : drSettings.kick;
 
-        // Sub oscillator — pitched down pitch envelope
+        // Sub oscillator — kick gets pitch sweep, sub gets fixed frequency
+        // Sweeping sub beats against the kick's own sub sweep (two converging sines
+        // → amplitude modulation at difference frequency → sounds like looping inside one hit).
         const sub = ctx.createOscillator();
         sub.type = 'sine';
         const subGain = ctx.createGain();
-        const subFreqStart = s.tune;
-        const subFreqEnd   = isSub ? s.tune * 0.636 : 40;
-        const subDur       = s.decay;
-        sub.frequency.setValueAtTime(subFreqStart, t);
-        sub.frequency.exponentialRampToValueAtTime(subFreqEnd, t + subDur * 0.9);
-        subGain.gain.setValueAtTime(v * (isSub ? 0.95 : 0.82), t);
-        subGain.gain.exponentialRampToValueAtTime(0.001, t + subDur);
+        const subDur = s.decay;
+        if (isSub) {
+          // Fixed frequency — clean root note, no interference with kick sweep
+          sub.frequency.value = s.tune;
+          subGain.gain.setValueAtTime(v * 0.90, t);
+          subGain.gain.exponentialRampToValueAtTime(0.001, t + subDur);
+        } else {
+          // Kick: pitch envelope 120→40 Hz gives the transient punch feel
+          sub.frequency.setValueAtTime(s.tune, t);
+          sub.frequency.exponentialRampToValueAtTime(40, t + subDur * 0.9);
+          subGain.gain.setValueAtTime(v * 0.82, t);
+          subGain.gain.exponentialRampToValueAtTime(0.001, t + subDur);
+        }
         sub.connect(subGain); subGain.connect(out);
         sub.start(t); sub.stop(t + subDur + 0.01);
 
