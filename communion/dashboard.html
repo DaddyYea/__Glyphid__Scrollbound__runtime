@@ -4741,7 +4741,7 @@
       // ── Drum voice settings (tweakable from the TUNE panel) ──
       const drSettings = {
         kick:   { tune: 120, decay: 0.38, click: 0.60 },
-        sub:    { tune: 55,  decay: 0.12 },
+        sub:    { tune: 65,  decay: 0.30 },
         snare:  { tone: 185, snap: 3200,  decay: 0.20 },
         clap:   { color: 1200, tail: 0.18 },
         hihatC: { tone: 9000, decay: 0.055 },
@@ -4767,26 +4767,30 @@
         const v = vel / 127;
         const s = isSub ? drSettings.sub : drSettings.kick;
 
-        // Sub oscillator — kick gets pitch sweep, sub gets fixed frequency
-        // Sweeping sub beats against the kick's own sub sweep (two converging sines
-        // → amplitude modulation at difference frequency → sounds like looping inside one hit).
         const sub = ctx.createOscillator();
         sub.type = 'sine';
         const subGain = ctx.createGain();
         const subDur = s.decay;
         if (isSub) {
-          // Fixed frequency — clean root note, no interference with kick sweep
-          sub.frequency.value = s.tune;
-          subGain.gain.setValueAtTime(v * 0.90, t);
+          // Sub: sweep from root-register (audible attack) down into sub-sonic territory.
+          // Fixed pitch at 55-65 Hz produces ~6+ audible sine cycles → perceived as rhythmic buzz.
+          // Sweeping to ~0.28× start pushes the tail below ~20 Hz where individual cycles
+          // are no longer perceptible — result is a clean thump with no looping artifact.
+          // Route directly to compressor, bypassing drum room reverb (reverb + sub = ringing mud).
+          const subOut = (prAudioCtx && prCompressor) ? prCompressor : out;
+          sub.frequency.setValueAtTime(s.tune * 1.4, t);
+          sub.frequency.exponentialRampToValueAtTime(s.tune * 0.28, t + subDur);
+          subGain.gain.setValueAtTime(v * 0.95, t);
           subGain.gain.exponentialRampToValueAtTime(0.001, t + subDur);
+          sub.connect(subGain); subGain.connect(subOut);
         } else {
           // Kick: pitch envelope 120→40 Hz gives the transient punch feel
           sub.frequency.setValueAtTime(s.tune, t);
           sub.frequency.exponentialRampToValueAtTime(40, t + subDur * 0.9);
           subGain.gain.setValueAtTime(v * 0.82, t);
           subGain.gain.exponentialRampToValueAtTime(0.001, t + subDur);
+          sub.connect(subGain); subGain.connect(out);
         }
-        sub.connect(subGain); subGain.connect(out);
         sub.start(t); sub.stop(t + subDur + 0.01);
 
         if (!isSub) {
@@ -5910,8 +5914,6 @@
           if (Math.random() < 0.40) hatFill(31, 8, 105);
         }
         // ── Sub: on every kick, tuned to current root ──
-        // Double-scheduling was the "loop inside one hit" bug — fixed by removing the
-        // drStep/drNextBeat reset from the piano loop callback above.
         drSettings.sub.tune = scMidiToHz(36 + scRootPc); // C2+root — solid sub register
         for (let s = 0; s < DR_STEPS; s++) {
           if (drPattern[ki][s] > 0) drPattern[si][s] = drPattern[ki][s];
