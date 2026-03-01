@@ -4784,10 +4784,12 @@
           subGain.gain.exponentialRampToValueAtTime(0.001, t + subDur);
           sub.connect(subGain); subGain.connect(subOut);
         } else {
-          // Kick: pitch envelope 120→40 Hz gives the transient punch feel
-          sub.frequency.setValueAtTime(s.tune, t);
-          sub.frequency.exponentialRampToValueAtTime(40, t + subDur * 0.9);
-          subGain.gain.setValueAtTime(v * 0.82, t);
+          // Kick body: punch sweep stays in mid-bass register so it doesn't beat against
+          // the sub track's oscillator. Sub starts at ~91 Hz; kick starts at 280 Hz.
+          // Beat between them = 189 Hz → heard as timbre, not as rhythmic pulsing.
+          sub.frequency.setValueAtTime(280, t);
+          sub.frequency.exponentialRampToValueAtTime(65, t + subDur * 0.7);
+          subGain.gain.setValueAtTime(v * 0.85, t);
           subGain.gain.exponentialRampToValueAtTime(0.001, t + subDur);
           sub.connect(subGain); subGain.connect(out);
         }
