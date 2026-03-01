@@ -1908,18 +1908,20 @@ export class CommunionLoop {
       if (readTriggered) {
         try {
           console.log(`[${agent.config.name}] READ triggered immediate re-generation`);
-          // Keep the full conversation so she knows what question was asked.
-          // Append the loaded file content at the end so it's the most recent context.
-          const ramContent = ram.assemble();
-          const regenConversation = options.conversationContext
-            + (ramContent ? '\n\n[SYSTEM: File loaded into RAM — contents follow]\n\n' + ramContent : '');
+          // Build a clean single-pass context: assemble() has conversation + documents + memory.
+          // Do NOT prepend options.conversationContext — that duplicates every slot and pushes
+          // the file content beyond what the 14B model can attend to.
+          const ramManifest = ram.buildManifest();
+          const regenConversation = ram.assemble()
+            + (ramManifest ? '\n\n' + ramManifest : '');
           const regenOptions: GenerateOptions = {
             systemPrompt: options.systemPrompt,
             conversationContext: regenConversation,
             journalContext: '',
-            documentsContext: undefined, // already appended above
+            documentsContext: undefined,
             memoryContext: undefined,
             provider: agent.config.provider,
+            prefill: '[SPEAK] ', // always SPEAK — human asked her to read a file
           };
           const regenResult = await agent.backend.generate(regenOptions);
           const regenText = regenResult.text?.replace(/\[RAM:[^\]]+\]/gi, '').trim() || '';
