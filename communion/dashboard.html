@@ -4085,8 +4085,10 @@
             console.error('[SCORE] scGeneratePianoPattern error:', e);
           }
           scGenerateDrumPattern(scSection);
-          drStep = 0;
-          drNextBeat = loopStart;
+          // Do NOT reset drStep/drNextBeat here — drum natural timing already puts step 0
+          // at loop boundaries (drum loop = 2 bars, piano loop = 4 bars, phase-locked at init).
+          // Resetting was double-scheduling step 0: natural wrap + explicit reset = two near-
+          // simultaneous sub hits, sounding like a loop/stutter inside a single hit.
           console.log(`[SCORE] regen @ loop ${prLoopCount} — section: ${scSection}`);
         }
 
@@ -5901,29 +5903,21 @@
           if (Math.random() < 0.40) hatFill(15, 8, 105);
           if (Math.random() < 0.40) hatFill(31, 8, 105);
         }
-        // ── Sub: downbeat hit, tuned to current root so it belongs to the key ──
-        // drSettings.sub.tune drives the sub oscillator in drPlayKick — update it here
-        // so every pattern regen retunes to the current root. MIDI 24+root = C1+root (sub register).
-        drSettings.sub.tune = scMidiToHz(24 + scRootPc);
-        drPattern[si][0] = 120;
+        // ── Sub: on every kick, tuned to current root ──
+        // Double-scheduling was the "loop inside one hit" bug — fixed by removing the
+        // drStep/drNextBeat reset from the piano loop callback above.
+        drSettings.sub.tune = scMidiToHz(36 + scRootPc); // C2+root — solid sub register
+        for (let s = 0; s < DR_STEPS; s++) {
+          if (drPattern[ki][s] > 0) drPattern[si][s] = drPattern[ki][s];
+        }
 
-        // ── Bar-2 micro-variation ──
-        // The drum machine loops at 32 steps (2 bars) inside a 4-bar piano loop,
-        // so bar 1 (steps 0-15) plays twice without variation. Give steps 16-31
-        // subtle hat and ghost-kick differences so each hearing feels unique.
+        // ── Bar-2 micro-variation — hat texture only, no kick/sub changes ──
         for (let s = 16; s < 32; s++) {
-          // 25% chance to thin a non-downbeat closed hat (open feel)
           if (drPattern[chhi][s] > 0 && s % 8 !== 0 && s % 4 !== 0 && Math.random() < 0.25) {
             drPattern[chhi][s] = 0;
-          // 20% chance to accent it instead (forward drive)
           } else if (drPattern[chhi][s] > 0 && Math.random() < 0.20) {
             drPattern[chhi][s] = Math.min(127, drPattern[chhi][s] + rnd(5, 14));
           }
-        }
-        // 45% chance of a ghost kick step in bar 2 to break symmetry
-        if (Math.random() < 0.45) {
-          const ghostStep = pick([18, 20, 22, 26, 28, 30]);
-          if (drPattern[ki][ghostStep] === 0) drPattern[ki][ghostStep] = rnd(52, 72);
         }
 
         drRenderGrid();
