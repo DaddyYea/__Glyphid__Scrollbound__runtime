@@ -991,9 +991,11 @@ export function parseRAMCommands(text: string): { cleanText: string; commands: R
 
   let match;
   while ((match = ramPattern.exec(text)) !== null) {
+    // Strip surrounding quotes — model sometimes writes [RAM:BROWSE "filename"]
+    const rawTarget = match[2].replace(/^["']+|["']+$/g, '').trim();
     commands.push({
       action: match[1].toLowerCase() as RAMCommand['action'],
-      target: match[2].toLowerCase(),
+      target: rawTarget.toLowerCase(),
     });
   }
 

@@ -1234,11 +1234,12 @@ async function main() {
     shuttingDown = true;
     console.log(`\n[SHUTDOWN] ${signal} received — stopping communion...`);
 
-    // Hard bailout: if graceful stop hangs (embed in-flight, etc.), force exit after 3s
+    // Hard bailout: if graceful stop hangs, force exit after 10s.
+    // 3s was too tight — 69MB brain JSON + session + graph save can take 3-8s.
     const bailout = setTimeout(() => {
       console.error('[SHUTDOWN] Graceful stop timed out — forcing exit');
       process.exit(1);
-    }, 3000);
+    }, 10000);
     bailout.unref(); // don't keep event loop alive just for this
 
     try {
