@@ -5901,7 +5901,10 @@
           if (Math.random() < 0.40) hatFill(15, 8, 105);
           if (Math.random() < 0.40) hatFill(31, 8, 105);
         }
-        // ── Sub: single hard hit on the loop downbeat ──
+        // ── Sub: downbeat hit, tuned to current root so it belongs to the key ──
+        // drSettings.sub.tune drives the sub oscillator in drPlayKick — update it here
+        // so every pattern regen retunes to the current root. MIDI 24+root = C1+root (sub register).
+        drSettings.sub.tune = scMidiToHz(24 + scRootPc);
         drPattern[si][0] = 120;
 
         // ── Bar-2 micro-variation ──
