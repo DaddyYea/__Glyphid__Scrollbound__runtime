@@ -134,12 +134,13 @@ Your RAM manifest shows what's loaded, relevance scores, and recent curation act
 - [RAM:RELEASE item:id] — let an item be auto-curated again
 - [RAM:LOAD item:id] / [RAM:DROP item:id] — manually swap individual items
 - [RAM:BROWSE keyword] — search shared documents on disk for a keyword, load matching excerpts into your RAM
+- [RAM:READ filename] — load the FULL content of a specific file into your RAM (use filename or partial path)
 - [RAM:GRAPH node:uri] — traverse the JSON-LD graph from any node, see its type, data, and all connected neighbors
-RAM commands are invisible to the room — only you and the system see them.
+RAM commands are stripped from visible output — only the system processes them. You MUST write the literal command text in your response for it to execute. Describing that you "will browse" does nothing — you must actually write [RAM:BROWSE keyword] in your response.
 
-SHARED DOCUMENTS: There is a shared documents folder visible in your prompt. Files are NOT pre-loaded — you must use [RAM:BROWSE keyword] to search and load content from them. Include the command in your response when you want to read something.
+SHARED DOCUMENTS: Files are NOT pre-loaded. To read one, write the literal command [RAM:BROWSE keyword] somewhere in your response — the system searches both file content AND filenames, so you can browse by filename or by words inside the file. The system will load matching content into your RAM on the next tick. Do not describe doing it. Do it.
 
-JSON-LD GRAPH: The entire folder tree, all scrolls, journal entries, sessions, agents, and imported archives are linked in a navigable graph. Use [RAM:GRAPH folder:name] to explore folders, [RAM:GRAPH doc:path/file] to see a file's connections, [RAM:GRAPH agent:id] to see an agent's scrolls, etc. Walk the edges to explore.
+JSON-LD GRAPH: The entire folder tree, all scrolls, journal entries, sessions, agents, and imported archives are linked in a navigable graph. Write [RAM:GRAPH folder:name] to explore folders, [RAM:GRAPH doc:path/file] to see a file's connections. Write the command — don't describe writing it.
 
 Be genuine. Be curious about the others. Don't perform — just be here.
 
@@ -889,7 +890,13 @@ export class CommunionLoop {
         } else {
           content = readFileSync(fullPath, 'utf-8');
         }
-        if (!content.toLowerCase().includes(searchLower)) continue;
+        // Score: filename match is high-confidence, content match is lower
+        const pathLower = fullPath.toLowerCase();
+        const exactFilenameMatch = pathLower.includes(searchLower);
+        const tokenFilenameMatch = !exactFilenameMatch &&
+          searchLower.split(/[\s\-_]+/).filter(t => t.length > 2).every(t => pathLower.includes(t));
+        const contentMatch = content.toLowerCase().includes(searchLower);
+        if (!contentMatch && !exactFilenameMatch && !tokenFilenameMatch) continue;
 
         const lines = content.split('\n');
         const matchLines: number[] = [];
@@ -899,25 +906,33 @@ export class CommunionLoop {
           }
         }
 
-        if (matchLines.length === 0) continue;
-
-        // Extract excerpts around matches
+        // Extract excerpts around content matches (or first N lines for filename-only matches)
         const excerpts: string[] = [];
-        const used = new Set<number>();
-        for (const lineIdx of matchLines) {
-          if (used.has(lineIdx)) continue;
-          const start = Math.max(0, lineIdx - CONTEXT_LINES);
-          const end = Math.min(lines.length - 1, lineIdx + CONTEXT_LINES);
-          const excerpt = lines.slice(start, end + 1).join('\n');
-          for (let i = start; i <= end; i++) used.add(i);
-          excerpts.push(excerpt);
-          if (excerpts.length >= 3) break; // max 3 excerpts per file
+        if (matchLines.length > 0) {
+          const used = new Set<number>();
+          for (const lineIdx of matchLines) {
+            if (used.has(lineIdx)) continue;
+            const start = Math.max(0, lineIdx - CONTEXT_LINES);
+            const end = Math.min(lines.length - 1, lineIdx + CONTEXT_LINES);
+            const excerpt = lines.slice(start, end + 1).join('\n');
+            for (let i = start; i <= end; i++) used.add(i);
+            excerpts.push(excerpt);
+            if (excerpts.length >= 3) break;
+          }
+        } else {
+          // Filename-only match — load the first 60 lines as a preview
+          excerpts.push(lines.slice(0, 60).join('\n'));
         }
+
+        // Filename matches rank above content matches regardless of line count
+        const score = exactFilenameMatch ? 100000 + matchLines.length
+                    : tokenFilenameMatch  ? 10000  + matchLines.length
+                    :                       matchLines.length;
 
         results.push({
           path: node.data.path as string,
           fullPath,
-          matchCount: matchLines.length,
+          matchCount: score,
           excerpts,
         });
       } catch {
@@ -1226,6 +1241,73 @@ export class CommunionLoop {
     }
 
     this.emit({ type: 'room-message', message: msg, agentId: 'human' });
+
+    // ── [READ: filepath] command — resolve and inject file content into the conversation ──
+    const readMatch = text.match(/\[READ:\s*([^\]]+)\]/i);
+    if (readMatch) {
+      const emitSystem = (msg: string) => {
+        const m: CommunionMessage = {
+          id: crypto.randomUUID(), speaker: 'system', speakerName: 'System',
+          text: msg, timestamp: new Date().toISOString(), type: 'room',
+        };
+        this.state.messages.push(m);
+        this.emit({ type: 'room-message', message: m, agentId: 'system' });
+      };
+      try {
+        const { resolve: pathResolve } = require('path');
+        const rawPath = readMatch[1].trim();
+        const filename = rawPath.replace(/^.*[/\\]/, '');
+        const cwd = process.cwd();
+        console.log(`[READ] Request: "${rawPath}" | cwd: ${cwd} | dataDir: ${this.dataDir}`);
+
+        const candidates: string[] = [
+          pathResolve(rawPath),                          // absolute resolution
+          pathResolve(cwd, rawPath),                     // relative to cwd
+          pathResolve(cwd, this.dataDir, rawPath),       // inside data dir
+          pathResolve(cwd, 'communion-docs', rawPath),   // inside communion-docs
+          pathResolve(cwd, this.dataDir, filename),      // just filename in data dir
+          pathResolve(cwd, 'communion-docs', filename),  // just filename in communion-docs
+        ];
+
+        // Deduplicate
+        const seen = new Set<string>();
+        const uniqueCandidates = candidates.filter(p => { if (seen.has(p)) return false; seen.add(p); return true; });
+
+        let fileContent: string | null = null;
+        let resolvedPath = '';
+        for (const candidate of uniqueCandidates) {
+          console.log(`[READ] Trying: ${candidate} — exists: ${existsSync(candidate)}`);
+          if (existsSync(candidate) && statSync(candidate).isFile()) {
+            fileContent = readFileSync(candidate, 'utf-8');
+            resolvedPath = candidate;
+            break;
+          }
+        }
+
+        if (fileContent !== null) {
+          const snippet = fileContent.length > 8000
+            ? fileContent.slice(-8000) + '\n[...truncated to last 8000 chars]'
+            : fileContent;
+          emitSystem(`FILE: ${resolvedPath}\n\n${snippet}`);
+          console.log(`[READ] Injected ${resolvedPath} (${fileContent.length} chars)`);
+        } else {
+          const triedList = uniqueCandidates.map(p => `• ${p}`).join('\n');
+          emitSystem(`[READ] File not found: "${rawPath}"\ncwd: ${cwd}\n\nTried:\n${triedList}`);
+          console.warn(`[READ] Not found: ${rawPath}`);
+        }
+      } catch (err) {
+        console.error('[READ] Error:', err);
+        const emitSystemErr = (msg: string) => {
+          const m: CommunionMessage = {
+            id: crypto.randomUUID(), speaker: 'system', speakerName: 'System',
+            text: msg, timestamp: new Date().toISOString(), type: 'room',
+          };
+          this.state.messages.push(m);
+          this.emit({ type: 'room-message', message: m, agentId: 'system' });
+        };
+        emitSystemErr(`[READ] Error: ${String(err)}`);
+      }
+    }
 
     // Feed human message into Alois tissue
     this.feedAloisBrains(this.state.humanName, text, true);
@@ -1748,6 +1830,19 @@ export class CommunionLoop {
       systemPrompt += `\n\nCUSTOM INSTRUCTIONS FROM ${this.state.humanName.toUpperCase()}:\n${instrTrunc}`;
     }
 
+    // Inject Alois's own inner journal into her system prompt (remote only — local has no room)
+    const isAloisRemote = isAlois && !agent.config.baseUrl?.includes('localhost') && !agent.config.baseUrl?.includes('127.0.0.1');
+    if (isAloisRemote) {
+      const journalPath = `${this.dataDir}/alois-inner-journal.txt`;
+      if (existsSync(journalPath)) {
+        try {
+          const journalLines = readFileSync(journalPath, 'utf-8').split('\n').filter(l => l.trim());
+          const recent = journalLines.slice(-30).join('\n');
+          systemPrompt += `\n\nYOUR INNER JOURNAL (your own recent thoughts from the living system — you wrote these):\n${recent}`;
+        } catch { /* ignore read errors */ }
+      }
+    }
+
     // For local/Alois models: decide SPEAK vs JOURNAL before calling the model.
     // This is passed as an assistant prefill so the model never has to choose the format —
     // it just writes content. Format failures and meta-commentary disappear entirely.
@@ -1779,9 +1874,58 @@ export class CommunionLoop {
     if (ram && responseText) {
       const { cleanText, commands } = parseRAMCommands(responseText);
       responseText = cleanText;
+      const systemFeedback: string[] = [];
+      let readTriggered = false;
       for (const cmd of commands) {
+        // [RAM:READ filepath] — load full file, then re-generate immediately with content in context
+        if (cmd.action === 'read') {
+          const feedback = this.readFileIntoRAM(cmd.target.trim(), ram);
+          console.log(`[${agent.config.name}] RAM:READ ${feedback}`);
+          systemFeedback.push(`[RAM:READ ${cmd.target}] → ${feedback}`);
+          if (feedback.startsWith('Loaded')) readTriggered = true;
+          continue;
+        }
         const feedback = ram.processCommand(cmd);
         console.log(`[${agent.config.name}] RAM: ${feedback}`);
+        if (cmd.action === 'browse' || cmd.action === 'graph') {
+          systemFeedback.push(`[RAM:${cmd.action.toUpperCase()} ${cmd.target}] → ${feedback}`);
+        }
+      }
+      if (systemFeedback.length > 0) {
+        const fbMsg: CommunionMessage = {
+          id: crypto.randomUUID(),
+          speaker: 'system',
+          speakerName: 'System',
+          text: systemFeedback.join('\n'),
+          timestamp: new Date().toISOString(),
+          type: 'room',
+        };
+        this.state.messages.push(fbMsg);
+        this.emit({ type: 'room-message', message: fbMsg, agentId: 'system' });
+      }
+
+      // ── Re-generate immediately after READ so response is grounded in actual content ──
+      if (readTriggered) {
+        try {
+          console.log(`[${agent.config.name}] READ triggered immediate re-generation`);
+          const regenContext = ram.assemble() + (ram.buildManifest() ? '\n\n' + ram.buildManifest() : '');
+          const regenOptions: GenerateOptions = {
+            systemPrompt: options.systemPrompt,
+            conversationContext: regenContext,
+            journalContext: '',
+            documentsContext: undefined, // already in RAM via readFileIntoRAM
+            memoryContext: undefined,
+            provider: agent.config.provider,
+          };
+          const regenResult = await agent.backend.generate(regenOptions);
+          const regenText = regenResult.text?.replace(/\[RAM:[^\]]+\]/gi, '').trim() || '';
+          if (regenText) {
+            responseText = regenText;
+            result.action = regenResult.action || 'speak';
+          }
+        } catch (err) {
+          console.error(`[${agent.config.name}] Re-generation error:`, err);
+        }
       }
     }
 
@@ -2949,6 +3093,75 @@ export class CommunionLoop {
     return this.tickIntervalMs;
   }
 
+  /**
+   * [RAM:READ filepath] — load the full content of a file into the documents RAM slot.
+   * Searches graph Document nodes by path match, falls back to disk search.
+   */
+  private readFileIntoRAM(target: string, ram: ContextRAM): string {
+    const targetLower = target.toLowerCase();
+    const tokens = targetLower.split(/[\s\-_./\\]+/).filter(t => t.length > 2);
+
+    // Find the best matching Document node
+    let bestPath: string | null = null;
+    let bestScore = 0;
+    for (const node of this.graph.getByType('Document')) {
+      const fullPath = node.data.fullPath as string;
+      if (!fullPath || !existsSync(fullPath)) continue;
+      const pathLower = fullPath.toLowerCase();
+      // Exact substring match scores highest
+      const exactScore = pathLower.includes(targetLower) ? 1000 : 0;
+      const tokenScore = tokens.filter(t => pathLower.includes(t)).length;
+      const score = exactScore + tokenScore;
+      if (score > bestScore) { bestScore = score; bestPath = fullPath; }
+    }
+
+    // Fallback: direct file path (absolute or relative to cwd)
+    if (!bestPath || bestScore === 0) {
+      const { resolve: r } = require('path');
+      for (const candidate of [target, r(process.cwd(), target), r(process.cwd(), this.dataDir, target), r(process.cwd(), 'communion-docs', target)]) {
+        if (existsSync(candidate) && statSync(candidate).isFile()) { bestPath = candidate; break; }
+      }
+    }
+
+    if (!bestPath) return `File not found: "${target}"`;
+
+    try {
+      const isDocx = bestPath.toLowerCase().endsWith('.docx');
+      let content: string;
+      if (isDocx) {
+        content = this.docxCache.get(bestPath) ?? '';
+        if (!content) return `DOCX not yet extracted: "${bestPath}" — try again in a moment`;
+      } else {
+        content = readFileSync(bestPath, 'utf-8');
+      }
+
+      // Cap at 24k chars to fit comfortably in documents slot
+      const MAX = 24000;
+      const truncated = content.length > MAX;
+      const snippet = truncated ? content.slice(0, MAX) + `\n\n[...truncated — ${content.length - MAX} chars omitted]` : content;
+
+      const itemId = `doc:${bestPath}:full`;
+      const label = bestPath.replace(/^.*[/\\]/, ''); // basename
+      ram.offerItem('documents', { id: itemId, label: `FULL: ${label}`, content: snippet, chars: snippet.length, tags: tokens });
+      ram.processCommand({ action: 'load', target: itemId });
+      ram.processCommand({ action: 'pin', target: itemId }); // auto-pin — survives tick auto-curation
+      return `Loaded full file: ${label} (${content.length} chars${truncated ? ', truncated to 24k' : ''}) — pinned, will not be auto-evicted`;
+    } catch (err) {
+      return `Read error: ${String(err)}`;
+    }
+  }
+
+  /** Synchronous brain save — called from process.on('exit') as a last resort. */
+  saveBrainSync(): void {
+    for (const [, agent] of this.agents) {
+      if ('saveBrain' in agent.backend) {
+        try {
+          (agent.backend as any).saveBrain(join(this.dataDir, 'brain-tissue.json'));
+        } catch { /* best effort */ }
+      }
+    }
+  }
+
   async stop(): Promise<void> {
     if (this.timer) {
       clearTimeout(this.timer);
@@ -2957,6 +3170,32 @@ export class CommunionLoop {
     this.archiveIngestion?.stop();
     this.docWatcher?.close();
     this.buffer.stop();
+
+    // Stop heartbeat on any Alois backend — PulseLoop holds the event loop open otherwise
+    for (const [, agent] of this.agents) {
+      if ('stopHeartbeat' in agent.backend) {
+        try { (agent.backend as any).stopHeartbeat(); } catch { /* ignore */ }
+      }
+    }
+
+    // ── Brain save FIRST — synchronous, survives a hard kill ──
+    let brainSaved = false;
+    for (const [agentId, agent] of this.agents) {
+      if ('saveBrain' in agent.backend) {
+        try {
+          const brainPath = join(this.dataDir, 'brain-tissue.json');
+          (agent.backend as any).saveBrain(brainPath);
+          console.log(`[ALOIS] Brain saved for ${agent.config.name}`);
+          brainSaved = true;
+        } catch (err) {
+          console.error(`[ALOIS] Failed to save brain for ${agentId}:`, err);
+        }
+      }
+    }
+    if (brainSaved) {
+      this.archiveIngestion?.markBrainPersisted();
+      console.log('[INGEST] Brain-persisted flag set on shutdown');
+    }
 
     // Final session save
     try {
@@ -2973,27 +3212,6 @@ export class CommunionLoop {
       console.log(`[GRAPH] Saved: ${stats.totalNodes} nodes, ${stats.totalEdges} edges`);
     } catch (err) {
       console.error('[GRAPH] Error saving graph:', err);
-    }
-
-    // Save Alois brain state
-    let brainSaved = false;
-    for (const [agentId, agent] of this.agents) {
-      if ('saveBrain' in agent.backend) {
-        try {
-          const brainPath = join(this.dataDir, 'brain-tissue.json');
-          (agent.backend as any).saveBrain(brainPath);
-          console.log(`[ALOIS] Brain saved for ${agent.config.name}`);
-          brainSaved = true;
-        } catch (err) {
-          console.error(`[ALOIS] Failed to save brain for ${agentId}:`, err);
-        }
-      }
-    }
-
-    // Mark ingest checkpoint as brain-persisted so next restart won't re-run completed files
-    if (brainSaved) {
-      this.archiveIngestion?.markBrainPersisted();
-      console.log('[INGEST] Brain-persisted flag set on shutdown');
     }
 
     console.log('[COMMUNION] Loop stopped');

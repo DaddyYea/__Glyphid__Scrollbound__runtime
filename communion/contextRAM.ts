@@ -105,7 +105,7 @@ export interface RAMPool {
 export type CurationMode = 'active' | 'reflective';
 
 export interface RAMCommand {
-  action: 'focus' | 'drop' | 'load' | 'shrink' | 'expand' | 'pin' | 'release' | 'browse' | 'graph';
+  action: 'focus' | 'drop' | 'load' | 'shrink' | 'expand' | 'pin' | 'release' | 'browse' | 'graph' | 'read';
   target: string; // slot name, "item:id" for pool items, keyword for browse, node URI for graph
 }
 
@@ -858,6 +858,7 @@ export class ContextRAM {
     lines.push('  [RAM:RELEASE item:id] — allow auto-eviction again');
     lines.push('  [RAM:LOAD item:id] / [RAM:DROP item:id] — manually swap items');
     lines.push('  [RAM:BROWSE keyword] — search documents for keyword, load matching chunks');
+    lines.push('  [RAM:READ filename] — load the FULL content of a specific file (by name or partial path)');
     lines.push('  [RAM:GRAPH node:uri] — traverse the JSON-LD graph from a node, see neighbors and edges');
 
     return lines.join('\n');
@@ -986,7 +987,7 @@ function contentSimilarity(a: string, b: string): number {
 
 export function parseRAMCommands(text: string): { cleanText: string; commands: RAMCommand[] } {
   const commands: RAMCommand[] = [];
-  const ramPattern = /\[RAM:(FOCUS|DROP|LOAD|SHRINK|EXPAND|PIN|RELEASE|BROWSE|GRAPH)\s+([^\]]+)\]/gi;
+  const ramPattern = /\[RAM:(FOCUS|DROP|LOAD|SHRINK|EXPAND|PIN|RELEASE|BROWSE|GRAPH|READ)\s+([^\]]+)\]/gi;
 
   let match;
   while ((match = ramPattern.exec(text)) !== null) {

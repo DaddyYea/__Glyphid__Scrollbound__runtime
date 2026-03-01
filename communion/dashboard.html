@@ -3620,6 +3620,7 @@
       let loopTimer = null, cursorTimer = null;
       let prLoopCount = 0;     // how many loops have fired — drives 8/16-bar evolution
       let prNextLoopTime = 0;  // stable Web Audio timestamp for start of upcoming loop
+      let prLastFragLabel = ''; // avoid repeating same fragment back-to-back
       let scroll = 0, viewBeats = 16;
       let lastAutoCompose = 0, lastTexture = '';
       let prCanvas = null, prCtx = null, prPlayBtn = null;
@@ -3640,8 +3641,8 @@
         drive: 0.0, mangle: 0.0, delaySend: 0.0, reverbSend: 0.08,
       };
       const padSettings = {
-        detune: 10, filterCutoff: 2400, filterQ: 2.2,
-        attack: 0.12, release: 0.22, reverbSend: 0.22,
+        detune: 10, filterCutoff: 2200, filterQ: 0.7,
+        attack: 0.12, release: 0.10, reverbSend: 0.18,
       };
       const fxSettings = {
         revSize: 1.4, revDecay: 1.8, delayFeedback: 0.18,
@@ -4014,9 +4015,9 @@
         const ps  = padSettings;
         const vol = (vel || 80) / 127 * 0.32;
 
-        // 3 oscillators detuned by ps.detune (spread ± half)
+        // 2 oscillators detuned by ps.detune (spread ± half) — 3 was too dense
         const spread = ps.detune / 2;
-        const oscs = [-spread, 0, spread].map(det => {
+        const oscs = [-spread, spread].map(det => {
           const o = ctx.createOscillator();
           o.type = 'sawtooth';
           o.frequency.value = freq;
@@ -4076,21 +4077,17 @@
           const next = scChooseSection();
           const sectionChanged = (next !== scSection);
           if (sectionChanged) { scSection = next; scApplySectionToDrone(next); }
-          // Piano + drums regenerate together every 8 bars (every 2 loops) or on section change.
-          // Drums deferred to exact loopStart so they flip at beat-1, locked with piano.
-          if (prLoopCount % 2 === 0 || sectionChanged) {
-            try {
-              scGeneratePianoPattern(scSection);
-            } catch (e) {
-              console.error('[SCORE] scGeneratePianoPattern error:', e);
-            }
-            scGenerateDrumPattern(scSection);
-            drStep = 0;
-            drNextBeat = loopStart;
-            console.log(`[SCORE] regen @ loop ${prLoopCount} — section: ${scSection}`);
-          } else {
-            tracks.jason = [];
+          // Both piano and drums regenerate every loop — 2-bar drum loop playing 2× per 4-bar
+          // piano loop was audibly repetitive ("same pattern"). Now each loop is fresh.
+          try {
+            scGeneratePianoPattern(scSection);
+          } catch (e) {
+            console.error('[SCORE] scGeneratePianoPattern error:', e);
           }
+          scGenerateDrumPattern(scSection);
+          drStep = 0;
+          drNextBeat = loopStart;
+          console.log(`[SCORE] regen @ loop ${prLoopCount} — section: ${scSection}`);
         }
 
         // ── Schedule notes relative to loopStart (not now) — immune to late fires ──
@@ -5100,7 +5097,7 @@
         // Base trap beat in bar 1 (steps 0–15)
         // Kick: 1, syncopated hits
         const kickHits = [0, 6, 10, 14];
-        kickHits.forEach(s => { drPattern[ki][s] = 110; if (s === 0 || s === 16) drPattern[si][s] = 105; }); // sub on downbeats only
+        kickHits.forEach(s => { drPattern[ki][s] = 110; }); // sub disabled
 
         // Snare on 2 and 4 (steps 4, 12)
         drPattern[sni][4]  = 108;
@@ -5121,7 +5118,7 @@
 
         // Bar 2 (steps 16–31) — doubled structure with Cloud Hop fills
         // Copy base kick/snare
-        kickHits.forEach(s => { drPattern[ki][s+16] = 110; if ((s+16) === 16) drPattern[si][s+16] = 105; }); // sub on step 16 only
+        kickHits.forEach(s => { drPattern[ki][s+16] = 110; }); // sub disabled
         drPattern[sni][20] = 108;
         drPattern[sni][28] = 108;
         drPattern[cli][20] = 95;
@@ -5454,10 +5451,14 @@
         }
       }
 
-      // Pick a random fragment matching section+mode, return notes transposed to targetRootPc
-      function pickMidiFragment(section, mode, targetRootPc) {
-        const pool = (midiFragLibBySection[section] || []).filter(f => f.mode === mode);
+      // Pick a random fragment matching section+mode, return notes transposed to targetRootPc.
+      // excludeLabel: skip the previously-used fragment to prevent back-to-back repeats.
+      function pickMidiFragment(section, mode, targetRootPc, excludeLabel = '') {
+        let pool = (midiFragLibBySection[section] || []).filter(f => f.mode === mode);
         if (pool.length === 0) return null;
+        // Avoid the last-used fragment if the pool is large enough
+        if (pool.length > 1 && excludeLabel) pool = pool.filter(f => f.label !== excludeLabel);
+        if (pool.length === 0) return null; // all same label — allow repeat
         const frag = pool[Math.floor(Math.random() * pool.length)];
         const shift = ((targetRootPc - frag.rootPc) + 12) % 12;
         return { frag, notes: frag.notes.map(n => ({
@@ -5726,35 +5727,32 @@
         return candidate;
       }
 
-      // Refresh bass only — new random progression each loop, sparse by design.
-      // 35% chance the bass sits out entirely; chord hits also skip individually (~30%).
+      // Refresh bass only — single hard downbeat hits, sparse by design.
+      // Currently unused — bass is generated inside scGeneratePianoPattern.
       function scRefreshBass(section) {
         const def = SECTION_DEFS[section];
         if (!def) return;
-        // Sit out some loops completely
         const silenceProb = { breakdown: 0.55, verse: 0.35, chorus: 0.20, peak: 0.10 }[section] ?? 0.35;
         if (Math.random() < silenceProb) { tracks.jason = []; return; }
-
         const scale    = activeMoodScale?.intervals || SC_SCALES.minor;
         const rootPc   = activeMoodScale?.rootPc ?? scRootPc;
         const beats    = loopBars * beatsPerBar;
         const rootMidi = 48 + rootPc;
         const scaleType = scale.includes(4) ? 'major' : 'minor';
         const spacing   = { breakdown: 8, verse: 4, chorus: 2, peak: 1.5 }[section] ?? 4;
-        const numChords = Math.min(12, Math.floor(beats / spacing));
         const progPool  = ALT_ROCK_PROGS[scaleType] || ALT_ROCK_PROGS.minor;
         const prog      = progPool[Math.floor(Math.random() * progPool.length)];
-        const bassVelBase = Math.min(100, def.velLo + 18 + Math.floor(Math.random() * 12));
+        const bassVelBase = Math.min(112, def.velLo + 20 + Math.floor(Math.random() * 12));
         const bassNotes = [];
-        for (let ci = 0; ci < numChords; ci++) {
-          const chordBeat = ci * spacing;
-          if (chordBeat >= beats) break;
-          if (ci > 0 && Math.random() < 0.30) continue; // skip individual chord hits (not first)
-          let pitch = rootMidi + prog[ci % prog.length] - 12;
-          while (pitch > 52) pitch -= 12;
-          while (pitch < 28) pitch += 12;
-          bassNotes.push({ pitch, start: chordBeat, dur: 0.55, vel: bassVelBase });
-        }
+        const mandatory = [0, 8];
+        const optional  = [4, 12].filter(() => Math.random() < 0.28);
+        [...mandatory, ...optional].filter(b => b < beats).forEach(bp => {
+          const ci = Math.floor(bp / spacing);
+          let p = rootMidi + prog[ci % prog.length] - 12;
+          while (p > 52) p -= 12;
+          while (p < 28) p += 12;
+          bassNotes.push({ pitch: p, start: bp, dur: 0.55, vel: Math.round(bassVelBase * (bp === 0 || bp === 8 ? 1.0 : 0.72)) });
+        });
         tracks.jason = bassNotes;
       }
 
@@ -5765,18 +5763,63 @@
         const rnd = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo));
         const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 
-        // Helper: write a rapid hat fill — n consecutive 16th steps ending at `endStep`
+        // Fill bank — choose a different fill type each time to break up repetition.
+        // Each fill type ends at `endStep` and builds over `len` 16th-note steps.
+        const FILL_TYPES = [
+          // 0: Classic hat run — consecutive 16th hats crescendo into bar end
+          (endStep, len, velPeak) => {
+            for (let i = 0; i < len; i++) {
+              const s = ((endStep - len + 1 + i) + DR_STEPS) % DR_STEPS;
+              drPattern[chhi][s] = Math.max(drPattern[chhi][s], Math.round(velPeak * (0.5 + 0.5 * (i / len))));
+            }
+          },
+          // 1: Snare roll — rapid snare ghost hits, last 2 steps loud
+          (endStep, len, velPeak) => {
+            for (let i = 0; i < len; i++) {
+              const s = ((endStep - len + 1 + i) + DR_STEPS) % DR_STEPS;
+              const loud = i >= len - 2;
+              const vel  = loud ? Math.round(velPeak * 0.95) : Math.round(velPeak * (0.3 + 0.4 * (i / len)));
+              drPattern[sni][s] = Math.max(drPattern[sni][s], vel);
+            }
+          },
+          // 2: Hat + snare alternating — two voices ping-pong
+          (endStep, len, velPeak) => {
+            for (let i = 0; i < len; i++) {
+              const s   = ((endStep - len + 1 + i) + DR_STEPS) % DR_STEPS;
+              const vel = Math.round(velPeak * (0.55 + 0.45 * (i / len)));
+              if (i % 2 === 0) drPattern[chhi][s] = Math.max(drPattern[chhi][s], vel);
+              else             drPattern[sni][s]  = Math.max(drPattern[sni][s],  Math.round(vel * 0.7));
+            }
+          },
+          // 3: Open-hat stabs — 3 evenly spaced open hat accents
+          (endStep, len, velPeak) => {
+            const positions = [0, Math.floor(len * 0.4), len - 1];
+            positions.forEach(pos => {
+              const s = ((endStep - len + 1 + pos) + DR_STEPS) % DR_STEPS;
+              drPattern[ohhi][s] = Math.max(drPattern[ohhi][s], Math.round(velPeak * (0.65 + 0.35 * (pos / len))));
+            });
+          },
+          // 4: Kick+hat combo — kick on even steps, hat on odd
+          (endStep, len, velPeak) => {
+            for (let i = 0; i < len; i++) {
+              const s   = ((endStep - len + 1 + i) + DR_STEPS) % DR_STEPS;
+              const vel = Math.round(velPeak * (0.55 + 0.45 * (i / len)));
+              if (i % 2 === 0) drPattern[ki][s]   = Math.max(drPattern[ki][s],   vel);
+              else             drPattern[chhi][s] = Math.max(drPattern[chhi][s], Math.round(vel * 0.8));
+            }
+          },
+        ];
+        // Pick a fill type per bar-end — different each call prevents same-fill-every-loop
+        let fillIdx = Math.floor(Math.random() * FILL_TYPES.length);
         const hatFill = (endStep, len = 4, velPeak = 90) => {
-          for (let i = 0; i < len; i++) {
-            const s = ((endStep - len + 1 + i) + DR_STEPS) % DR_STEPS;
-            drPattern[chhi][s] = Math.max(drPattern[chhi][s], Math.round(velPeak * (0.6 + 0.4 * (i / len))));
-          }
+          FILL_TYPES[fillIdx % FILL_TYPES.length](endStep, len, velPeak);
+          fillIdx++; // advance so bar1-end and bar2-end fills differ too
         };
 
         if (section === 'breakdown') {
           // Sparse, dreamy — pick one of 4 minimalist kick placements
           const kicks = pick([[0, 24], [0, 20], [0, 28], [0, 16, 24]]);
-          kicks.forEach(s => { drPattern[ki][s] = rnd(75, 92); if (s === 0 || s === 16) drPattern[si][s] = rnd(62, 78); });
+          kicks.forEach(s => { drPattern[ki][s] = rnd(75, 92); });
           for (let s = 0; s < 32; s += 8) drPattern[chhi][s] = rnd(40, 58);
           if (Math.random() < 0.4) drPattern[rdi][0] = rnd(55, 72);
 
@@ -5798,7 +5841,7 @@
           const hatGroove = Math.floor(Math.random() * 3);
           const kicks  = pick(kickPats);
           const snares = pick(snarePats);
-          kicks.forEach(s  => { drPattern[ki][s]  = rnd(90, 108); if (s === 0 || s === 16) drPattern[si][s] = rnd(80, 95); });
+          kicks.forEach(s  => { drPattern[ki][s]  = rnd(90, 108); });
           snares.forEach(s => { drPattern[sni][s] = rnd(95, 112); });
           if (Math.random() < 0.6) drPattern[cli][snares[snares.length - 1]] = rnd(78, 95);
           if (hatGroove === 0) {
@@ -5827,7 +5870,7 @@
             [0, 12, 16, 28],
           ];
           const kicks = pick(kickPats);
-          kicks.forEach(s => { drPattern[ki][s] = rnd(100, 115); if (s === 0 || s === 16) drPattern[si][s] = rnd(88, 100); });
+          kicks.forEach(s => { drPattern[ki][s] = rnd(100, 115); });
           [8, 24].forEach(s => { drPattern[sni][s] = rnd(98, 112); drPattern[cli][s] = rnd(85, 100); });
           for (let s = 0; s < 32; s++) {
             drPattern[chhi][s] = (s % 4 === 0) ? rnd(82, 100) : rnd(55, 72);
@@ -5847,7 +5890,7 @@
             [0, 10, 14, 16, 26, 30],
           ];
           const kicks = pick(kickPats);
-          kicks.forEach(s => { drPattern[ki][s] = rnd(108, 120); if (s === 0 || s === 16) drPattern[si][s] = rnd(95, 110); });
+          kicks.forEach(s => { drPattern[ki][s] = rnd(108, 120); });
           drPattern[sni][8]  = 112; drPattern[cli][8]  = 95;
           drPattern[sni][24] = 115; drPattern[cli][24] = 100;
           for (let s = 0; s < 32; s++) drPattern[chhi][s] = rnd(70, 100);
@@ -5858,6 +5901,9 @@
           if (Math.random() < 0.40) hatFill(15, 8, 105);
           if (Math.random() < 0.40) hatFill(31, 8, 105);
         }
+        // ── Sub: single hard hit on the loop downbeat ──
+        drPattern[si][0] = 120;
+
         // ── Bar-2 micro-variation ──
         // The drum machine loops at 32 steps (2 bars) inside a 4-bar piano loop,
         // so bar 1 (steps 0-15) plays twice without variation. Give steps 16-31
@@ -5913,7 +5959,10 @@
         // Shared vars — must be visible to both if/else paths AND the arp layer below.
         const scalePCs   = scale.map(deg => (rootPc + deg) % 12);
         let spacing      = { breakdown: 8, verse: 4, chorus: 2, peak: 1.5 }[section] ?? 4;
-        let numChords    = Math.min(12, Math.floor(beats / spacing));
+        // Pads are sustained wash, not rhythm — clamp to 4-beat minimum regardless of section.
+        // Dense chord hits (chorus/peak at 1.5–2 beats) sound like a repeating bass fill.
+        const padSpacing = Math.max(4, spacing);
+        let numChords    = Math.min(4, Math.floor(beats / padSpacing));
         const progPool0  = ALT_ROCK_PROGS[scaleType] || ALT_ROCK_PROGS.minor;
         let prog         = progPool0[Math.floor(Math.random() * progPool0.length)];
         let intervals    = CHORD_TYPES.min7; // overridden by procedural path
@@ -5922,47 +5971,47 @@
         // Fragment library loaded from free-midi-chords (MIT). Falls back to procedural
         // if library not yet loaded or no matching fragment found.
         const useFragment = midiFragmentLib.length > 0 && Math.random() < 0.70;
-        const fragResult  = useFragment ? pickMidiFragment(section, scaleType, rootPc) : null;
+        const fragResult  = useFragment ? pickMidiFragment(section, scaleType, rootPc, prLastFragLabel) : null;
 
         if (fragResult) {
           // ── Fragment path: real human-written chord progression ──
           const { frag, notes: fragNotes } = fragResult;
+          prLastFragLabel = frag.label; // remember for next loop — avoids back-to-back repeat
           const loopBeats = beats;
           const fragLen = frag.bars * 4; // fragment length in beats
           // Sort by start time — multi-track MIDI arrives in track order, not time order.
           // Sorting lets the break statement work correctly and spreads notes evenly.
           const sortedFrag = [...fragNotes].sort((a, b) => a.start - b.start);
-          for (let offset = 0; offset < loopBeats; offset += fragLen) {
+          // Play fragment once only — no tiling. Avoids rhythmic stab repetition within the loop.
+          const maxTiles = 1;
+          for (let tileIdx = 0; tileIdx < maxTiles; tileIdx++) {
+            const offset = tileIdx * fragLen;
+            // Group fragment notes by quantised time slot — keep max 3 voices (top pitches = soprano voicing)
+            const slotMap = new Map();
             for (const n of sortedFrag) {
-              const start = offset + n.start;
-              if (start >= loopBeats) break;
-              // Scale-snap to active key — keeps fragment in-key regardless of mode/mood
-              let pitch = Math.max(52, Math.min(84, n.pitch)); // 52=E3 — keep pad out of bass register
-              const pc = ((pitch % 12) + 12) % 12;
-              if (!scalePCs.includes(pc)) {
-                let bestPc = scalePCs[0], bestDist = 99;
-                for (const sp of scalePCs) { let d = Math.abs(pc - sp); if (d > 6) d = 12 - d; if (d < bestDist) { bestDist = d; bestPc = sp; } }
-                const diff = ((bestPc - pc + 12) % 12);
-                pitch += diff <= 6 ? diff : diff - 12;
-              }
-              padNotes.push({ pitch, start, dur: Math.min(n.dur, spacing * 0.88, loopBeats - start - 0.05), vel: n.vel });
+              const absStart = offset + n.start;
+              if (absStart >= loopBeats) break;
+              const slot = Math.round(n.start * 4) / 4; // quantise to 16th-note slots
+              if (!slotMap.has(slot)) slotMap.set(slot, []);
+              slotMap.get(slot).push({ ...n, absStart });
             }
-          }
-          // Bass groove — follows chord roots with per-section rhythmic pattern
-          const bassGroove = BASS_GROOVES[section] || BASS_GROOVES.verse;
-          const bassVelBase = Math.min(108, def.velLo + 18 + Math.floor(Math.random() * 12));
-          for (let ci = 0; ci < numChords; ci++) {
-            const chordBeat = ci * spacing;
-            if (chordBeat >= beats) break;
-            let rootPitch = rootMidi + prog[ci % prog.length] - 12;
-            while (rootPitch > 52) rootPitch -= 12;
-            while (rootPitch < 28) rootPitch += 12;
-            for (const [offset, velFactor] of bassGroove) {
-              if (offset >= spacing) break;
-              const start = chordBeat + offset;
-              if (start >= beats) break;
-              const dur = 0.55; // tight punch — no bleed into next hit
-              bassNotes.push({ pitch: rootPitch, start, dur, vel: Math.round(bassVelBase * velFactor) });
+            for (const [, group] of slotMap) {
+              // Sort descending by pitch, take top 3 — soprano + inner voices, no doubling in bass register
+              group.sort((a, b) => b.pitch - a.pitch);
+              for (const n of group.slice(0, 3)) {
+                const start = n.absStart;
+                // Scale-snap to active key — keeps fragment in-key regardless of mode/mood
+                let pitch = Math.max(64, Math.min(88, n.pitch)); // 64=E4 — keep pad clear of bass register
+                const pc = ((pitch % 12) + 12) % 12;
+                if (!scalePCs.includes(pc)) {
+                  let bestPc = scalePCs[0], bestDist = 99;
+                  for (const sp of scalePCs) { let d = Math.abs(pc - sp); if (d > 6) d = 12 - d; if (d < bestDist) { bestDist = d; bestPc = sp; } }
+                  const diff = ((bestPc - pc + 12) % 12);
+                  pitch += diff <= 6 ? diff : diff - 12;
+                }
+                pitch = Math.max(60, pitch); // re-clamp after scale snap
+                padNotes.push({ pitch, start, dur: Math.min(n.dur, spacing * 0.88, loopBeats - start - 0.05), vel: n.vel });
+              }
             }
           }
           console.log(`[SCORE] fragment: "${frag.label}" [${section}]`);
@@ -5980,7 +6029,7 @@
           const STAGGER   = 0.02;
 
           for (let ci = 0; ci < numChords; ci++) {
-            const chordBeat = ci * spacing;
+            const chordBeat = ci * padSpacing;
             if (chordBeat >= beats) break;
             const chordRoot = rootMidi + prog[ci % prog.length];
 
@@ -5988,8 +6037,8 @@
             intervals.forEach(semis => {
               let pitch = chordRoot + semis;
               while (pitch > 72) pitch -= 12;
-              while (pitch < 48) pitch += 12;
-              pitch = Math.max(36, Math.min(84, pitch));
+              while (pitch < 64) pitch += 12;  // keep pads above bass register (E4+)
+              pitch = Math.max(64, Math.min(88, pitch));
               const pc = ((pitch % 12) + 12) % 12;
               if (!scalePCs.includes(pc)) {
                 let bestPc = scalePCs[0], bestDist = 99;
@@ -5997,34 +6046,29 @@
                 const diff = ((bestPc - pc + 12) % 12);
                 pitch += diff <= 6 ? diff : diff - 12;
               }
+              pitch = Math.max(60, pitch); // re-clamp after scale snap — snap can shift down 5 semitones
               voices.push(pitch);
             });
             voices.sort((a, b) => a - b);
-            const noteDur = spacing * 0.85; // was 1.05 — cap within chord window, no bleed into next loop
+            const noteDur = padSpacing * 0.88; // sustain to near-next chord, no rhythmic stab feel
             const vel = Math.max(35, def.velLo + Math.floor(Math.random() * (def.velHi - def.velLo)));
-            voices.forEach((pitch, vi) => {
+            // Top 2 voices (highest pitches) — stays in mid/upper register, not bass
+            voices.slice(-2).forEach((pitch, vi) => {
               const start = chordBeat + vi * STAGGER;
               if (start >= beats) return;
               padNotes.push({ pitch, start, dur: noteDur, vel });
             });
 
-            let bassPitch = chordRoot - 12;
-            while (bassPitch > 52) bassPitch -= 12;
-            while (bassPitch < 28) bassPitch += 12;
-            const bassVelBase = Math.min(100, def.velLo + 18 + Math.floor(Math.random() * 15));
-            const bassGrooveP = BASS_GROOVES[section] || BASS_GROOVES.verse;
-            for (const [offset, velFactor] of bassGrooveP) {
-              if (offset >= spacing) break;
-              const start = chordBeat + offset;
-              if (start >= beats) break;
-              const dur = 0.55; // tight punch — no bleed into next hit
-              bassNotes.push({ pitch: bassPitch, start, dur, vel: Math.round(bassVelBase * velFactor) });
-            }
           }
         }
 
+        // ── Bass: disabled — sub kick handles low end, 808s come later ──
+        // Explicit pitched bass notes (tracks.jason) always landed on the same
+        // beats as the sub kick, creating an audibly identical repeating bass sound.
+        // Re-enable when 808 samples are wired up with proper timing design.
+
         tracks.alois = padNotes;
-        tracks.jason = bassNotes; // always regenerate — bass follows chord roots
+        tracks.jason = [];
         tracks.arp   = [];        // reserved — not used
 
         // ── Melody layer: soprano voice extracted from MIDI fragment ──

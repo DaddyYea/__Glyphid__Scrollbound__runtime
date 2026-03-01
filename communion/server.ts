@@ -6,6 +6,7 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
+import { createInterface } from 'readline';
 import { readFileSync, existsSync, mkdirSync, statSync, readdirSync, createReadStream } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -1233,11 +1234,11 @@ async function main() {
     shuttingDown = true;
     console.log(`\n[SHUTDOWN] ${signal} received — stopping communion...`);
 
-    // Hard bailout: if graceful stop hangs (embed in-flight, etc.), force exit after 5s
+    // Hard bailout: if graceful stop hangs (embed in-flight, etc.), force exit after 3s
     const bailout = setTimeout(() => {
       console.error('[SHUTDOWN] Graceful stop timed out — forcing exit');
       process.exit(1);
-    }, 5000);
+    }, 3000);
     bailout.unref(); // don't keep event loop alive just for this
 
     try {
@@ -1259,8 +1260,18 @@ async function main() {
     process.exit(0);
   };
 
-  process.on('SIGINT',  () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT',   () => shutdown('SIGINT'));
+  process.on('SIGTERM',  () => shutdown('SIGTERM'));
+  process.on('SIGBREAK', () => shutdown('SIGBREAK')); // Windows Ctrl+Break
+
+  // readline SIGINT — more reliable than process signals on Windows PowerShell
+  const rl = createInterface({ input: process.stdin });
+  rl.on('SIGINT', () => shutdown('SIGINT-readline'));
+
+  // process.exit safety net — fires even on hard kills, saves brain synchronously
+  process.on('exit', () => {
+    try { communion.saveBrainSync(); } catch { /* best effort */ }
+  });
 }
 
 main().catch(err => {
