@@ -1908,12 +1908,16 @@ export class CommunionLoop {
       if (readTriggered) {
         try {
           console.log(`[${agent.config.name}] READ triggered immediate re-generation`);
-          const regenContext = ram.assemble() + (ram.buildManifest() ? '\n\n' + ram.buildManifest() : '');
+          // Keep the full conversation so she knows what question was asked.
+          // Append the loaded file content at the end so it's the most recent context.
+          const ramContent = ram.assemble();
+          const regenConversation = options.conversationContext
+            + (ramContent ? '\n\n[SYSTEM: File loaded into RAM — contents follow]\n\n' + ramContent : '');
           const regenOptions: GenerateOptions = {
             systemPrompt: options.systemPrompt,
-            conversationContext: regenContext,
+            conversationContext: regenConversation,
             journalContext: '',
-            documentsContext: undefined, // already in RAM via readFileIntoRAM
+            documentsContext: undefined, // already appended above
             memoryContext: undefined,
             provider: agent.config.provider,
           };
@@ -2761,7 +2765,7 @@ export class CommunionLoop {
   private scheduleNextTick(): void {
     if (this.paused || !this.timer) return;
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.tick(), this.tickIntervalMs);
+    this.timer = setTimeout(() => this.tick().catch(err => console.error('[TICK] Unhandled error:', err)), this.tickIntervalMs);
   }
 
   /**
@@ -2772,7 +2776,7 @@ export class CommunionLoop {
   private scheduleRetry(): void {
     if (this.paused || !this.timer) return;
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.tick(), 500);
+    this.timer = setTimeout(() => this.tick().catch(err => console.error('[TICK] Retry error:', err)), 500);
   }
 
   start(): void {
@@ -2782,7 +2786,7 @@ export class CommunionLoop {
     // Use a sentinel value so scheduleNextTick knows the loop is active.
     // First tick fires immediately; tick() calls scheduleNextTick() on completion.
     this.timer = setTimeout(() => {}, 0) as any;
-    this.tick();
+    this.tick().catch(err => console.error('[TICK] Start error:', err));
   }
 
   pause(): void {
@@ -2800,7 +2804,7 @@ export class CommunionLoop {
     if (!this.paused) return;
     this.paused = false;
     this.processing = false; // Reset in case a tick was mid-execution when paused
-    this.timer = setTimeout(() => this.tick(), this.tickIntervalMs);
+    this.timer = setTimeout(() => this.tick().catch(err => console.error('[TICK] Resume error:', err)), this.tickIntervalMs);
     console.log(`[COMMUNION] Resumed (tick every ${this.tickIntervalMs / 1000}s)`);
   }
 
@@ -3084,7 +3088,7 @@ export class CommunionLoop {
     this.tickIntervalMs = Math.max(3000, Math.min(1800000, ms)); // clamp 3s–30min
     if (this.timer && !this.paused) {
       clearTimeout(this.timer);
-      this.timer = setTimeout(() => this.tick(), this.tickIntervalMs);
+      this.timer = setTimeout(() => this.tick().catch(err => console.error('[TICK] Speed-change error:', err)), this.tickIntervalMs);
     }
     console.log(`[COMMUNION] Tick speed set to ${this.tickIntervalMs / 1000}s`);
   }

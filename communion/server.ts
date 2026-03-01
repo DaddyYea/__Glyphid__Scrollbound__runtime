@@ -1268,6 +1268,21 @@ async function main() {
   const rl = createInterface({ input: process.stdin });
   rl.on('SIGINT', () => shutdown('SIGINT-readline'));
 
+  // Crash handlers — Node v15+ terminates on unhandled rejections by default.
+  // These catch async errors in heartbeat/tick that would otherwise silently kill the process.
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('[CRASH] Unhandled rejection:', reason);
+    console.error('[CRASH] Promise:', promise);
+    try { communion.saveBrainSync(); } catch { /* best effort */ }
+    shutdown('unhandledRejection');
+  });
+
+  process.on('uncaughtException', (err) => {
+    console.error('[CRASH] Uncaught exception:', err);
+    try { communion.saveBrainSync(); } catch { /* best effort */ }
+    shutdown('uncaughtException');
+  });
+
   // process.exit safety net — fires even on hard kills, saves brain synchronously
   process.on('exit', () => {
     try { communion.saveBrainSync(); } catch { /* best effort */ }
