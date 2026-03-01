@@ -3146,8 +3146,11 @@ export class CommunionLoop {
 
       const itemId = `doc:${bestPath}:full`;
       const label = bestPath.replace(/^.*[/\\]/, ''); // basename
+      // Ensure the documents slot is active — force-load it if it was dropped
+      if (!ram.isLoaded('documents')) {
+        ram.processCommand({ action: 'load', target: 'documents' });
+      }
       ram.offerItem('documents', { id: itemId, label: `FULL: ${label}`, content: snippet, chars: snippet.length, tags: tokens });
-      ram.processCommand({ action: 'load', target: itemId });
       ram.processCommand({ action: 'pin', target: itemId }); // auto-pin — survives tick auto-curation
       return `Loaded full file: ${label} (${content.length} chars${truncated ? ', truncated to 24k' : ''}) — pinned, will not be auto-evicted`;
     } catch (err) {

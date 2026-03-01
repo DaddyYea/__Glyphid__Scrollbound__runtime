@@ -249,15 +249,25 @@ export class ContextRAM {
   offerItem(slotName: 'memory' | 'documents', item: Omit<RAMItem, 'loaded' | 'relevance' | 'lastRelevantTick' | 'loadedAtTick'>): void {
     const pool = this.pools.get(slotName);
     const slot = this.slots.get(slotName);
-    if (!pool || !slot || !slot.loaded) return;
+    if (!pool || !slot) return;
+    // Ensure the slot itself is active — if it was dropped, bring it back
+    if (!slot.loaded) {
+      slot.loaded = true;
+      slot.content = '';
+    }
 
     const existing = pool.items.get(item.id);
     if (existing) {
       // Update content but preserve curation state
+      const charDelta = item.chars - existing.chars;
       existing.content = item.content;
       existing.chars = item.chars;
       existing.tags = item.tags;
       existing.label = item.label;
+      if (existing.loaded) {
+        pool.loadedChars += charDelta;
+        this.rebuildPoolContent(); // content changed — rebuild immediately
+      }
       return;
     }
 
@@ -277,6 +287,9 @@ export class ContextRAM {
     }
 
     pool.items.set(item.id, ramItem);
+
+    // Must rebuild so assemble() sees this item immediately
+    if (ramItem.loaded) this.rebuildPoolContent();
   }
 
   /**
