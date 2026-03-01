@@ -310,6 +310,7 @@ export class ContextRAM {
     item.loaded = true;
     item.loadedAtTick = this.currentTick;
     pool.loadedChars += item.chars;
+    this.rebuildPoolContent(); // must rebuild so assemble() sees the new item immediately
     return `Loaded ${item.label} into RAM`;
   }
 
