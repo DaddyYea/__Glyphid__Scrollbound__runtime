@@ -4762,52 +4762,39 @@
 
       // SubKick — layered kick transient + pitched sub oscillator
       function drPlayKick(t, vel, isSub) {
+        // Sub track is disabled: two simultaneous oscillators in the 40-120 Hz range
+        // create amplitude modulation (beating) that sounds like a rhythmic loop inside
+        // each hit. Kick handles all sub-bass via its own sweep oscillator.
+        if (isSub) return;
+
         const ctx = prAudioCtx || drEnsureCtx();
         const out = drGetOut();
         const v = vel / 127;
-        const s = isSub ? drSettings.sub : drSettings.kick;
+        const s = drSettings.kick;
 
+        // Body oscillator — classic kick sweep 120→40 Hz
         const sub = ctx.createOscillator();
         sub.type = 'sine';
         const subGain = ctx.createGain();
         const subDur = s.decay;
-        if (isSub) {
-          // Sub: sweep from root-register (audible attack) down into sub-sonic territory.
-          // Fixed pitch at 55-65 Hz produces ~6+ audible sine cycles → perceived as rhythmic buzz.
-          // Sweeping to ~0.28× start pushes the tail below ~20 Hz where individual cycles
-          // are no longer perceptible — result is a clean thump with no looping artifact.
-          // Route directly to compressor, bypassing drum room reverb (reverb + sub = ringing mud).
-          const subOut = (prAudioCtx && prCompressor) ? prCompressor : out;
-          sub.frequency.setValueAtTime(s.tune * 1.4, t);
-          sub.frequency.exponentialRampToValueAtTime(s.tune * 0.28, t + subDur);
-          subGain.gain.setValueAtTime(v * 0.95, t);
-          subGain.gain.exponentialRampToValueAtTime(0.001, t + subDur);
-          sub.connect(subGain); subGain.connect(subOut);
-        } else {
-          // Kick body: punch sweep stays in mid-bass register so it doesn't beat against
-          // the sub track's oscillator. Sub starts at ~91 Hz; kick starts at 280 Hz.
-          // Beat between them = 189 Hz → heard as timbre, not as rhythmic pulsing.
-          sub.frequency.setValueAtTime(280, t);
-          sub.frequency.exponentialRampToValueAtTime(65, t + subDur * 0.7);
-          subGain.gain.setValueAtTime(v * 0.85, t);
-          subGain.gain.exponentialRampToValueAtTime(0.001, t + subDur);
-          sub.connect(subGain); subGain.connect(out);
-        }
+        sub.frequency.setValueAtTime(s.tune, t);
+        sub.frequency.exponentialRampToValueAtTime(40, t + subDur * 0.9);
+        subGain.gain.setValueAtTime(v * 0.82, t);
+        subGain.gain.exponentialRampToValueAtTime(0.001, t + subDur);
+        sub.connect(subGain); subGain.connect(out);
         sub.start(t); sub.stop(t + subDur + 0.01);
 
-        if (!isSub) {
-          // Click transient — highpassed noise burst
-          const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.008), ctx.sampleRate);
-          const d = buf.getChannelData(0);
-          for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
-          const click = ctx.createBufferSource();
-          click.buffer = buf;
-          const hp = ctx.createBiquadFilter();
-          hp.type = 'highpass'; hp.frequency.value = 2000;
-          const cg = ctx.createGain(); cg.gain.value = v * drSettings.kick.click;
-          click.connect(hp); hp.connect(cg); cg.connect(out);
-          click.start(t);
-        }
+        // Click transient — highpassed noise burst
+        const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.008), ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+        const click = ctx.createBufferSource();
+        click.buffer = buf;
+        const hp = ctx.createBiquadFilter();
+        hp.type = 'highpass'; hp.frequency.value = 2000;
+        const cg = ctx.createGain(); cg.gain.value = v * s.click;
+        click.connect(hp); hp.connect(cg); cg.connect(out);
+        click.start(t);
       }
 
       // Snare — noise burst + body tone
@@ -5915,11 +5902,9 @@
           if (Math.random() < 0.40) hatFill(15, 8, 105);
           if (Math.random() < 0.40) hatFill(31, 8, 105);
         }
-        // ── Sub: on every kick, tuned to current root ──
-        drSettings.sub.tune = scMidiToHz(36 + scRootPc); // C2+root — solid sub register
-        for (let s = 0; s < DR_STEPS; s++) {
-          if (drPattern[ki][s] > 0) drPattern[si][s] = drPattern[ki][s];
-        }
+        // ── Sub track: disabled — drPattern[si] stays all zeros ──
+        // Two simultaneous oscillators in 40-120 Hz range create beating heard as rhythmic loop.
+        // Kick's own sweep oscillator (120→40 Hz) handles all sub-bass.
 
         // ── Bar-2 micro-variation — hat texture only, no kick/sub changes ──
         for (let s = 16; s < 32; s++) {
