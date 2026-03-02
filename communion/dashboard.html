@@ -5902,9 +5902,12 @@
           if (Math.random() < 0.40) hatFill(15, 8, 105);
           if (Math.random() < 0.40) hatFill(31, 8, 105);
         }
-        // ── Sub track: disabled — drPattern[si] stays all zeros ──
-        // Two simultaneous oscillators in 40-120 Hz range create beating heard as rhythmic loop.
-        // Kick's own sweep oscillator (120→40 Hz) handles all sub-bass.
+        // ── Sub: on every kick — uses sample if loaded, silent if not ──
+        // Synthesis disabled (oscillator beating artifact). Drop a sub/subbass WAV
+        // into data/samples/ and the sample loader will pick it up via the 'sub' pattern.
+        for (let s = 0; s < DR_STEPS; s++) {
+          if (drPattern[ki][s] > 0) drPattern[si][s] = drPattern[ki][s];
+        }
 
         // ── Bar-2 micro-variation — hat texture only, no kick/sub changes ──
         for (let s = 16; s < 32; s++) {
