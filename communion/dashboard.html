@@ -5009,6 +5009,10 @@
       let _drNoiseBuffer = null; // shared noise buffer for hi-hat synthesis (lazy-initialized)
       const _drLoopSrcs = new Set(); // active loop BufferSource nodes — killed on drStop()
       let _drPatternCycle = 0;       // increments each time step 0 fires (2 cycles = 4 bars)
+      let drLoopStart  = 0;         // AudioContext time when current pattern loop began (straight-time anchor)
+      let drLoopStep   = 0;         // absolute step counter — never resets, used for straight-time calc
+      // CH_NO_SWING: track indices exempt from swing (kick/sub/snare/clap must be on-grid)
+      const CH_NO_SWING = new Set([0, 1, 2, 3]);
 
       // ── Drum voice settings (tweakable from the TUNE panel) ──
       const drSettings = {
@@ -5032,6 +5036,33 @@
 
       function drGetOut() { return prAudioCtx ? (drDryBus || prDryBus || prAudioCtx.destination) : (drEnsureCtx(), drAudioCtx.destination); }
 
+      // ── LowBus: soft-clipped bus for kick+sub — CloudHop "too loud but controlled" aesthetic ──
+      let chLowBus = null, chLowClip = null;
+      function chMakeSoftClipCurve(amount) {
+        const n = 256, curve = new Float32Array(n);
+        for (let i = 0; i < n; i++) {
+          const x = (i * 2) / n - 1;
+          curve[i] = x < 0
+            ? -Math.pow(-x, amount) / Math.pow(1, amount)
+            :  Math.pow( x, amount) / Math.pow(1, amount);
+        }
+        return curve;
+      }
+      function chGetLowBus() {
+        const ctx = prAudioCtx || drAudioCtx;
+        if (!ctx) return null;
+        if (!chLowBus || chLowBus.context !== ctx) {
+          chLowBus = ctx.createGain();
+          chLowBus.gain.value = 1.2; // intentionally hot into soft-clip
+          chLowClip = ctx.createWaveShaper();
+          chLowClip.curve = chMakeSoftClipCurve(0.7);
+          chLowClip.oversample = '4x';
+          chLowBus.connect(chLowClip);
+          chLowClip.connect(drGetOut());
+        }
+        return chLowBus;
+      }
+
       // SubKick — layered kick transient + pitched sub oscillator
       function drPlayKick(t, vel, isSub) {
         // Sub track is disabled: two simultaneous oscillators in the 40-120 Hz range
@@ -5040,7 +5071,7 @@
         if (isSub) return;
 
         const ctx = prAudioCtx || drEnsureCtx();
-        const out = drGetOut();
+        const out = chGetLowBus() || drGetOut();
         const v = vel / 127;
         const s = drSettings.kick;
 
@@ -5273,7 +5304,10 @@
             if (hasSub) return; // handled by scheduler
           }
           const cand = drPickShotSample(sampleKey);
-          if (cand) { drPlaySample(cand.buffer, t, v, ctx, drGetOut()); return; }
+          if (cand) {
+            const out = (trackId === 'kick' || trackId === 'sub') ? (chGetLowBus() || drGetOut()) : drGetOut();
+            drPlaySample(cand.buffer, t, v, ctx, out); return;
+          }
         }
         switch (trackId) {
           case 'kick':  drPlayKick(t, v, false); break;
@@ -5376,10 +5410,15 @@
         const stepS = drStepSeconds();
         while (drNextBeat < ctx.currentTime + drLookahead) {
           const step = drStep;
-          const t = drNextBeat;
+          const t_swing    = drNextBeat;                             // swing time (for hats/perc)
+          const t_straight = drLoopStart + drLoopStep * stepS;      // grid-perfect time (for kick/snare)
           DR_TRACKS.forEach((tr, ti) => {
             const vel = drPattern[ti][step];
-            if (vel > 0) drTrigger(tr.id, t, Math.round(vel * drVol[ti]));
+            if (vel > 0) {
+              // CloudHop law: kick/sub/snare/clap must be on grid — no swing
+              const hitTime = CH_NO_SWING.has(ti) ? t_straight : t_swing;
+              drTrigger(tr.id, hitTime, Math.round(vel * drVol[ti]));
+            }
           });
           // Loop-mode sub sample: fires occasionally (every ~8–16 drum cycles) — not every pass
           if (step === 0) {
@@ -5403,10 +5442,11 @@
           const capturedStep = step;
           requestAnimationFrame(() => drUpdatePlayhead(capturedStep));
 
-          // Swing: push every odd 16th note later
+          // Swing: push every odd 16th note later — applies to hats/perc only (CH_NO_SWING exempt)
           const isOdd = step % 2 === 1;
           const swingOffset = isOdd ? drSwing * stepS : 0;
           drNextBeat += stepS + swingOffset;
+          drLoopStep++;
           drStep = (drStep + 1) % DR_STEPS;
         }
         drScheduleId = setTimeout(drScheduler, drScheduleTick);
@@ -5417,7 +5457,9 @@
         drAudioCtx = ctx;
         drStep = 0;
         _drPatternCycle = 0;
-        drNextBeat = ctx.currentTime + 0.05;
+        drNextBeat  = ctx.currentTime + 0.05;
+        drLoopStart = ctx.currentTime + 0.05;
+        drLoopStep  = 0;
         drPlaying = true;
         drScheduler();
         document.getElementById('drPlay').textContent = '■ STOP';
@@ -5462,68 +5504,14 @@
       // kick+sub locked together, dreamy sparse ride
 
       function drCloudHopGenerate() {
-        // Cloud Hop lives at 60 BPM — set both transports
-        drBpm = 60; bpm = 60;
-        const bpmEl = document.getElementById('drBpmCtrl'); if (bpmEl) bpmEl.value = 60;
-        const prBpmEl = document.getElementById('prBpm'); if (prBpmEl) prBpmEl.value = 60;
-        if (prDelayNode) prDelayNode.delayTime.value = (60 / 60) * 0.75;
-
-        drPattern = DR_TRACKS.map(() => new Uint8Array(DR_STEPS));
-        const ki = 0, si = 1, sni = 2, cli = 3, chhi = 4, ohhi = 5, rdi = 6, perci = 7;
-
-        // Base trap beat in bar 1 (steps 0–15)
-        // Kick: 1, syncopated hits
-        const kickHits = [0, 6, 10, 14];
-        kickHits.forEach(s => { drPattern[ki][s] = 110; }); // sub disabled
-
-        // Snare on 2 and 4 (steps 4, 12)
-        drPattern[sni][4]  = 108;
-        drPattern[sni][12] = 108;
-
-        // Clap doubles the snare in bar 1
-        drPattern[cli][4]  = 95;
-        drPattern[cli][12] = 95;
-
-        // Closed hi-hat driving 8th notes
-        for (let s = 0; s < 16; s += 2) drPattern[chhi][s] = 85;
-        // Some 16th accent hats
-        [3, 7, 11, 15].forEach(s => { drPattern[chhi][s] = 65; });
-
-        // Open hi-hat pickups before snare
-        drPattern[ohhi][3]  = 72;
-        drPattern[ohhi][11] = 72;
-
-        // Bar 2 (steps 16–31) — doubled structure with Cloud Hop fills
-        // Copy base kick/snare
-        kickHits.forEach(s => { drPattern[ki][s+16] = 110; }); // sub disabled
-        drPattern[sni][20] = 108;
-        drPattern[sni][28] = 108;
-        drPattern[cli][20] = 95;
-        drPattern[cli][28] = 95;
-
-        // Cloud Hop fill — random extra kick hits in positions not occupied
-        const fillCandidates = [17, 18, 19, 21, 22, 23, 25, 26, 27, 29, 30, 31];
-        const numFills = 3 + Math.floor(Math.random() * 3);
-        const shuffled = fillCandidates.sort(() => Math.random() - 0.5).slice(0, numFills);
-        shuffled.forEach(s => {
-          drPattern[ki][s] = 75 + Math.floor(Math.random() * 25);
-          // No sub on fill kicks — sub stays anchored to downbeats only
-        });
-
-        // Perc hits for Cloud Hop texture — sparse, off-grid feel
-        const percSlots = [2, 5, 9, 13, 18, 22, 27, 30];
-        percSlots.filter(() => Math.random() < 0.4).forEach(s => drPattern[perci][s] = 70 + Math.floor(Math.random() * 30));
-
-        // Ride bell — sparse, on-beat accents for dreamy feel
-        [0, 8, 16, 24].forEach(s => { if (Math.random() < 0.6) drPattern[rdi][s] = 65 + Math.floor(Math.random() * 25); });
-
-        // Bar 2 hi-hats — slightly different variation
-        for (let s = 16; s < 32; s += 2) drPattern[chhi][s] = 82;
-        [19, 23, 27, 31].forEach(s => { drPattern[chhi][s] = 60 + Math.floor(Math.random() * 20); });
-        drPattern[ohhi][19] = 68;
-        drPattern[ohhi][27] = 68;
-
-        drRenderGrid();
+        // Apply CloudHop BPM (60–85) and defer to the Empathy Engine drum generator.
+        // The step-sequencer button now generates a law-compliant pattern matching the current scene.
+        const newBpm = Math.round(chScene.bpm);
+        drBpm = newBpm; bpm = newBpm;
+        const bpmEl = document.getElementById('drBpmCtrl'); if (bpmEl) bpmEl.value = newBpm;
+        const prBpmEl = document.getElementById('prBpm');  if (prBpmEl) prBpmEl.value = newBpm;
+        if (prDelayNode) prDelayNode.delayTime.value = (60 / newBpm) * 0.375;
+        scGenerateDrumPattern(scSection || 'verse');
       }
 
       // ── Build UI ──
@@ -5794,6 +5782,57 @@
         },
       };
       let scGenre = 'cloudhop';
+
+      // ── CloudHop Empathy Engine: SceneState ──
+      // Drives all generation (drums, harmony, melody, synth stacks).
+      // Updated every 8 bars by chUpdateScene(); externally writable by chBiometricsPush().
+      const chScene = {
+        bpm:              72,    // 60–85 CloudHop law
+        density:          0.5,   // 0–1: extra hits, hat density, pad voices
+        dream:            0.6,   // 0–1: reverb depth, open hats, pad air layer
+        dirt:             0.5,   // 0–1: saturation, grit layer on lead/pad
+        clarity:          0.5,   // 0–1: hat brightness, lead presence
+        surpriseBudget:   1,     // decorators per bar: 1 default, max 2
+        chordChangeBars:  4,     // 2 or 4 — bars per chord change
+        hatRate:         '1/16', // '1/16' or '1/32' — hat density mode
+        tripletFillBars:  2,     // triplet fill every N bars (law: max 2)
+      };
+
+      // Smoothly evolve scene state each 8-bar cycle
+      function chUpdateScene() {
+        const drift = (cur, target, rate) => cur + (target - cur) * rate;
+        // EMA toward pond affect dimensions if available
+        if (scLastAffect && scLastAffect.length >= 8) {
+          const mag = scLastMagnitude;
+          chScene.density = drift(chScene.density, Math.max(0.25, Math.min(0.85, mag * 1.4)), 0.25);
+          chScene.dream   = drift(chScene.dream,   Math.max(0.2, scLastAffect[4]), 0.2);
+          chScene.dirt    = drift(chScene.dirt,    Math.max(0.2, scLastAffect[1]), 0.2);
+          chScene.clarity = drift(chScene.clarity, Math.max(0.2, scLastAffect[2]), 0.2);
+        }
+        // Evolve surpriseBudget: increase with density, cap at 2
+        chScene.surpriseBudget = Math.min(2, Math.round(1 + chScene.density));
+        // Chord change rate: slow (4 bars) when dreamy, faster (2 bars) when dense
+        chScene.chordChangeBars = chScene.density > 0.65 ? 2 : 4;
+        // Hat rate: 1/32 density when clarity is high
+        chScene.hatRate = chScene.clarity > 0.7 ? '1/32' : '1/16';
+        _chScenePanelDirty = true;
+      }
+
+      // External biometrics hook — called by future biometric system with normalized readings
+      // data: { heartRate?, hrv?, gsr?, breathing? } all 0–1 normalized
+      window.chBiometricsPush = function(data) {
+        if (!data) return;
+        if (data.heartRate  != null) chScene.density = 0.2 + data.heartRate * 0.65;
+        if (data.hrv        != null) chScene.dream   = data.hrv;
+        if (data.gsr        != null) chScene.dirt    = data.gsr;
+        if (data.breathing  != null) chScene.clarity = data.breathing;
+        chScene.surpriseBudget = Math.min(2, Math.round(1 + chScene.density));
+        chScene.chordChangeBars = chScene.density > 0.65 ? 2 : 4;
+        _chScenePanelDirty = true;
+        console.log('[EMPATHY] biometrics push →', JSON.stringify(chScene));
+      };
+
+      let _chScenePanelDirty = false;
 
       // ── Drone audio context ──
       let scCtx = null, scGain = null;
@@ -6134,167 +6173,168 @@
       }
 
       // ── Drum pattern per section (cloud hop: sparse kick+sub, trap-influenced) ──
+      // ── CloudHop Empathy Engine: Drum Generator ──
+      // Enforces Genre Constitution laws (see chScene). Section still modulates density
+      // but NEVER overrides the mandatory landmarks.
       function scGenerateDrumPattern(section) {
         drPattern = DR_TRACKS.map(() => new Uint8Array(DR_STEPS));
         const ki = 0, si = 1, sni = 2, cli = 3, chhi = 4, ohhi = 5, rdi = 6, perci = 7;
-        const rnd = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo));
+        const rnd  = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo));
         const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+        const sc   = chScene;
 
-        // Fill bank — choose a different fill type each time to break up repetition.
-        // Each fill type ends at `endStep` and builds over `len` 16th-note steps.
-        const FILL_TYPES = [
-          // 0: Classic hat run — consecutive 16th hats crescendo into bar end
-          (endStep, len, velPeak) => {
-            for (let i = 0; i < len; i++) {
-              const s = ((endStep - len + 1 + i) + DR_STEPS) % DR_STEPS;
-              drPattern[chhi][s] = Math.max(drPattern[chhi][s], Math.round(velPeak * (0.5 + 0.5 * (i / len))));
-            }
-          },
-          // 1: Snare roll — rapid snare ghost hits, last 2 steps loud
-          (endStep, len, velPeak) => {
-            for (let i = 0; i < len; i++) {
-              const s = ((endStep - len + 1 + i) + DR_STEPS) % DR_STEPS;
-              const loud = i >= len - 2;
-              const vel  = loud ? Math.round(velPeak * 0.95) : Math.round(velPeak * (0.3 + 0.4 * (i / len)));
-              drPattern[sni][s] = Math.max(drPattern[sni][s], vel);
-            }
-          },
-          // 2: Hat + snare alternating — two voices ping-pong
-          (endStep, len, velPeak) => {
-            for (let i = 0; i < len; i++) {
-              const s   = ((endStep - len + 1 + i) + DR_STEPS) % DR_STEPS;
-              const vel = Math.round(velPeak * (0.55 + 0.45 * (i / len)));
-              if (i % 2 === 0) drPattern[chhi][s] = Math.max(drPattern[chhi][s], vel);
-              else             drPattern[sni][s]  = Math.max(drPattern[sni][s],  Math.round(vel * 0.7));
-            }
-          },
-          // 3: Open-hat stabs — 3 evenly spaced open hat accents
-          (endStep, len, velPeak) => {
-            const positions = [0, Math.floor(len * 0.4), len - 1];
-            positions.forEach(pos => {
-              const s = ((endStep - len + 1 + pos) + DR_STEPS) % DR_STEPS;
-              drPattern[ohhi][s] = Math.max(drPattern[ohhi][s], Math.round(velPeak * (0.65 + 0.35 * (pos / len))));
-            });
-          },
-          // 4: Kick+hat combo — kick on even steps, hat on odd
-          (endStep, len, velPeak) => {
-            for (let i = 0; i < len; i++) {
-              const s   = ((endStep - len + 1 + i) + DR_STEPS) % DR_STEPS;
-              const vel = Math.round(velPeak * (0.55 + 0.45 * (i / len)));
-              if (i % 2 === 0) drPattern[ki][s]   = Math.max(drPattern[ki][s],   vel);
-              else             drPattern[chhi][s] = Math.max(drPattern[chhi][s], Math.round(vel * 0.8));
-            }
-          },
-        ];
-        // Pick a fill type per bar-end — different each call prevents same-fill-every-loop
-        let fillIdx = Math.floor(Math.random() * FILL_TYPES.length);
-        const hatFill = (endStep, len = 4, velPeak = 90) => {
-          FILL_TYPES[fillIdx % FILL_TYPES.length](endStep, len, velPeak);
-          fillIdx++; // advance so bar1-end and bar2-end fills differ too
-        };
+        // ─────────────────────────────────────────────────────────────────────────
+        // LAW 1: Kick + sub UNION required on beat 1 of EVERY bar (steps 0, 16)
+        // ─────────────────────────────────────────────────────────────────────────
+        const KICK_ANCHORS = [0, 16];
+        KICK_ANCHORS.forEach(s => { drPattern[ki][s] = rnd(105, 118); });
 
-        if (section === 'breakdown') {
-          // Sparse, dreamy — pick one of 4 minimalist kick placements
-          const kicks = pick([[0, 24], [0, 20], [0, 28], [0, 16, 24]]);
-          kicks.forEach(s => { drPattern[ki][s] = rnd(75, 92); });
-          for (let s = 0; s < 32; s += 8) drPattern[chhi][s] = rnd(40, 58);
-          if (Math.random() < 0.4) drPattern[rdi][0] = rnd(55, 72);
+        // ─────────────────────────────────────────────────────────────────────────
+        // LAW 2: Half-time trap — snare/clap on beat 3 only (steps 8, 24)
+        // ─────────────────────────────────────────────────────────────────────────
+        const SNARE_ANCHORS = [8, 24];
+        SNARE_ANCHORS.forEach(s => {
+          drPattern[sni][s] = rnd(102, 115);
+          drPattern[cli][s] = rnd(88, 100);
+        });
 
-        } else if (section === 'verse') {
-          // Four distinct kick feels
-          const kickPats = [
-            [0, 16],
-            [0, 10, 16],
-            [0, 16, 26],
-            [0, 6, 16, 22],
-          ];
-          // Three snare feels
-          const snarePats = [
-            [8, 24],
-            [16],
-            [8, 20, 24],
-          ];
-          // THREE HAT GROOVES — the most audible difference between pattern regen
-          const hatGroove = Math.floor(Math.random() * 3);
-          const kicks  = pick(kickPats);
-          const snares = pick(snarePats);
-          kicks.forEach(s  => { drPattern[ki][s]  = rnd(90, 108); });
-          snares.forEach(s => { drPattern[sni][s] = rnd(95, 112); });
-          if (Math.random() < 0.6) drPattern[cli][snares[snares.length - 1]] = rnd(78, 95);
-          if (hatGroove === 0) {
-            // Sparse 8th-note hats — mellow, open feel
-            for (let s = 0; s < 32; s += 4) drPattern[chhi][s] = rnd(72, 90);
-            [4, 12, 20, 28].forEach(s => { if (Math.random() < 0.7) drPattern[ohhi][s] = rnd(68, 82); });
-          } else if (hatGroove === 1) {
-            // Full 16th-note hats — driving, dense
-            for (let s = 0; s < 32; s++) {
-              const onBeat = s % 8 === 0, onEighth = s % 4 === 0;
-              drPattern[chhi][s] = onBeat ? rnd(80, 95) : onEighth ? rnd(65, 78) : rnd(45, 62);
+        // ─────────────────────────────────────────────────────────────────────────
+        // Optional extra low-end hit: density-gated, NOT on beat1/beat3, max 1/bar
+        // (law: optional_extra_low_end.condition density >= 0.55)
+        // ─────────────────────────────────────────────────────────────────────────
+        if (sc.density >= 0.55) {
+          const extraPool = [[4,6,10,12,14], [4,6,10,12,14]]; // per-bar candidates
+          for (let bar = 0; bar < 2; bar++) {
+            if (Math.random() < sc.density - 0.4) {
+              const offset = bar * 16;
+              const cands  = extraPool[bar].filter(s => drPattern[ki][offset+s] === 0);
+              if (cands.length) {
+                const s = pick(cands);
+                drPattern[ki][offset + s] = rnd(72, 88);
+                // Sub NOT on ghost/extra kicks — only on main anchors
+              }
             }
-            [4, 12, 20, 28].forEach(s => { if (Math.random() < 0.5) drPattern[ohhi][s] = rnd(65, 75); });
-          } else {
-            // Shuffled accent hats — off-beat emphasis, alt-rock feel
-            [0, 3, 6, 8, 11, 14, 16, 19, 22, 24, 27, 30].forEach(s => drPattern[chhi][s] = rnd(58, 82));
-            [4, 12, 20, 28].forEach(s => { drPattern[ohhi][s] = rnd(72, 88); });
           }
-
-        } else if (section === 'chorus') {
-          // Four energetic kick patterns
-          const kickPats = [
-            [0, 10, 16],
-            [0, 16, 22],
-            [0, 6, 16, 24],
-            [0, 12, 16, 28],
-          ];
-          const kicks = pick(kickPats);
-          kicks.forEach(s => { drPattern[ki][s] = rnd(100, 115); });
-          [8, 24].forEach(s => { drPattern[sni][s] = rnd(98, 112); drPattern[cli][s] = rnd(85, 100); });
-          for (let s = 0; s < 32; s++) {
-            drPattern[chhi][s] = (s % 4 === 0) ? rnd(82, 100) : rnd(55, 72);
-          }
-          [4, 12, 20, 28].forEach(s => drPattern[ohhi][s] = rnd(72, 88));
-          if (Math.random() < 0.5) drPattern[ohhi][pick([2, 10, 18, 26])] = rnd(68, 82);
-          if (Math.random() < 0.4) drPattern[perci][rnd(0, 4) * 8 + rnd(2, 6)] = rnd(65, 80);
-          if (Math.random() < 0.35) hatFill(15, 6, 95);
-          if (Math.random() < 0.35) hatFill(31, 6, 92);
-
-        } else {
-          // Peak — four dense kick patterns
-          const kickPats = [
-            [0, 10, 16, 26],
-            [0, 6, 16, 22, 28],
-            [0, 8, 16, 24],
-            [0, 10, 14, 16, 26, 30],
-          ];
-          const kicks = pick(kickPats);
-          kicks.forEach(s => { drPattern[ki][s] = rnd(108, 120); });
-          drPattern[sni][8]  = 112; drPattern[cli][8]  = 95;
-          drPattern[sni][24] = 115; drPattern[cli][24] = 100;
-          for (let s = 0; s < 32; s++) drPattern[chhi][s] = rnd(70, 100);
-          [4, 12, 20, 28].forEach(s => drPattern[ohhi][s] = rnd(80, 95));
-          [2, 10, 18, 26].forEach(s => { if (Math.random() < 0.5) drPattern[ohhi][s] = rnd(72, 85); });
-          drPattern[rdi][0] = 80; drPattern[rdi][16] = 80;
-          for (let s = 4; s < 32; s += 8) { if (Math.random() < 0.5) drPattern[perci][s] = rnd(70, 90); }
-          if (Math.random() < 0.40) hatFill(15, 8, 105);
-          if (Math.random() < 0.40) hatFill(31, 8, 105);
         }
-        // ── Sub: on every kick — uses sample if loaded, silent if not ──
-        // Synthesis disabled (oscillator beating artifact). Drop a sub/subbass WAV
-        // into data/samples/ and the sample loader will pick it up via the 'sub' pattern.
+
+        // ─────────────────────────────────────────────────────────────────────────
+        // Sub: mirrors ONLY loud (main) kick hits — not ghost kicks
+        // ─────────────────────────────────────────────────────────────────────────
+        KICK_ANCHORS.forEach(s => { drPattern[si][s] = drPattern[ki][s]; });
+
+        // ─────────────────────────────────────────────────────────────────────────
+        // Hats: fast 16th-note stream (CloudHop law: base_rates 1/16 or 1/32)
+        // ─────────────────────────────────────────────────────────────────────────
+        const hatDense = sc.hatRate === '1/32' || sc.clarity > 0.7;
+        const fillProb = hatDense ? 0.92 : 0.82;
         for (let s = 0; s < DR_STEPS; s++) {
-          if (drPattern[ki][s] > 0) drPattern[si][s] = drPattern[ki][s];
+          // Skip steps occupied by snare landmark to keep the snare audible
+          if (drPattern[sni][s] > 80) continue;
+          const onBeat   = s % 8 === 0;
+          const onEighth = s % 4 === 0;
+          if (Math.random() < fillProb) {
+            const vel = onBeat   ? rnd(78, 94)
+                      : onEighth ? rnd(62, 78)
+                      :            rnd(42, 62 + Math.round(sc.clarity * 18));
+            drPattern[chhi][s] = vel;
+          }
         }
 
-        // ── Bar-2 micro-variation — hat texture only, no kick/sub changes ──
+        // Section-driven hat groove variation (accent pattern, not density)
+        if (section === 'breakdown') {
+          // Sparse — thin out the hat stream heavily
+          for (let s = 1; s < DR_STEPS; s++) {
+            if (drPattern[chhi][s] > 0 && s % 8 !== 0 && Math.random() < 0.65) drPattern[chhi][s] = 0;
+          }
+        } else if (section === 'peak') {
+          // Dense — boost existing hats, add some open accents
+          for (let s = 0; s < DR_STEPS; s++) {
+            if (drPattern[chhi][s] > 0) drPattern[chhi][s] = Math.min(127, drPattern[chhi][s] + rnd(5, 18));
+          }
+        }
+
+        // Open-hat pickups (dreamy feel — sc.dream gates these)
+        if (sc.dream > 0.3) {
+          [3, 7, 11, 15, 19, 23, 27, 31].forEach(s => {
+            if (drPattern[sni][s] === 0 && Math.random() < sc.dream * 0.35) {
+              drPattern[ohhi][s] = rnd(55, Math.round(60 + sc.dream * 30));
+            }
+          });
+        }
+
+        // Bar-2 hat micro-variation — natural humanisation between bars
         for (let s = 16; s < 32; s++) {
-          if (drPattern[chhi][s] > 0 && s % 8 !== 0 && s % 4 !== 0 && Math.random() < 0.25) {
+          if (drPattern[chhi][s] > 0 && s % 8 !== 0 && s % 4 !== 0 && Math.random() < 0.22) {
             drPattern[chhi][s] = 0;
-          } else if (drPattern[chhi][s] > 0 && Math.random() < 0.20) {
-            drPattern[chhi][s] = Math.min(127, drPattern[chhi][s] + rnd(5, 14));
+          } else if (drPattern[chhi][s] > 0 && Math.random() < 0.18) {
+            drPattern[chhi][s] = Math.min(127, drPattern[chhi][s] + rnd(4, 12));
+          }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        // Kick fills: section-driven extra kicks (NOT on beat-3 snare anchor)
+        // ─────────────────────────────────────────────────────────────────────────
+        const FORBIDDEN_KICK = new Set([...SNARE_ANCHORS]);
+        if (section === 'verse' || section === 'chorus') {
+          const extraKickPool = [
+            [10], [6, 10], [10, 26], [6, 10, 22], [10, 22, 26],
+          ];
+          pick(extraKickPool).filter(s => !FORBIDDEN_KICK.has(s)).forEach(s => {
+            if (drPattern[ki][s] === 0) drPattern[ki][s] = rnd(75, 95);
+          });
+        } else if (section === 'peak') {
+          const extraKickPool = [
+            [6, 10, 26], [10, 14, 26], [6, 10, 22, 28], [10, 14, 26, 30],
+          ];
+          pick(extraKickPool).filter(s => !FORBIDDEN_KICK.has(s)).forEach(s => {
+            if (drPattern[ki][s] === 0) drPattern[ki][s] = rnd(85, 108);
+          });
+        }
+
+        // Re-mirror sub for any new loud kick hits added above
+        for (let s = 0; s < DR_STEPS; s++) {
+          if (drPattern[ki][s] > 95) drPattern[si][s] = drPattern[ki][s];
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        // Ride bell: sparse, dreamy (alt-rock texture)
+        // ─────────────────────────────────────────────────────────────────────────
+        if (sc.dream > 0.4 || section === 'breakdown') {
+          [0, 8, 16, 24].forEach(s => {
+            if (Math.random() < sc.dream * 0.55) drPattern[rdi][s] = rnd(55, 72);
+          });
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        // Decorator: ghost kicks + perc glitches — within surpriseBudget per bar
+        // LAW: never on downbeat anchors, never reverse kick/sub, max 1 extra/bar default
+        // ─────────────────────────────────────────────────────────────────────────
+        const MAX_BUDGET = sc.surpriseBudget;
+        for (let bar = 0; bar < 2; bar++) {
+          const offset = bar * 16;
+          let budget = MAX_BUDGET;
+          const decorCandidates = [2, 4, 6, 10, 12, 14]
+            .map(s => s + offset)
+            .filter(s => drPattern[ki][s] === 0 && drPattern[sni][s] === 0);
+          for (let i = decorCandidates.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [decorCandidates[i], decorCandidates[j]] = [decorCandidates[j], decorCandidates[i]];
+          }
+          for (const s of decorCandidates) {
+            if (budget <= 0) break;
+            if (Math.random() < 0.45) {
+              if (Math.random() < 0.5) {
+                drPattern[ki][s]    = rnd(42, 62); // ghost kick — quiet, no sub
+              } else {
+                drPattern[perci][s] = rnd(52, 72); // perc accent
+              }
+              budget--;
+            }
           }
         }
 
         drRenderGrid();
+        console.log(`[SCORE] drums: ${section} | density=${sc.density.toFixed(2)} dream=${sc.dream.toFixed(2)} surpriseBudget=${MAX_BUDGET}`);
       }
 
       // ── Piano + lead note generation per section ──
@@ -6346,7 +6386,15 @@
         const rawPattern  = patternPool[Math.floor(Math.random() * patternPool.length)];
         // Scale beat offsets from 16-beat reference to actual loop length
         const beatScale   = beats / 16;
-        const chordBeats  = rawPattern.map(b => b * beatScale);
+        const rawChordBeats = rawPattern.map(b => b * beatScale);
+        // ── CloudHop law: minimum chord duration = chordChangeBars bars (2 or 4) ──
+        // Filter out changes that come too soon — keeps slow alt-rock pad identity.
+        const MIN_CHORD_GAP = chScene.chordChangeBars * beatsPerBar;
+        const chordBeats = rawChordBeats.reduce((acc, beat) => {
+          const prev = acc.length > 0 ? acc[acc.length - 1] : -Infinity;
+          if (beat - prev >= MIN_CHORD_GAP) acc.push(beat);
+          return acc;
+        }, []);
 
         // ── Hybrid pad layer: MIDI fragment (70%) or procedural (30%) ──
         // Fragment library loaded from free-midi-chords (MIT). Falls back to procedural
@@ -6557,10 +6605,28 @@
         prDraw();
       }
 
-      // ── Bar clock — section state, drone, and drum evolution ──
-      // Drum evolution lives here (not only in scheduleLoop) so drums change even when
-      // the piano roll isn't playing. Piano pattern evolution stays in scheduleLoop
-      // for tight scheduling timing.
+      // ── CloudHop triplet fill — scheduled against AudioContext clock ──
+      // Fires at end of every 2nd bar (law: triplet_fill_windows_per_2_bars >= 1).
+      // 1/12 rate = triplets = 3 notes per beat. Window: 0.5 or 1 beat at bar end.
+      function chScheduleTripletFill(barEndAudioTime) {
+        const ctx = prAudioCtx || drAudioCtx;
+        if (!ctx || !drPlaying) return;
+        const spb       = 60 / drBpm;                          // seconds per beat
+        const useLong   = Math.random() < 0.5;
+        const winBeats  = useLong ? 1.0 : 0.5;
+        const numHits   = Math.round(winBeats * 3);            // 3 per beat = 1/12 rate
+        const fillStart = barEndAudioTime - winBeats * spb;
+        const sc        = chScene;
+        for (let i = 0; i < numHits; i++) {
+          const hitTime    = fillStart + (i / 3) * spb;
+          const crescendo  = i / numHits;
+          const vel        = Math.round((62 + crescendo * 35) * (0.7 + sc.clarity * 0.5));
+          const useOpen    = i === numHits - 1 && Math.random() < 0.35;
+          drPlayHihat(hitTime, Math.min(127, vel), useOpen);
+        }
+      }
+
+      // ── Bar clock — section state, drone, drum evolution, triplet fills, scene updates ──
       function scStartBarClock() {
         if (scBarInterval) clearInterval(scBarInterval);
         const msPerBar = (60 / bpm) * beatsPerBar * 1000;
@@ -6569,7 +6635,18 @@
           if (Math.abs(currentMs - msPerBar) > 50) { scStartBarClock(); return; }
           scBarCount++;
           scSectionBar = (scSectionBar + 1) % 8;
-          // Drums update every 4 bars — always audible even without piano roll playing
+
+          // Triplet fill: every 2 bars (law: triplet_fill_windows_per_2_bars >= 1)
+          if (scBarCount % chScene.tripletFillBars === 0) {
+            const ctx = prAudioCtx || drAudioCtx;
+            if (ctx && drPlaying) {
+              // Schedule fill to land exactly at the end of the upcoming bar
+              const barEndTime = ctx.currentTime + currentMs / 1000;
+              chScheduleTripletFill(barEndTime);
+            }
+          }
+
+          // Drums regen every 4 bars
           if (scSectionBar % 4 === 0) {
             const next = scChooseSection();
             if (next !== scSection) { scSection = next; }
@@ -6579,6 +6656,12 @@
               console.log(`[SCORE] bar-clock drum regen — section: ${scSection}`);
             }
           }
+
+          // SceneState update every 8 bars (full scene cycle)
+          if (scBarCount % 8 === 0) {
+            chUpdateScene();
+          }
+
           scUpdatePanel();
         }, msPerBar);
       }
@@ -6737,6 +6820,37 @@
               <button class="ep-ctrl-reset" data-sc-param="lfoDepth">↺</button>
             </div>
           </div>
+          <div class="ep-ctrl-section">
+            <div class="ep-ctrl-title" style="color:#c47eda">SCENE STATE &mdash; CLOUDHOP ENGINE</div>
+            <div class="ep-ctrl-row">
+              <span class="ep-label">DENSITY</span>
+              <input type="range" class="ep-ctrl-slider" id="ch-density" min="0" max="100" value="${Math.round(chScene.density*100)}">
+              <span class="ep-ctrl-val" id="ch-val-density">${Math.round(chScene.density*100)}%</span>
+            </div>
+            <div class="ep-ctrl-row">
+              <span class="ep-label">DREAM</span>
+              <input type="range" class="ep-ctrl-slider" id="ch-dream" min="0" max="100" value="${Math.round(chScene.dream*100)}">
+              <span class="ep-ctrl-val" id="ch-val-dream">${Math.round(chScene.dream*100)}%</span>
+            </div>
+            <div class="ep-ctrl-row">
+              <span class="ep-label">DIRT</span>
+              <input type="range" class="ep-ctrl-slider" id="ch-dirt" min="0" max="100" value="${Math.round(chScene.dirt*100)}">
+              <span class="ep-ctrl-val" id="ch-val-dirt">${Math.round(chScene.dirt*100)}%</span>
+            </div>
+            <div class="ep-ctrl-row">
+              <span class="ep-label">CLARITY</span>
+              <input type="range" class="ep-ctrl-slider" id="ch-clarity" min="0" max="100" value="${Math.round(chScene.clarity*100)}">
+              <span class="ep-ctrl-val" id="ch-val-clarity">${Math.round(chScene.clarity*100)}%</span>
+            </div>
+            <div class="ep-ctrl-row">
+              <span class="ep-label">CHORD BARS</span>
+              <select class="ep-ctrl-slider" id="ch-chordbars" style="width:80px;padding:1px 4px;">
+                <option value="2" ${chScene.chordChangeBars===2?'selected':''}>2 bars</option>
+                <option value="4" ${chScene.chordChangeBars===4?'selected':''}>4 bars</option>
+              </select>
+              <span class="ep-ctrl-val" id="ch-val-chordbars" style="font-size:9px;color:#7888a8">BIOMETRIC READY</span>
+            </div>
+          </div>
           <div class="ep-controls">
             <button class="ep-btn" id="sc-gen-now">↺ GENERATE</button>
             <button class="ep-btn" id="sc-force-peak">⚡ PEAK</button>
@@ -6772,6 +6886,27 @@
             if (scEnabled) scApplySectionToDrone(scSection);
           });
         });
+        // ── Scene state sliders ──
+        [
+          { id:'ch-density', key:'density', valId:'ch-val-density', fmt: v => Math.round(v)+'%' },
+          { id:'ch-dream',   key:'dream',   valId:'ch-val-dream',   fmt: v => Math.round(v)+'%' },
+          { id:'ch-dirt',    key:'dirt',    valId:'ch-val-dirt',    fmt: v => Math.round(v)+'%' },
+          { id:'ch-clarity', key:'clarity', valId:'ch-val-clarity', fmt: v => Math.round(v)+'%' },
+        ].forEach(({ id, key, valId, fmt }) => {
+          const el = panel.querySelector(`#${id}`); if (!el) return;
+          el.addEventListener('input', e => {
+            const v01 = parseInt(e.target.value) / 100;
+            chScene[key] = v01;
+            panel.querySelector(`#${valId}`).textContent = fmt(e.target.value);
+            // Update downstream params
+            chScene.surpriseBudget  = Math.min(2, Math.round(1 + chScene.density));
+            chScene.chordChangeBars = chScene.density > 0.65 ? 2 : 4;
+            chScene.hatRate         = chScene.clarity > 0.7 ? '1/32' : '1/16';
+          });
+        });
+        const chordBarsEl = panel.querySelector('#ch-chordbars');
+        if (chordBarsEl) chordBarsEl.addEventListener('change', e => { chScene.chordChangeBars = parseInt(e.target.value); });
+
         const drResync = () => { drStep = 0; drNextBeat = (prAudioCtx || drAudioCtx).currentTime + 0.005; };
         panel.querySelector('#sc-gen-now').addEventListener('click', () => {
           scGenerateDrumPattern(scSection); drResync(); scGeneratePianoPattern(scSection); scUpdatePanel();
@@ -6802,6 +6937,18 @@
         for (let i = 0; i < 8; i++) {
           const pip = document.getElementById(`sc-pip-${i}`);
           if (pip) { pip.classList.toggle('active', i < scSectionBar); pip.classList.toggle('current', i === scSectionBar); }
+        }
+        // Sync scene state sliders if chUpdateScene() dirtied them
+        if (_chScenePanelDirty) {
+          _chScenePanelDirty = false;
+          const sync = (id, val01, valId) => {
+            const el = document.getElementById(id); if (el) el.value = Math.round(val01 * 100);
+            const vEl = document.getElementById(valId); if (vEl) vEl.textContent = Math.round(val01 * 100) + '%';
+          };
+          sync('ch-density', chScene.density, 'ch-val-density');
+          sync('ch-dream',   chScene.dream,   'ch-val-dream');
+          sync('ch-dirt',    chScene.dirt,    'ch-val-dirt');
+          sync('ch-clarity', chScene.clarity, 'ch-val-clarity');
         }
       }
 
