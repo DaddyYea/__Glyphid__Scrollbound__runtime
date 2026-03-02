@@ -6000,6 +6000,27 @@
         console.log(`[ARR] horizon planned: section=${targetSec} dense=${dense} (mag=${mag.toFixed(2)})`);
       }
 
+      // ── Harmonic rhythm gate — picks scChordChangeBars for the upcoming 8-bar horizon ──
+      // Called once per horizon (when scHorizonBar === 0) and at startup.
+      // Sets scChordChangeBars based on section + SceneState; deterministic (no pure random).
+      function scPickChordChangeBarsForHorizon() {
+        const s  = scSection;
+        const sc = chScene;
+        let bars;
+        if (s === 'breakdown') {
+          // 2–4 bars per chord; use 4 only when both tension low and clarity high
+          bars = (sc.tension < 0.35 && sc.clarity > 0.6) ? 4 : 2;
+        } else if (s === 'verse') {
+          // 1–2 bars per chord; weighted to 2 when warmth high
+          bars = sc.warmth > 0.55 ? 2 : 1;
+        } else {
+          // chorus / peak: 1 bar per chord; allow 2 only when clarity low
+          bars = sc.clarity < 0.5 ? 2 : 1;
+        }
+        scChordChangeBars = bars;
+        console.log('[HARM-RHYTHM]', { section: scSection, chordChangeBars: scChordChangeBars });
+      }
+
       // ── MIDI fragment library ──
       // Pre-baked from free-midi-chords (MIT). Each fragment has notes in beat time,
       // originally in A/Am (rootPc=9) — transposed to active key at playback time.
@@ -6598,6 +6619,7 @@
       let scChordHomeDeg    = 0;     // home = i, always 0 for Aeolian
       let scChordCadenceDue = false; // true → next harmony change must resolve to home (i)
       let scHarmonyDebug    = false; // set true to enable [FRAG-GRAMMAR] console logs
+      let scChordChangeBars = 2;    // bars per chord change — authoritative gate; set each horizon by scPickChordChangeBarsForHorizon()
 
       function scGeneratePianoPattern(section) {
         const def = SECTION_DEFS[section];
@@ -6643,28 +6665,30 @@
         let prog         = progPool0[Math.floor(Math.random() * progPool0.length)];
         let intervals    = CHORD_TYPES.min7; // overridden by procedural path
 
-        // ── Pad timing patterns (beat offsets in a 16-beat reference loop) ──
-        // Cloud hop = slow alt-rock: few chords, long sustains, natural pacing.
-        // Each sub-array is one timing layout. Picked randomly per loop.
-        const PAD_TIMING_PATTERNS = {
-          breakdown: [[0, 12], [0, 8], [0]],
-          verse:     [[0, 8, 12], [0, 6, 12], [0, 8, 14], [0, 4, 12], [0, 6, 14]],
-          chorus:    [[0, 4, 8, 12], [0, 4, 10, 14], [0, 6, 10, 14], [0, 4, 8, 14], [0, 3, 8, 12]],
-          peak:      [[0, 4, 8, 12], [0, 3, 6, 10], [0, 4, 6, 12], [0, 6, 10, 14]],
-        };
-        const patternPool = PAD_TIMING_PATTERNS[section] || PAD_TIMING_PATTERNS.verse;
-        const rawPattern  = patternPool[Math.floor(Math.random() * patternPool.length)];
-        // Scale beat offsets from 16-beat reference to actual loop length
-        const beatScale   = beats / 16;
-        const rawChordBeats = rawPattern.map(b => b * beatScale);
-        // ── CloudHop law: minimum chord duration = chordChangeBars bars (2 or 4) ──
-        // Filter out changes that come too soon — keeps slow alt-rock pad identity.
-        const MIN_CHORD_GAP = chScene.chordChangeBars * beatsPerBar;
-        const chordBeats = rawChordBeats.reduce((acc, beat) => {
-          const prev = acc.length > 0 ? acc[acc.length - 1] : -Infinity;
-          if (beat - prev >= MIN_CHORD_GAP) acc.push(beat);
-          return acc;
-        }, []);
+        // ── Harmonic rhythm gate ──────────────────────────────────────────────────────────────
+        // Chord changes are permitted only at bar boundaries where
+        //   (scBarCount + barOffset) % scChordChangeBars === 0
+        // scChordChangeBars is set per-horizon by scPickChordChangeBarsForHorizon().
+        // If no bar in this loop qualifies, carry scLastChordPlan forward and return — no regen.
+        const chordBeats = [];
+        for (let i = 0; i < loopBars; i++) {
+          if ((scBarCount + i) % scChordChangeBars === 0) {
+            chordBeats.push(i * beatsPerBar); // beat 0 of that bar — no sub-bar positions
+          }
+        }
+        if (chordBeats.length === 0) {
+          if (scLastChordPlan.length > 0) {
+            // Carry chord forward — re-schedule same notes, no harmony state change
+            tracks.alois = scLastChordPlan.map(n => ({ ...n }));
+            tracks.jason = []; tracks.arp = [];
+            if (scLeadMotifSeed.length > 0) scLeadNotes = scLeadMotifSeed.map(n => ({ ...n }));
+            scNoveltyReport.harm = { cost: 0, events: ['harm_carried'], warnings: [] };
+            scNoveltyReport.lead = { cost: 0, events: ['lead_carried'], warnings: [] };
+            prDraw();
+            return;
+          }
+          chordBeats.push(0); // no previous plan — generate at beat 0 as fallback
+        }
 
         // ── Hybrid pad layer: MIDI fragment (70%) or procedural (30%) ──
         // Fragment library loaded from free-midi-chords (MIT). Falls back to procedural
@@ -6779,7 +6803,7 @@
 
             const nextBeat = ci < numChords - 1 ? chordBeats[ci + 1] : beats;
             const gap       = nextBeat - chordBeat;
-            const noteDur   = gap * (0.72 + Math.random() * 0.24);
+            const noteDur   = gap; // exact bar-to-bar coverage — chordBeats are bar-aligned now
 
             const voices = [];
             intervals.forEach(semis => {
@@ -7098,7 +7122,8 @@
           scHorizonBar = scBarCount % 8;
           if (scHorizonBar === 0) {
             scPlanHorizon();
-            scChordCadenceDue = true; // guarantee ≥1 cadence to i this horizon
+            scChordCadenceDue = true;          // guarantee ≥1 cadence to i this horizon
+            scPickChordChangeBarsForHorizon(); // set chord-change cadence for upcoming 8 bars
           }
           const permit = scHorizonPlan[scHorizonBar] ?? scHorizonPlan[0];
 
@@ -7432,6 +7457,7 @@
         scApplyGenreDefaults();
         scSectionBar = 0; scBarCount = 0; scSection = 'verse';
         scApplySectionToDrone('verse');
+        scPickChordChangeBarsForHorizon(); // initialize chord rate before first pattern
         scGenerateDrumPattern('verse');
         scGeneratePianoPattern('verse');
         scStartBarClock();
@@ -7589,7 +7615,10 @@
           });
         });
         const chordBarsEl = panel.querySelector('#ch-chordbars');
-        if (chordBarsEl) chordBarsEl.addEventListener('change', e => { chScene.chordChangeBars = parseInt(e.target.value); });
+        if (chordBarsEl) chordBarsEl.addEventListener('change', e => {
+          chScene.chordChangeBars = parseInt(e.target.value);
+          scChordChangeBars = chScene.chordChangeBars; // sync authoritative gate var
+        });
 
         const drResync = () => { drStep = 0; drNextBeat = (prAudioCtx || drAudioCtx).currentTime + 0.005; };
         panel.querySelector('#sc-gen-now').addEventListener('click', () => {
