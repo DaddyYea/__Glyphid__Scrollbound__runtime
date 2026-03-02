@@ -4164,12 +4164,13 @@
             }
           }
         }
-        // Lead synth layer
+        // Lead synth layer — swing + section pocket offset (no per-note jitter)
         if (typeof scLeadNotes !== 'undefined') {
+          const pocketS = SC_LEAD_POCKET[scSection] || 0;
           for (const n of scLeadNotes) {
             const stepIdx = Math.round(n.start * snapDiv);
             const swingOffset = (stepIdx % 2 === 1) ? prSwing * spStep : 0;
-            scPlayLead(n.pitch, loopStart + n.start * spb + swingOffset, n.dur * spb, n.vel, scSection);
+            scPlayLead(n.pitch, loopStart + n.start * spb + swingOffset + pocketS, n.dur * spb, n.vel, scSection);
           }
         }
 
@@ -4369,6 +4370,18 @@
           [9, 5, 0, 7],    // vi – IV – I – V    same loop, minor start feel
           [0, 5, 7, 5],    // I  – IV – V – IV   anthemic
         ],
+      };
+
+      // ── Chord Grammar (Aeolian/minor) — semitone offsets from root ──────────
+      // Markov transition table for procedural chord root selection.
+      // Every loop must cadence to i (0). ♭VII→i and iv→i are the strong cadences.
+      const CHORD_GRAMMAR_MINOR = {
+        0:  [8, 5, 3],   // i     → ♭VI, iv, ♭III
+        8:  [10, 5],     // ♭VI   → ♭VII, iv
+        10: [0],         // ♭VII  → i    (cadence)
+        5:  [0, 10],     // iv    → i, ♭VII
+        7:  [0],         // v     → i    (cadence)
+        3:  [5, 8],      // ♭III  → iv, ♭VI
       };
 
       function autoComposePr(texture) {
@@ -5765,6 +5778,9 @@
         breakdown: { detune: 8,  drive: 0.2, filterHz: 500,  filterQ: 4,  lfoRate: 0.4, lfoDepth: 80,  density: 0.08 },
       };
 
+      // Section pocket offset for lead (seconds). Negative = push early, positive = sit back.
+      const SC_LEAD_POCKET = { breakdown: 0.010, verse: 0.000, chorus: -0.010, peak: -0.010 };
+
       // ── TIMBRE base values — frozen at definition, NEVER written after this ──
       // scUpdateTimbreFromScene() computes deltas from here, not from live settings,
       // so EMA-smoothing never accumulates drift away from the intended baseline.
@@ -6521,6 +6537,7 @@
       let scLastChordPlan  = []; // saved pad-note array — reused by harm skeleton mode
       let scLeadMotifSeed  = []; // saved lead-note array — reused by lead skeleton mode
       let scCurrentScalePCs = []; // last computed scalePCs — shared with SAFETY validator
+      let scLastVoicing     = null; // [p0,p1,p2] MIDI pitches from last procedural chord — voice leading
 
       function scGeneratePianoPattern(section) {
         const def = SECTION_DEFS[section];
@@ -6647,8 +6664,7 @@
           }
           console.log(`[SCORE] fragment: "${frag.label}" [${section}] tiles:${tiles}`);
         } else {
-          // ── Procedural path: algorithmic alt-rock progression ──
-          // spacing / numChords / prog already set in outer scope; only intervals changes.
+          // ── Procedural path: chord grammar walk + voice leading ──
           const SECTION_CHORDS = {
             breakdown: ['sus2', 'add9'],
             verse:     ['sus2', 'min7', 'add9'],
@@ -6658,17 +6674,43 @@
           const chordType = (SECTION_CHORDS[section] || SECTION_CHORDS.verse)[Math.floor(Math.random() * 3)];
           intervals = CHORD_TYPES[chordType] || CHORD_TYPES.min7;
           const STAGGER   = 0.025;
+          const numChords = chordBeats.length;
+          const maxJump   = chScene.tension > 0.7 ? 3 : 2; // voice-leading semitone cap
 
-          for (let ci = 0; ci < chordBeats.length; ci++) {
+          // ── Grammar walk: minor builds cadence to i, major falls back to ALT_ROCK_PROGS ──
+          let progDegs;
+          if (scaleType === 'minor' && numChords > 0) {
+            const G = CHORD_GRAMMAR_MINOR;
+            if (numChords === 1) {
+              progDegs = [0];
+            } else if (numChords === 2) {
+              const APR = [10, 5]; // ♭VII→i or iv→i
+              progDegs = [APR[Math.floor(Math.random() * APR.length)], 0];
+            } else if (numChords === 3) {
+              const MID = [10, 5, 8]; // color chord before cadence
+              progDegs = [0, MID[Math.floor(Math.random() * MID.length)], 0];
+            } else {
+              progDegs = [0];
+              let cur = 0;
+              for (let i = 1; i < numChords - 1; i++) {
+                const nexts = G[cur] || G[0];
+                cur = nexts[Math.floor(Math.random() * nexts.length)];
+                progDegs.push(cur);
+              }
+              progDegs.push(0); // always cadence home
+            }
+          } else {
+            progDegs = Array.from({ length: numChords }, (_, i) => prog[i % prog.length]);
+          }
+
+          for (let ci = 0; ci < numChords; ci++) {
             const chordBeat = chordBeats[ci];
             if (chordBeat >= beats) break;
-            const chordRoot = rootMidi + prog[ci % prog.length];
+            const chordRoot = rootMidi + progDegs[ci];
 
-            // Duration: time until next chord × varied hold fraction (0.72–0.96)
-            const nextBeat  = ci < chordBeats.length - 1 ? chordBeats[ci + 1] : beats;
-            const gap        = nextBeat - chordBeat;
-            const holdFrac   = 0.72 + Math.random() * 0.24;
-            const noteDur    = gap * holdFrac;
+            const nextBeat = ci < numChords - 1 ? chordBeats[ci + 1] : beats;
+            const gap       = nextBeat - chordBeat;
+            const noteDur   = gap * (0.72 + Math.random() * 0.24);
 
             const voices = [];
             intervals.forEach(semis => {
@@ -6683,12 +6725,30 @@
                 const diff = ((bestPc - pc + 12) % 12);
                 pitch += diff <= 6 ? diff : diff - 12;
               }
-              pitch = Math.max(57, pitch);
+              pitch = Math.max(57, Math.min(88, pitch));
               voices.push(pitch);
             });
             voices.sort((a, b) => a - b);
+            let voicing = voices.slice(-3);
+
+            // ── Voice leading: pick the inversion with minimum movement from last chord ──
+            if (scLastVoicing && scLastVoicing.length === 3 && voicing.length === 3) {
+              const candidates = [
+                [voicing[0],      voicing[1],      voicing[2]     ],
+                [voicing[1],      voicing[2],      voicing[0] + 12],
+                [voicing[2] - 12, voicing[0],      voicing[1]     ],
+              ].map(v => v.map(p => Math.max(57, Math.min(88, p))));
+              const scored = candidates.map(v => ({
+                v,
+                score: v.reduce((s, p, i) => s + Math.abs(p - scLastVoicing[i]) + (Math.abs(p - scLastVoicing[i]) > maxJump ? 8 : 0), 0),
+              }));
+              scored.sort((a, b) => a.score - b.score);
+              voicing = scored[0].v;
+            }
+            scLastVoicing = [...voicing];
+
             const vel = Math.max(35, def.velLo + Math.floor(Math.random() * (def.velHi - def.velLo)));
-            voices.slice(-3).forEach((pitch, vi) => {
+            voicing.forEach((pitch, vi) => {
               const start = chordBeat + vi * STAGGER;
               if (start >= beats) return;
               padNotes.push({ pitch, start, dur: noteDur, vel });
@@ -6713,11 +6773,12 @@
 
         // Rhythm templates per section — beat offsets within 4 beats, values are duration
         // { o: onset_beat, d: dur_beats } — tighter templates for breakdown, busier for peak
+        // Rhythm grid law: onsets on eighth-note grid, durations from {0.5, 1.0, 1.5} only
         const LEAD_RHYTHMS = {
           breakdown: [{ o:0, d:1.5 }, { o:2, d:1.0 }],
-          verse:     [{ o:0, d:0.5 }, { o:1, d:0.5 }, { o:2.5, d:0.75 }, { o:3.5, d:0.5 }],
-          chorus:    [{ o:0, d:0.5 }, { o:0.5, d:0.5 }, { o:1.5, d:0.5 }, { o:2.5, d:0.5 }, { o:3, d:0.75 }],
-          peak:      [{ o:0, d:0.5 }, { o:0.5, d:0.25 }, { o:1, d:0.5 }, { o:2, d:0.5 }, { o:2.5, d:0.5 }, { o:3.5, d:0.5 }],
+          verse:     [{ o:0, d:0.5 }, { o:1, d:0.5 }, { o:2.5, d:1.0 }, { o:3.5, d:0.5 }],
+          chorus:    [{ o:0, d:0.5 }, { o:0.5, d:1.0 }, { o:1.5, d:0.5 }, { o:2.5, d:1.0 }, { o:3.5, d:0.5 }],
+          peak:      [{ o:0, d:0.5 }, { o:0.5, d:0.5 }, { o:1, d:0.5 }, { o:2, d:0.5 }, { o:2.5, d:0.5 }, { o:3.5, d:0.5 }],
         };
         // Pick a scale degree index to start the phrase from
         const LEAD_START_DEGREE = { breakdown: [4, 5], verse: [0, 2, 4], chorus: [0, 2, 4, 6], peak: [0, 1, 2, 4] };
@@ -6754,28 +6815,52 @@
           const baseOctave = rootMidi + 12; // one octave above pad root (melody register)
           const velBase    = def.velLo + Math.floor(Math.random() * (def.velHi - def.velLo) * 0.5);
 
-          const motif = [];
+          // Pitch-class sets for phrase-ending enforcement
+          const STABLE_PCS  = [0, 3, 7].map(s => (rootPc + s) % 12); // root, min3, 5th
+          const CADENCE_PCS = [0, 7].map(s => (rootPc + s) % 12);    // root, 5th only
+          const snapToPCSet = (pitch, pcSet) => {
+            const pc = ((pitch % 12) + 12) % 12;
+            if (pcSet.includes(pc)) return pitch;
+            let bestPc = pcSet[0], bestDist = 99;
+            for (const sp of pcSet) { const d = Math.min(Math.abs(pc - sp), 12 - Math.abs(pc - sp)); if (d < bestDist) { bestDist = d; bestPc = sp; } }
+            const diff = (bestPc - pc + 12) % 12;
+            return pitch + (diff <= 6 ? diff : diff - 12);
+          };
+
+          // ── Bar 1 (A): stepwise rise, last note snapped to stable chord tone ──
+          const bar1 = [];
           let degCursor = startDeg;
-          // Generate one bar of motif from rhythm template, repeat/truncate to fill loop
-          const barsToFill = Math.min(loopBars, 2); // motif spans 1-2 bars max
-          for (let bar = 0; bar < barsToFill; bar++) {
-            // Gentle contour per bar — step up first bar, step down or hold second
-            const barDir = bar === 0 ? 1 : (Math.random() < 0.55 ? -1 : 0);
-            for (const { o, d } of rhythm) {
-              const start = bar * beatsPerBar + o;
-              if (start >= beats) break;
-              // Walk scale degree
-              const degStep = barDir + Math.round((Math.random() - 0.5) * 2);
-              degCursor = ((degCursor + degStep) % scalePCs.length + scalePCs.length) % scalePCs.length;
-              const pc    = (rootPc + scalePCs[degCursor] % 12) % 12;
-              let pitch   = baseOctave + ((pc - rootPc + 12) % 12);
-              while (pitch < 62) pitch += 12;
-              while (pitch > 84) pitch -= 12;
-              pitch = snapToScale(pitch);
-              const dur   = Math.min(d * 0.9, beats - start);
-              const vel   = Math.max(35, Math.min(100, velBase + Math.round((Math.random() - 0.5) * 14)));
-              motif.push({ pitch, start, dur, vel });
-            }
+          const barsToFill = Math.min(loopBars, 2); // kept for mutation Op 4 below
+          for (const { o, d } of rhythm) {
+            const start = o;
+            if (start >= beats) break;
+            const degStep = 1 + Math.round((Math.random() - 0.5) * 2);
+            degCursor = ((degCursor + degStep) % scalePCs.length + scalePCs.length) % scalePCs.length;
+            const pc  = (rootPc + scalePCs[degCursor] % 12) % 12;
+            let pitch = baseOctave + ((pc - rootPc + 12) % 12);
+            while (pitch < 62) pitch += 12;
+            while (pitch > 84) pitch -= 12;
+            bar1.push({ pitch: snapToScale(pitch), start, dur: Math.min(d * 0.9, beats - start), vel: Math.max(35, Math.min(100, velBase + Math.round((Math.random() - 0.5) * 14))) });
+          }
+          if (bar1.length > 0) bar1[bar1.length - 1].pitch = snapToPCSet(bar1[bar1.length - 1].pitch, STABLE_PCS);
+
+          // ── Bar 2 (A'): same rhythm, 1–2 inner pitches shifted one diatonic step, ends on root/5th ──
+          const motif = [...bar1];
+          if (barsToFill >= 2) {
+            const bar2 = bar1.map(n => ({ ...n, start: n.start + beatsPerBar })).filter(n => n.start < beats);
+            const inner = bar2.slice(1, -1);
+            const nMut  = 1 + (Math.random() < 0.35 ? 1 : 0);
+            [...inner].sort(() => Math.random() - 0.5).slice(0, Math.min(nMut, inner.length)).forEach(n => {
+              const pc    = ((n.pitch % 12) + 12) % 12;
+              const curDg = scalePCs.indexOf((pc - rootPc + 12) % 12);
+              const step  = Math.random() < 0.5 ? 1 : -1;
+              const newDg = ((curDg >= 0 ? curDg : 0) + step + scalePCs.length) % scalePCs.length;
+              const newPc = (rootPc + scalePCs[newDg]) % 12;
+              const diff  = (newPc - pc + 12) % 12;
+              n.pitch     = n.pitch + (diff <= 6 ? diff : diff - 12);
+            });
+            if (bar2.length > 0) bar2[bar2.length - 1].pitch = snapToPCSet(bar2[bar2.length - 1].pitch, CADENCE_PCS);
+            motif.push(...bar2);
           }
 
           // ── Mutation pass (only when noveltyLeader === 'lead') ──
