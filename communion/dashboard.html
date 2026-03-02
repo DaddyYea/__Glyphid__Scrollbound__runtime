@@ -6468,6 +6468,7 @@
         if (drumCost > MAX_BUDGET) drumWarnings.push(`drum cost ${drumCost.toFixed(2)} > budget ${MAX_BUDGET}`);
         scNoveltyReport.drums = { cost: drumCost, events: drumEvents, warnings: drumWarnings };
 
+        scSafetyValidate({ drPattern, chordPlan: null, leadNotes: null, scalePCs: scCurrentScalePCs, scene: chScene });
         drRenderGrid();
         console.log(`[SCORE] drums: ${section} | motion=${sc.motion.toFixed(2)} warmth=${sc.warmth.toFixed(2)} surpriseBudget=${MAX_BUDGET} drumCost=${drumCost.toFixed(2)}`);
       }
@@ -6516,8 +6517,9 @@
 
       // scLeadNotes stores {pitch, start, dur, vel} for scheduling by the loop
       let scLeadNotes = [];
-      let scLastChordPlan = []; // saved pad-note array — reused by harm skeleton mode
-      let scLeadMotifSeed = []; // saved lead-note array — reused by lead skeleton mode
+      let scLastChordPlan  = []; // saved pad-note array — reused by harm skeleton mode
+      let scLeadMotifSeed  = []; // saved lead-note array — reused by lead skeleton mode
+      let scCurrentScalePCs = []; // last computed scalePCs — shared with SAFETY validator
 
       function scGeneratePianoPattern(section) {
         const def = SECTION_DEFS[section];
@@ -6558,6 +6560,7 @@
         const bassNotes = [];
         // Shared vars — must be visible to both if/else paths AND the arp layer below.
         const scalePCs   = scale.map(deg => (rootPc + deg) % 12);
+        scCurrentScalePCs = scalePCs; // expose for SAFETY validator + drum call site
         const progPool0  = ALT_ROCK_PROGS[scaleType] || ALT_ROCK_PROGS.minor;
         let prog         = progPool0[Math.floor(Math.random() * progPool0.length)];
         let intervals    = CHORD_TYPES.min7; // overridden by procedural path
@@ -6831,6 +6834,7 @@
         if (!scNoveltyReport.harm) {
           scNoveltyReport.harm = { cost: NOVELTY_COSTS.chord_change, events: ['chord_change'], warnings: [] };
         }
+        scSafetyValidate({ drPattern, chordPlan: padNotes, leadNotes: scLeadNotes, scalePCs, scene: chScene });
         prDraw();
       }
 
@@ -7113,6 +7117,73 @@
 
         // ── DRUMS: tension → snare rattle texture (noise gain only, no pattern/velocity changes) ──
         scDrumTensionTexture = scDrumTensionTexture * AF + cl(sc.tension * 0.65, 0, 0.65) * (1 - AF);
+      }
+
+      // ── SAFETY Validator ──────────────────────────────────────────────────────────
+      // Belt-and-suspenders check. Called after each generator writes its output.
+      // Auto-corrects violations; emits console.warn('[SAFETY] ...') per correction.
+      // ctx: { drPattern, chordPlan, leadNotes, scalePCs, scene }
+      function scSafetyValidate(ctx) {
+        const { drPattern, chordPlan, leadNotes, scalePCs, scene } = ctx;
+        const KA  = [0, 16];          // kick anchors — must always fire
+        const SA  = [8, 24];          // snare anchors — must always fire
+        const FKS = new Set([8, 24]); // forbidden kick steps (snare positions)
+        const ki = 0, sni = 2;
+
+        if (drPattern) {
+          // 1. Kick anchors required
+          KA.forEach(s => {
+            if (drPattern[ki][s] === 0) {
+              drPattern[ki][s] = 100;
+              console.warn(`[SAFETY] kick anchor missing @ step ${s} — restored`);
+            }
+          });
+          // 2. Snare anchors required
+          SA.forEach(s => {
+            if (drPattern[sni][s] === 0) {
+              drPattern[sni][s] = 100;
+              console.warn(`[SAFETY] snare anchor missing @ step ${s} — restored`);
+            }
+          });
+          // 3. Kick forbidden on snare anchor steps
+          for (let s = 0; s < DR_STEPS; s++) {
+            if (FKS.has(s) && drPattern[ki][s] > 0) {
+              drPattern[ki][s] = 0;
+              console.warn(`[SAFETY] kick on forbidden step ${s} — zeroed`);
+            }
+          }
+          // 4. clarity < 0.4: zero decorator tracks + ghost kicks
+          if (scene.clarity < 0.4) {
+            [5, 6, 7].forEach(ti => { // ohhi, rdi, perci
+              for (let s = 0; s < DR_STEPS; s++) drPattern[ti][s] = 0;
+            });
+            let ghosts = 0;
+            for (let s = 0; s < DR_STEPS; s++) {
+              if (drPattern[ki][s] > 0 && !KA.includes(s)) { drPattern[ki][s] = 0; ghosts++; }
+            }
+            if (ghosts > 0) console.warn(`[SAFETY] clarity<0.4: stripped ${ghosts} ghost kicks + decorator tracks`);
+          }
+        }
+
+        // 5. Lead notes: snap off-scale pitches to nearest scale PC
+        if (leadNotes && scalePCs && scalePCs.length) {
+          leadNotes.forEach(n => {
+            const pc = ((n.pitch % 12) + 12) % 12;
+            if (!scalePCs.includes(pc)) {
+              let bestPc = scalePCs[0], bestDist = 99;
+              for (const sp of scalePCs) { const d = Math.abs(pc - sp); const dd = d > 6 ? 12 - d : d; if (dd < bestDist) { bestDist = dd; bestPc = sp; } }
+              const diff = (bestPc - pc + 12) % 12;
+              n.pitch = n.pitch + (diff <= 6 ? diff : diff - 12);
+              console.warn(`[SAFETY] lead pitch off-scale (pc=${pc}) — snapped to pc=${bestPc}`);
+            }
+          });
+        }
+
+        // 6. clarity < 0.4: revert chord plan to last saved plan
+        if (chordPlan && scene.clarity < 0.4 && scLastChordPlan.length > 0) {
+          chordPlan.splice(0, chordPlan.length, ...scLastChordPlan.map(n => ({ ...n })));
+          console.warn('[SAFETY] clarity<0.4: chord plan reverted to scLastChordPlan');
+        }
       }
 
       function scStart() {
