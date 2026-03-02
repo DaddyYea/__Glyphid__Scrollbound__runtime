@@ -152,6 +152,46 @@
     /* ── Sound settings panel ── */
     #soundWrap { flex-shrink: 0; height: 0; overflow: hidden; transition: height 0.22s ease; }
     #soundWrap.open { height: 178px; border-top: 1px solid #1a2030; }
+
+    /* ── Preset bank panel ── */
+    #presetWrap { flex-shrink: 0; height: 0; overflow: hidden; transition: height 0.22s ease; }
+    #presetWrap.open { height: 100px; border-top: 1px solid #1a2030; }
+    .preset-panel-inner {
+      height: 100%; display: flex; flex-direction: row; gap: 0;
+      background: #06090e; overflow-x: auto; overflow-y: hidden;
+    }
+    .preset-bank {
+      display: flex; flex-direction: column; gap: 5px;
+      padding: 7px 14px; min-width: 220px; border-right: 1px solid #0e1828; flex: 1;
+    }
+    .preset-bank:last-child { border-right: none; }
+    .preset-bank-title { font-size: 9px; letter-spacing: 2px; font-family: monospace; }
+    .preset-chips {
+      display: flex; flex-direction: row; gap: 4px; flex-wrap: wrap;
+      flex: 1; overflow-y: auto; align-content: flex-start;
+    }
+    .preset-chip {
+      font-size: 9px; font-family: monospace; letter-spacing: 0.5px;
+      background: #0e1828; border: 1px solid #1a2a40; color: #7a9ab8;
+      padding: 2px 6px; cursor: pointer; border-radius: 2px; user-select: none;
+      display: flex; align-items: center; gap: 3px;
+    }
+    .preset-chip:hover { background: #162030; color: #a0c0d8; }
+    .preset-chip.active { border-color: #4a8aba; color: #7eb8da; background: #0d1a28; }
+    .preset-chip-del { font-size: 8px; color: #384858; cursor: pointer; padding: 0 2px; line-height: 1; }
+    .preset-chip-del:hover { color: #c05050; }
+    .preset-save-row { display: flex; align-items: center; gap: 5px; }
+    .preset-name-in {
+      background: #080c12; border: 1px solid #1a2a40; color: #7a9ab8;
+      font-size: 9px; font-family: monospace; padding: 2px 6px; width: 110px;
+      outline: none;
+    }
+    .preset-name-in:focus { border-color: #2a4a6a; }
+    .preset-save-btn {
+      font-size: 9px; font-family: monospace; background: #0e1828;
+      border: 1px solid #2a4a6a; color: #5a9aaa; padding: 2px 8px; cursor: pointer;
+    }
+    .preset-save-btn:hover { background: #162030; color: #7ab8c8; }
     .sound-panel-inner {
       height: 100%; display: flex; flex-direction: row; gap: 0;
       background: #070b10; overflow-x: auto; overflow-y: hidden;
@@ -1340,6 +1380,7 @@
   <div id="pianoWrap"><!-- inner content built by pianoRoll.buildUI() --></div>
   <div id="drumWrap"><!-- content built by buildDrumMachine() --></div>
   <div id="soundWrap"><!-- content built by pianoRoll init --></div>
+  <div id="presetWrap"><!-- content built by buildPresetPanel() --></div>
 
   <script>
     const eventSource = new EventSource('/events');
@@ -4564,6 +4605,7 @@
             </select>
             <button class="piano-tbtn" id="prExport">EXPORT</button>
             <button class="piano-tbtn" id="prSoundBtn" title="Instrument settings">SOUND</button>
+            <button class="piano-tbtn" id="prPresetsBtn" title="Sound preset banks">PRESETS</button>
             <div class="piano-legend">
               <div class="piano-dot piano-dot-j"></div>Jason
               <div class="piano-dot piano-dot-a"></div>Alois
@@ -4623,6 +4665,207 @@
           sw.classList.toggle('open');
           document.getElementById('prSoundBtn').classList.toggle('on', sw.classList.contains('open'));
         });
+
+        // PRESETS button toggles the preset bank panel
+        document.getElementById('prPresetsBtn').addEventListener('click', () => {
+          const pw = document.getElementById('presetWrap');
+          pw.classList.toggle('open');
+          document.getElementById('prPresetsBtn').classList.toggle('on', pw.classList.contains('open'));
+        });
+      }
+
+      // ═══════════════════════════════════════════════════════
+      //  PRESET BANK
+      // ═══════════════════════════════════════════════════════
+
+      let prPresets = { pad: [], lead: [] }; // { id, name, params }[]
+
+      // Snapshot current pad/pluck/fx settings into a storable params object.
+      // Lead bank captures the full SC_LEAD_PROFILES (all 4 sections).
+      function capturePreset(bank) {
+        if (bank === 'pad') {
+          return {
+            fmRatio: pluckSettings.fmRatio,       fmBright: pluckSettings.fmBright,
+            decay: pluckSettings.decay,             drive: pluckSettings.drive,
+            mangle: pluckSettings.mangle,           delaySend: pluckSettings.delaySend,
+            pluckRevSend: pluckSettings.reverbSend,
+            detune: padSettings.detune,             filterCutoff: padSettings.filterCutoff,
+            filterQ: padSettings.filterQ,           attack: padSettings.attack,
+            release: padSettings.release,           padRevSend: padSettings.reverbSend,
+            revSize: fxSettings.revSize,            revDecay: fxSettings.revDecay,
+            delayFeedback: fxSettings.delayFeedback, delayReturn: fxSettings.delayReturn,
+            compThreshold: fxSettings.compThreshold, masterVol: fxSettings.masterVol,
+          };
+        } else if (bank === 'lead') {
+          return JSON.parse(JSON.stringify(SC_LEAD_PROFILES));
+        }
+        return {};
+      }
+
+      // Apply a preset by id. Works headlessly — safe to call from biometric signals.
+      function applyPreset(bank, id) {
+        const preset = prPresets[bank]?.find(p => p.id === id);
+        if (!preset) return;
+        const p = preset.params;
+
+        if (bank === 'pad') {
+          pluckSettings.fmRatio    = p.fmRatio;    pluckSettings.fmBright  = p.fmBright;
+          pluckSettings.decay      = p.decay;       pluckSettings.drive     = p.drive;
+          pluckSettings.mangle     = p.mangle;      pluckSettings.delaySend = p.delaySend;
+          pluckSettings.reverbSend = p.pluckRevSend;
+          padSettings.detune       = p.detune;      padSettings.filterCutoff = p.filterCutoff;
+          padSettings.filterQ      = p.filterQ;     padSettings.attack      = p.attack;
+          padSettings.release      = p.release;     padSettings.reverbSend  = p.padRevSend;
+          fxSettings.revSize       = p.revSize;     fxSettings.revDecay     = p.revDecay;
+          fxSettings.delayFeedback = p.delayFeedback; fxSettings.delayReturn = p.delayReturn;
+          fxSettings.compThreshold = p.compThreshold; fxSettings.masterVol  = p.masterVol;
+          // Live audio nodes
+          rebuildReverb();
+          if (prAudioCtx) {
+            const now = prAudioCtx.currentTime;
+            if (prDelayFb)   prDelayFb.gain.setTargetAtTime(p.delayFeedback, now, 0.05);
+            if (prDelReturn) prDelReturn.gain.setTargetAtTime(p.delayReturn, now, 0.05);
+            if (prCompressor) prCompressor.threshold.setTargetAtTime(p.compThreshold, now, 0.05);
+            if (prMasterGain) prMasterGain.gain.setTargetAtTime(p.masterVol, now, 0.05);
+          }
+          // Sync UI sliders (if sound panel is open)
+          const R = Math.round;
+          _prSyncSlider('spFmRatio',  p.fmRatio);
+          _prSyncSlider('spFmBright', R(p.fmBright * 100));
+          _prSyncSlider('spDecay',    R(p.decay * 100));
+          _prSyncSlider('spDrive',    R(p.drive * 100));
+          _prSyncSlider('spMangle',   R(p.mangle * 100));
+          _prSyncSlider('spDlySend',  R(p.delaySend * 100));
+          _prSyncSlider('spRevSend',  R(p.pluckRevSend * 100));
+          _prSyncSlider('sdDetune',   p.detune);
+          _prSyncSlider('sdCutoff',   p.filterCutoff);
+          _prSyncSlider('sdReso',     R(p.filterQ * 10));
+          _prSyncSlider('sdAttack',   R(p.attack * 1000));
+          _prSyncSlider('sdRelease',  R(p.release * 1000));
+          _prSyncSlider('sdRevSend',  R(p.padRevSend * 100));
+          _prSyncSlider('sfRevSize',  p.revSize);
+          _prSyncSlider('sfRevDecay', p.revDecay);
+          _prSyncSlider('sfDlyFb',    R(p.delayFeedback * 100));
+          _prSyncSlider('sfDlyRtn',   R(p.delayReturn * 100));
+          _prSyncSlider('sfComp',     p.compThreshold);
+          _prSyncSlider('sfMaster',   R(p.masterVol * 100));
+
+        } else if (bank === 'lead') {
+          Object.assign(SC_LEAD_PROFILES, JSON.parse(JSON.stringify(p)));
+        }
+
+        // Mark active chip
+        document.querySelectorAll(`.preset-chip[data-bank="${bank}"]`).forEach(el => {
+          el.classList.toggle('active', el.dataset.id === id);
+        });
+      }
+
+      function _prSyncSlider(id, val) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.value = val;
+        const vEl = document.getElementById(id + 'V');
+        if (vEl) vEl.textContent = val;
+      }
+
+      function savePreset(bank, name) {
+        if (!name?.trim()) return;
+        const id = `${bank}_${Date.now()}`;
+        prPresets[bank].push({ id, name: name.trim(), params: capturePreset(bank) });
+        persistPresets();
+        renderPresets();
+      }
+
+      function deletePreset(bank, id) {
+        prPresets[bank] = prPresets[bank].filter(p => p.id !== id);
+        persistPresets();
+        renderPresets();
+      }
+
+      async function loadPresets() {
+        try {
+          const r = await fetch('/api/presets');
+          if (r.ok) {
+            const data = await r.json();
+            if (data && (Array.isArray(data.pad) || Array.isArray(data.lead))) {
+              prPresets = { pad: data.pad || [], lead: data.lead || [] };
+              renderPresets();
+              return;
+            }
+          }
+        } catch {}
+        // Fall back to localStorage
+        try {
+          const local = localStorage.getItem('prPresets');
+          if (local) { prPresets = JSON.parse(local); renderPresets(); }
+        } catch {}
+      }
+
+      async function persistPresets() {
+        localStorage.setItem('prPresets', JSON.stringify(prPresets));
+        try {
+          await fetch('/api/presets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(prPresets),
+          });
+        } catch {}
+      }
+
+      function renderPresets() {
+        for (const bank of ['pad', 'lead']) {
+          const el = document.getElementById(`preset-chips-${bank}`);
+          if (!el) continue;
+          el.innerHTML = '';
+          for (const p of prPresets[bank]) {
+            const chip = document.createElement('div');
+            chip.className = 'preset-chip';
+            chip.dataset.bank = bank;
+            chip.dataset.id = p.id;
+            chip.textContent = p.name;
+            chip.addEventListener('click', () => applyPreset(bank, p.id));
+            const del = document.createElement('span');
+            del.className = 'preset-chip-del';
+            del.title = 'Delete';
+            del.textContent = '×';
+            del.addEventListener('click', e => { e.stopPropagation(); deletePreset(bank, p.id); });
+            chip.appendChild(del);
+            el.appendChild(chip);
+          }
+        }
+      }
+
+      function buildPresetPanel() {
+        const wrap = document.getElementById('presetWrap');
+        if (!wrap) return;
+        wrap.innerHTML = `<div class="preset-panel-inner">
+          <div class="preset-bank">
+            <div class="preset-bank-title" style="color:#c47eda">◆ PAD PRESETS</div>
+            <div class="preset-chips" id="preset-chips-pad"></div>
+            <div class="preset-save-row">
+              <input class="preset-name-in" id="preset-name-pad" placeholder="name this sound" maxlength="32">
+              <button class="preset-save-btn" id="preset-save-pad">SAVE</button>
+            </div>
+          </div>
+          <div class="preset-bank">
+            <div class="preset-bank-title" style="color:#7eb8da">◆ LEAD PRESETS</div>
+            <div class="preset-chips" id="preset-chips-lead"></div>
+            <div class="preset-save-row">
+              <input class="preset-name-in" id="preset-name-lead" placeholder="name this lead" maxlength="32">
+              <button class="preset-save-btn" id="preset-save-lead">SAVE</button>
+            </div>
+          </div>
+        </div>`;
+
+        // Wire save buttons and Enter key
+        for (const bank of ['pad', 'lead']) {
+          const inp = document.getElementById(`preset-name-${bank}`);
+          const btn = document.getElementById(`preset-save-${bank}`);
+          const doSave = () => { savePreset(bank, inp.value); inp.value = ''; };
+          btn.addEventListener('click', doSave);
+          inp.addEventListener('keydown', e => { if (e.key === 'Enter') doSave(); });
+        }
+        renderPresets();
       }
 
       // ─── Sound panel builder ───
@@ -4733,9 +4976,11 @@
       let drAudioCtx = null;
       let drNextBeat = 0;       // Web Audio timestamp of next step
       let drLookahead = 0.08;   // seconds to look ahead when scheduling
-      const drSamples = {};     // trackId → AudioBuffer (null = use synthesis fallback)
-      const drSampleMeta = {};  // trackId → { semitone: number|null, isLoop: boolean }
-      let drSamplesLoading = false; // guard against concurrent loads
+      const drSamples = {};           // trackId → current AudioBuffer (for compat)
+      const drSampleMeta = {};        // trackId → { semitone: number|null, isLoop: boolean }
+      const drSampleCandidates = {};  // trackId → [{buffer, semitone, isLoop}] — all loaded
+      const drSampleLastIdx = {};     // trackId → last-used index (anti-repeat)
+      let drSamplesLoading = false;   // guard against concurrent loads
       let drScheduleTick = 25;  // ms between scheduler ticks
       let _drNoiseBuffer = null; // shared noise buffer for hi-hat synthesis (lazy-initialized)
       const _drLoopSrcs = new Set(); // active loop BufferSource nodes — killed on drStop()
@@ -4959,19 +5204,52 @@
         src.stop(t + playDur + 0.01);
       }
 
+      // Pick a shot sample (duration ≤ 2s preferred) for a given track.
+      // Avoids repeating the last-used index so consecutive hits feel varied.
+      function drPickShotSample(trackId) {
+        const all = drSampleCandidates[trackId];
+        if (!all || all.length === 0) return null;
+        const shots = all.filter(c => !c.isLoop);
+        const pool = shots.length > 0 ? shots : all;
+        if (pool.length === 1) return pool[0];
+        const lastKey = trackId + '_shot';
+        const last = drSampleLastIdx[lastKey] ?? -1;
+        let idx = Math.floor(Math.random() * pool.length);
+        if (idx === last) idx = (idx + 1) % pool.length;
+        drSampleLastIdx[lastKey] = idx;
+        return pool[idx];
+      }
+
+      // Pick a loop sample (duration > 2s) for a given track.
+      // Rotates sequentially through loop candidates.
+      function drPickLoopSample(trackId) {
+        const all = drSampleCandidates[trackId];
+        if (!all || all.length === 0) return null;
+        const loops = all.filter(c => c.isLoop);
+        if (loops.length === 0) return null;
+        if (loops.length === 1) return loops[0];
+        const lastKey = trackId + '_loop';
+        const last = drSampleLastIdx[lastKey] ?? -1;
+        const idx = (last + 1) % loops.length;
+        drSampleLastIdx[lastKey] = idx;
+        return loops[idx];
+      }
+
       function drTrigger(trackId, t, vel) {
         const v = vel || 100;
         // Use sample if loaded, otherwise fall back to synthesis
         const sampleKey = { kick:'kick', sub:'sub', snare:'snare', clap:'clap',
                             chh:'hihatC', ohh:'hihatO', ride:'ride', perc:'perc' }[trackId];
-        if (sampleKey && drSamples[sampleKey]) {
+        if (sampleKey && drSampleCandidates[sampleKey]?.length) {
           const ctx = prAudioCtx || drEnsureCtx();
-          const buf = drSamples[sampleKey];
-          // Loop samples (>2s) on the sub track fire once per pattern cycle in drScheduler —
-          // suppress per-hit re-triggering here to avoid overlapping loops on every kick
-          if (trackId === 'sub' && buf.duration > 2.0) return;
-          drPlaySample(buf, t, v, ctx, drGetOut());
-          return;
+          // Loop samples on sub track are fired once per pattern cycle in the scheduler —
+          // suppress per-hit re-triggering here to avoid stacked overlapping loops.
+          if (trackId === 'sub') {
+            const hasSub = drSampleCandidates[sampleKey].some(c => c.isLoop);
+            if (hasSub) return; // handled by scheduler
+          }
+          const cand = drPickShotSample(sampleKey);
+          if (cand) { drPlaySample(cand.buffer, t, v, ctx, drGetOut()); return; }
         }
         switch (trackId) {
           case 'kick':  drPlayKick(t, v, false); break;
@@ -4997,6 +5275,7 @@
           manifest = await r.json();
         } catch (e) {
           console.warn('[SAMPLES] Could not fetch manifest:', e);
+          drSamplesLoading = false;
           return;
         }
 
@@ -5004,32 +5283,47 @@
         console.log(`[SAMPLES] Manifest: ${entries.length} track(s) found →`, Object.keys(manifest));
         if (entries.length === 0) {
           console.warn('[SAMPLES] No samples matched — check data/samples/ folder and patterns');
+          drSamplesLoading = false;
           return;
         }
 
         const ctx = forceCtx || prAudioCtx || drEnsureCtx();
         let loaded = 0;
-        for (const [trackKey, entry] of entries) {
-          // Manifest entries are now { file, semitone, isLoop } objects
-          const filename = (typeof entry === 'string') ? entry : entry.file;
-          const semitone = (typeof entry === 'object') ? entry.semitone : null;
-          const isLoop   = (typeof entry === 'object') ? entry.isLoop   : false;
-          try {
-            const encodedPath = filename.split('/').map(encodeURIComponent).join('/');
-            const r = await fetch(`/sample-files/${encodedPath}`);
-            if (!r.ok) { console.warn(`[SAMPLES] ${filename}: HTTP ${r.status}`); continue; }
-            const ab = await r.arrayBuffer();
-            drSamples[trackKey] = await ctx.decodeAudioData(ab);
-            drSampleMeta[trackKey] = { semitone, isLoop };
-            loaded++;
-            drMarkSampleLoaded(trackKey, filename);
-            const pitchStr = semitone !== null ? ` pitch=${['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][semitone]}` : '';
-            console.log(`[SAMPLES] ✓ ${trackKey} ← ${filename.split('/').pop()}${pitchStr}${isLoop ? ' [loop]' : ''}`);
-          } catch (e) {
-            console.warn(`[SAMPLES] Failed to load ${filename}:`, e);
+        const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+        for (const [trackKey, entryOrArray] of entries) {
+          // Manifest is now an array of candidates per track; support legacy single-object too
+          const entryList = Array.isArray(entryOrArray) ? entryOrArray : [entryOrArray];
+          const cands = [];
+          for (const entry of entryList) {
+            const filename = (typeof entry === 'string') ? entry : entry.file;
+            const semitone = (typeof entry === 'object' && entry !== null) ? entry.semitone : null;
+            const isLoop   = (typeof entry === 'object' && entry !== null) ? (entry.isLoop ?? false) : false;
+            try {
+              const encodedPath = filename.split('/').map(encodeURIComponent).join('/');
+              const r = await fetch(`/sample-files/${encodedPath}`);
+              if (!r.ok) { console.warn(`[SAMPLES] ${filename}: HTTP ${r.status}`); continue; }
+              const ab = await r.arrayBuffer();
+              const buffer = await ctx.decodeAudioData(ab);
+              cands.push({ buffer, semitone, isLoop });
+              loaded++;
+              const pitchStr = semitone !== null ? ` pitch=${NOTE_NAMES[semitone]}` : '';
+              console.log(`[SAMPLES] ✓ ${trackKey}[${cands.length}] ← ${filename.split('/').pop()}${pitchStr}${isLoop ? ' [loop]' : ''}`);
+            } catch (e) {
+              console.warn(`[SAMPLES] Failed to load ${filename}:`, e);
+            }
+          }
+          if (cands.length > 0) {
+            drSampleCandidates[trackKey] = cands;
+            // Set initial active sample: prefer shots for drum tracks, loops for sub
+            const shots = cands.filter(c => !c.isLoop);
+            const loops = cands.filter(c => c.isLoop);
+            const initial = (trackKey === 'sub' && loops.length) ? loops[0] : (shots[0] ?? cands[0]);
+            drSamples[trackKey] = initial.buffer;
+            drSampleMeta[trackKey] = { semitone: initial.semitone, isLoop: initial.isLoop };
+            drMarkSampleLoaded(trackKey, entryList[0]?.file ?? '');
           }
         }
-        console.log(`[SAMPLES] ${loaded}/${entries.length} sample(s) loaded into AudioContext`);
+        console.log(`[SAMPLES] ${loaded} sample(s) loaded across ${Object.keys(drSampleCandidates).length} track(s)`);
         drSamplesLoading = false;
       }
 
@@ -5067,15 +5361,17 @@
           if (step === 0) {
             _drPatternCycle++;
             // Fire at multiples of 8 cycles, with 50% probability so timing isn't mechanical.
-            // At 120 BPM this averages ~once per 32 bars — a sparse texture/transition element.
-            if (_drPatternCycle % 8 === 1 && Math.random() < 0.5 && drSamples['sub']?.duration > 2.0) {
-              const lCtx = prAudioCtx || drAudioCtx;
-              if (lCtx) {
-                // Transpose to current root: playbackRate = 2^(semitoneShift/12)
-                const meta = drSampleMeta['sub'];
-                const nativeSemi = (meta?.semitone != null) ? meta.semitone : 0; // default C
-                const shift = ((typeof scRootPc !== 'undefined' ? scRootPc : 0) - nativeSemi + 12) % 12;
-                drPlaySampleLoop(drSamples['sub'], t, 100, lCtx, drGetOut(), DR_STEPS * stepS * 2, shift);
+            // At 120 BPM this averages ~once per 32 bars — sparse texture/transition element.
+            // Rotates through loop candidates so same sample doesn't repeat back-to-back.
+            if (_drPatternCycle % 8 === 1 && Math.random() < 0.5) {
+              const cand = drPickLoopSample('sub');
+              if (cand) {
+                const lCtx = prAudioCtx || drAudioCtx;
+                if (lCtx) {
+                  const nativeSemi = cand.semitone ?? 0;
+                  const shift = ((typeof scRootPc !== 'undefined' ? scRootPc : 0) - nativeSemi + 12) % 12;
+                  drPlaySampleLoop(cand.buffer, t, 100, lCtx, drGetOut(), DR_STEPS * stepS * 2, shift);
+                }
               }
             }
           }
@@ -6468,6 +6764,8 @@
         buildUI();
         buildDrumMachine();
         buildSoundPanel();
+        buildPresetPanel();
+        loadPresets();
 
         const pianoBtn = document.getElementById('pianoBtn');
         if (pianoBtn) {

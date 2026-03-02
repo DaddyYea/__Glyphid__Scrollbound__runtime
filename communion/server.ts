@@ -7,7 +7,7 @@
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { createInterface } from 'readline';
-import { readFileSync, existsSync, mkdirSync, statSync, readdirSync, createReadStream } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, readdirSync, createReadStream } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
@@ -334,6 +334,37 @@ async function main() {
       const html = readFileSync(join(__dirname, 'dashboard.html'), 'utf-8');
       res.end(html);
       return;
+    }
+
+    // Preset bank — GET reads presets.json, POST writes it
+    if (url === '/api/presets') {
+      const presetsPath = join(process.cwd(), 'data', 'communion', 'presets.json');
+      if (req.method === 'GET') {
+        if (existsSync(presetsPath)) {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+          res.end(readFileSync(presetsPath, 'utf-8'));
+        } else {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ pad: [], lead: [] }));
+        }
+        return;
+      }
+      if (req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body);
+            mkdirSync(join(process.cwd(), 'data', 'communion'), { recursive: true });
+            writeFileSync(presetsPath, JSON.stringify(data, null, 2), 'utf-8');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'ok' }));
+          } catch {
+            res.writeHead(400); res.end('Bad request');
+          }
+        });
+        return;
+      }
     }
 
     // MIDI fragment library
@@ -1201,7 +1232,9 @@ async function main() {
         }
       }
 
-      const manifest: Record<string, { file: string; semitone: number | null; isLoop: boolean }> = {};
+      // Return ALL candidates per track as an array (shots first, loops last)
+      // so the client can rotate through them without repeating.
+      const manifest: Record<string, { file: string; semitone: number | null; isLoop: boolean }[]> = {};
       for (const [track, cands] of Object.entries(candidates)) {
         if (cands.length === 0) continue;
         cands.sort((a, b) => {
@@ -1209,13 +1242,10 @@ async function main() {
           if (a.isLoop !== b.isLoop) return a.isLoop ? 1 : -1;
           return a.path.localeCompare(b.path);
         });
-        const best = cands.find(c => !c.isLoop) ?? cands[0];
-        const fname = best.path.split('/').pop() ?? '';
-        manifest[track] = {
-          file: best.path,
-          semitone: parseSemitone(fname),
-          isLoop: best.isLoop,
-        };
+        manifest[track] = cands.map(c => {
+          const fname = c.path.split('/').pop() ?? '';
+          return { file: c.path, semitone: parseSemitone(fname), isLoop: c.isLoop };
+        });
       }
 
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
