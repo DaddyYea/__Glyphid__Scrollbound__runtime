@@ -4183,6 +4183,12 @@
         ensurePrAudio();
         playing = true; playPos = 0;
         prLoopCount = 0; prNextLoopTime = 0;
+        // Score engine must boot FIRST so patterns exist before scheduleLoop schedules them
+        scStart();
+        if (activeMoodScale) scSyncDroneToKey(activeMoodScale.rootPc);
+        // Drums must start BEFORE scheduleLoop so drNextBeat anchor is set
+        if (!drPlaying) drStart();
+        // Piano loop scheduler — patterns and drums are ready
         scheduleLoop();
         if (cursorTimer) clearInterval(cursorTimer);
         cursorTimer = setInterval(() => {
@@ -4192,11 +4198,6 @@
           prDraw();
         }, 50);
         prPlayBtn.textContent = '⏹ STOP'; prPlayBtn.classList.add('on');
-        // Unified transport: start drum if not already playing
-        if (!drPlaying) drStart();
-        // Score engine: start and sync to active key
-        scStart();
-        if (activeMoodScale) scSyncDroneToKey(activeMoodScale.rootPc);
       }
 
       function stopPrPlayback() {
@@ -5458,7 +5459,7 @@
                 if (lCtx) {
                   const nativeSemi = cand.semitone ?? 0;
                   const shift = ((typeof scRootPc !== 'undefined' ? scRootPc : 0) - nativeSemi + 12) % 12;
-                  drPlaySampleLoop(cand.buffer, t, 100, lCtx, drGetOut(), DR_STEPS * stepS * 2, shift);
+                  drPlaySampleLoop(cand.buffer, t_swing, 100, lCtx, drGetOut(), DR_STEPS * stepS * 2, shift);
                 }
               }
             }
@@ -6622,7 +6623,8 @@
         // ── Hybrid pad layer: MIDI fragment (70%) or procedural (30%) ──
         // Fragment library loaded from free-midi-chords (MIT). Falls back to procedural
         // if library not yet loaded or no matching fragment found.
-        const useFragment = midiFragmentLib.length > 0 && Math.random() < 0.70;
+        // Bypass fragment path when cadence is due — grammar must handle the resolution
+        const useFragment = !scChordCadenceDue && midiFragmentLib.length > 0 && Math.random() < 0.70;
         const fragResult  = useFragment ? pickMidiFragment(section, scaleType, rootPc, prLastFragLabel) : null;
 
         if (fragResult) {
@@ -6675,6 +6677,7 @@
               padNotes.push({ pitch, start: slot, dur: Math.max(0.25, gap * holdFrac), vel: n.vel });
             }
           }
+          scChordRootDeg = scChordHomeDeg; // approximate: fragments tend toward tonic; keep state consistent
           console.log(`[SCORE] fragment: "${frag.label}" [${section}] tiles:${tiles}`);
         } else {
           // ── Procedural path: chord grammar walk + voice leading ──
@@ -7060,13 +7063,11 @@
             if (!permit.leadCanMutate  && chScene.noveltyLeader === 'lead') chScene.noveltyLeader = null;
           }
 
-          // Drums regen every 4 bars
+          // Drums regen every 4 section bars — pattern is read dynamically so change is immediate
           if (scSectionBar % 4 === 0) {
             scApplySectionToDrone(scSection);
-            if (!playing) {
-              scGenerateDrumPattern(scSection);
-              console.log(`[SCORE] bar-clock drum regen — section: ${scSection} | leader: ${chScene.noveltyLeader}`);
-            }
+            scGenerateDrumPattern(scSection);
+            console.log(`[SCORE] bar-clock drum regen — section: ${scSection} | leader: ${chScene.noveltyLeader}`);
           }
 
           // Merge novelty spend from this bar's generators into surpriseAccum
