@@ -4129,9 +4129,10 @@
         prLoopCount++;
         drBpm = bpm; // keep drum scheduler BPM locked to piano BPM
         if (scEnabled && prLoopCount > 1) {
-          const next = scChooseSection();
+          // Use horizon plan section if available, else fall back to scChooseSection
+          const next = (scHorizonPlan.length > 0 ? scHorizonPlan[scHorizonBar % 8]?.section : null) ?? scChooseSection();
           const sectionChanged = (next !== scSection);
-          if (sectionChanged) { scSection = next; scApplySectionToDrone(next); }
+          if (sectionChanged) { scSection = next; scApplySectionToDrone(next); scLeadMotifSeed = []; }
           // Both piano and drums regenerate every loop — 2-bar drum loop playing 2× per 4-bar
           // piano loop was audibly repetitive ("same pattern"). Now each loop is fresh.
           try {
@@ -5788,9 +5789,9 @@
       // Updated every 8 bars by chUpdateScene(); externally writable by chBiometricsPush().
       const chScene = {
         bpm:              72,    // 60–85 CloudHop law
-        density:          0.5,   // 0–1: extra hits, hat density, pad voices
-        dream:            0.6,   // 0–1: reverb depth, open hats, pad air layer
-        dirt:             0.5,   // 0–1: saturation, grit layer on lead/pad
+        motion:           0.5,   // 0–1 (was density): hit density, hat weight, pad voices
+        warmth:           0.6,   // 0–1 (was dream):   reverb depth, open hats, pad air
+        tension:          0.5,   // 0–1 (was dirt):    saturation, grit, expressive edge
         clarity:          0.5,   // 0–1: hat brightness, lead presence
         surpriseBudget:   1,     // decorators per bar: 1 default, max 2
         chordChangeBars:  4,     // 2 or 4 — bars per chord change
@@ -5806,30 +5807,41 @@
         // EMA toward pond affect dimensions if available
         if (scLastAffect && scLastAffect.length >= 8) {
           const mag = scLastMagnitude;
-          chScene.density = drift(chScene.density, Math.max(0.25, Math.min(0.85, mag * 1.4)), 0.25);
-          chScene.dream   = drift(chScene.dream,   Math.max(0.2, scLastAffect[4]), 0.2);
-          chScene.dirt    = drift(chScene.dirt,    Math.max(0.2, scLastAffect[1]), 0.2);
+          chScene.motion  = drift(chScene.motion,  Math.max(0.25, Math.min(0.85, mag * 1.4)), 0.25);
+          chScene.warmth  = drift(chScene.warmth,  Math.max(0.2, scLastAffect[4]), 0.2);
+          chScene.tension = drift(chScene.tension, Math.max(0.2, scLastAffect[1]), 0.2);
           chScene.clarity = drift(chScene.clarity, Math.max(0.2, scLastAffect[2]), 0.2);
         }
-        // Evolve surpriseBudget: increase with density, cap at 2
-        chScene.surpriseBudget = Math.min(2, Math.round(1 + chScene.density));
-        // Chord change rate: slow (4 bars) when dreamy, faster (2 bars) when dense
-        chScene.chordChangeBars = chScene.density > 0.65 ? 2 : 4;
+        // Evolve surpriseBudget: increase with motion, cap at 2
+        chScene.surpriseBudget = Math.min(2, Math.round(1 + chScene.motion));
+        // Chord change rate: slow (4 bars) when warm, faster (2 bars) when high-motion
+        chScene.chordChangeBars = chScene.motion > 0.65 ? 2 : 4;
         // Hat rate: 1/32 density when clarity is high
         chScene.hatRate = chScene.clarity > 0.7 ? '1/32' : '1/16';
         _chScenePanelDirty = true;
       }
 
-      // External biometrics hook — called by future biometric system with normalized readings
-      // data: { heartRate?, hrv?, gsr?, breathing? } all 0–1 normalized
+      // External biometrics hook — called by BIO-IN (Fitbit poller) or manual override.
+      // Canonical params (Cloud Hop Canon v1): { pulse, tension, stability, restoration }
+      // Legacy params still accepted:          { heartRate, gsr, hrv, breathing }
       window.chBiometricsPush = function(data) {
         if (!data) return;
-        if (data.heartRate  != null) chScene.density = 0.2 + data.heartRate * 0.65;
-        if (data.hrv        != null) chScene.dream   = data.hrv;
-        if (data.gsr        != null) chScene.dirt    = data.gsr;
-        if (data.breathing  != null) chScene.clarity = data.breathing;
-        chScene.surpriseBudget = Math.min(2, Math.round(1 + chScene.density));
-        chScene.chordChangeBars = chScene.density > 0.65 ? 2 : 4;
+        // motion  — canonical: pulse (0-1 normalized HR), legacy: heartRate → scaled
+        const rawMotion  = data.pulse      != null ? data.pulse
+                         : data.heartRate  != null ? 0.2 + data.heartRate * 0.65 : null;
+        // warmth  — canonical: stability (sleep quality), legacy: hrv
+        const rawWarmth  = data.stability  ?? data.hrv  ?? null;
+        // tension — canonical: tension (HRV-inverted stress), legacy: gsr
+        const rawTension = data.tension    ?? data.gsr   ?? null;
+        // clarity — canonical: restoration (recovery), legacy: breathing
+        const rawClarity = data.restoration ?? data.breathing ?? null;
+        const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+        if (rawMotion  != null) chScene.motion   = clamp(rawMotion,  0, 1);
+        if (rawWarmth  != null) chScene.warmth   = clamp(rawWarmth,  0, 1);
+        if (rawTension != null) chScene.tension  = clamp(rawTension, 0, 1);
+        if (rawClarity != null) chScene.clarity  = clamp(rawClarity, 0, 1);
+        chScene.surpriseBudget  = Math.min(2, Math.round(1 + chScene.motion));
+        chScene.chordChangeBars = chScene.motion > 0.65 ? 2 : 4;
         _chScenePanelDirty = true;
         console.log('[EMPATHY] biometrics push →', JSON.stringify(chScene));
       };
@@ -5849,7 +5861,7 @@
           chScene.hatRate = '1/16'; // pull back to base hat density
         } else {
           // Gradually refill surprise budget toward scene-driven cap (0.15/bar)
-          const target = Math.min(2, Math.round(1 + chScene.density));
+          const target = Math.min(2, Math.round(1 + chScene.motion));
           chScene.surpriseBudget = Math.min(target, chScene.surpriseBudget + 0.15);
           chScene.surpriseAccum  = Math.max(0, chScene.surpriseAccum - chScene.surpriseBudget);
         }
@@ -5866,9 +5878,9 @@
           sc.noveltyLeader = null;
           return;
         }
-        const wDrums = sc.density;           // motion proxy — more density → drums lead
-        const wHarm  = sc.dream;             // warmth proxy — more dream → pads lead
-        const wLead  = sc.dirt * sc.clarity; // expressiveness — dirt+clarity → lead leads
+        const wDrums = sc.motion;             // high motion → drums lead
+        const wHarm  = sc.warmth;             // high warmth → pads/harmony lead
+        const wLead  = sc.tension * sc.clarity; // tension+clarity → lead takes novelty
         const total  = wDrums + wHarm + wLead;
         if (total < 0.1) { sc.noveltyLeader = null; return; }
         const r = Math.random() * total;
@@ -5886,6 +5898,42 @@
       // ── Section state ──
       let scSection = 'verse', scSectionBar = 0, scBarCount = 0;
       let scBarInterval = null, scEnabled = false;
+      let scLowAffectCount = 0; // hysteresis for section downgrade
+
+      // ── ARR Horizon Planner ──
+      // Replaces single-bar greedy scChooseSection().
+      // Plans 8 bars ahead, assigns per-bar permissions that EXEC enforces on generators.
+      let scHorizonPlan = [];  // Array<{ bar, section, harmCanChange, drumsCanDecorate, leadCanMutate }>
+      let scHorizonBar  = 0;  // which bar within the current plan we're executing
+
+      function scPlanHorizon() {
+        const mag  = scLastMagnitude;
+        const arc  = mag < 0.10 ? 'breakdown'
+                   : mag < 0.45 ? 'verse'
+                   : mag < 0.72 ? 'chorus'
+                   :               'peak';
+        // Downgrade hysteresis — same as old scChooseSection
+        const order     = ['breakdown', 'verse', 'chorus', 'peak'];
+        const curIdx    = order.indexOf(scSection);
+        const arcIdx    = order.indexOf(arc);
+        const targetSec = arcIdx < curIdx
+          ? (++scLowAffectCount >= 2 ? arc : scSection)
+          : (scLowAffectCount = 0, arc);
+
+        const dense = (targetSec === 'chorus' || targetSec === 'peak');
+        scHorizonPlan = Array.from({ length: 8 }, (_, bar) => ({
+          bar,
+          section:          targetSec,
+          // Harmony may change at bar 0 always; also bar 4 (or every even bar for dense)
+          harmCanChange:    bar === 0 || (dense ? (bar % 2 === 0) : bar === 4),
+          // Drums may decorate in the second half of the plan, not for breakdown
+          drumsCanDecorate: bar >= 4 && targetSec !== 'breakdown',
+          // Lead mutation only at off-downbeat interior bars (2 and 6)
+          leadCanMutate:    bar === 2 || bar === 6,
+        }));
+        scHorizonBar = 0;
+        console.log(`[ARR] horizon planned: section=${targetSec} dense=${dense} (mag=${mag.toFixed(2)})`);
+      }
 
       // ── MIDI fragment library ──
       // Pre-baked from free-midi-chords (MIT). Each fragment has notes in beat time,
@@ -5937,7 +5985,7 @@
       // so it provides a floor when the brain is between conversations.
       let scLastMagnitude = 0.35; // starts at verse level
       let scHumanSpeaking = false, scAloisSpeaking = false;
-      let scLowAffectCount = 0;
+      // scLowAffectCount declared above with scHorizonPlan
 
       // ── Volume / key ──
       let scDroneVol = 0.35, scRootPc = 0;
@@ -6246,10 +6294,10 @@
         // Optional extra low-end hit: density-gated, NOT on beat1/beat3, max 1/bar
         // (law: optional_extra_low_end.condition density >= 0.55)
         // ─────────────────────────────────────────────────────────────────────────
-        if (sc.density >= 0.55) {
+        if (sc.motion >= 0.55) {
           const extraPool = [[4,6,10,12,14], [4,6,10,12,14]]; // per-bar candidates
           for (let bar = 0; bar < 2; bar++) {
-            if (Math.random() < sc.density - 0.4) {
+            if (Math.random() < sc.motion - 0.4) {
               const offset = bar * 16;
               const cands  = extraPool[bar].filter(s => drPattern[ki][offset+s] === 0);
               if (cands.length) {
@@ -6310,11 +6358,11 @@
           }
         }
 
-        // Open-hat pickups (dreamy feel — sc.dream gates these)
-        if (sc.dream > 0.3) {
+        // Open-hat pickups (warmth gates these)
+        if (sc.warmth > 0.3) {
           [3, 7, 11, 15, 19, 23, 27, 31].forEach(s => {
-            if (drPattern[sni][s] === 0 && Math.random() < sc.dream * 0.35) {
-              drPattern[ohhi][s] = rnd(55, Math.round(60 + sc.dream * 30));
+            if (drPattern[sni][s] === 0 && Math.random() < sc.warmth * 0.35) {
+              drPattern[ohhi][s] = rnd(55, Math.round(60 + sc.warmth * 30));
             }
           });
         }
@@ -6356,9 +6404,9 @@
         // ─────────────────────────────────────────────────────────────────────────
         // Ride bell: sparse, dreamy (alt-rock texture)
         // ─────────────────────────────────────────────────────────────────────────
-        if (sc.dream > 0.4 || section === 'breakdown') {
+        if (sc.warmth > 0.4 || section === 'breakdown') {
           [0, 8, 16, 24].forEach(s => {
-            if (Math.random() < sc.dream * 0.55) drPattern[rdi][s] = rnd(55, 72);
+            if (Math.random() < sc.warmth * 0.55) drPattern[rdi][s] = rnd(55, 72);
           });
         }
 
@@ -6367,6 +6415,12 @@
         // LAW: never on downbeat anchors, never reverse kick/sub, max 1 extra/bar default
         // ─────────────────────────────────────────────────────────────────────────
         const MAX_BUDGET = sc.surpriseBudget;
+        const drumEvents = [], drumWarnings = [];
+        let drumCost = 0;
+        // Count open-hat pickups already placed above
+        for (let s = 0; s < DR_STEPS; s++) { if (drPattern[ohhi][s] > 0) { drumCost += NOVELTY_COSTS.open_hat; drumEvents.push(`oh@${s}`); } }
+        // Count ride hits already placed
+        for (let s = 0; s < DR_STEPS; s++) { if (drPattern[rdi][s] > 0) { drumCost += NOVELTY_COSTS.ride_hit; } }
         for (let bar = 0; bar < 2; bar++) {
           const offset = bar * 16;
           let budget = MAX_BUDGET;
@@ -6382,16 +6436,55 @@
             if (Math.random() < 0.45) {
               if (Math.random() < 0.5) {
                 drPattern[ki][s]    = rnd(42, 62); // ghost kick — quiet, no sub
+                drumCost += NOVELTY_COSTS.ghost_kick;
+                drumEvents.push(`gk@${s}`);
               } else {
                 drPattern[perci][s] = rnd(52, 72); // perc accent
+                drumCost += NOVELTY_COSTS.perc_hit;
+                drumEvents.push(`pc@${s}`);
               }
               budget--;
             }
           }
         }
+        if (drumCost > MAX_BUDGET) drumWarnings.push(`drum cost ${drumCost.toFixed(2)} > budget ${MAX_BUDGET}`);
+        scNoveltyReport.drums = { cost: drumCost, events: drumEvents, warnings: drumWarnings };
 
         drRenderGrid();
-        console.log(`[SCORE] drums: ${section} | density=${sc.density.toFixed(2)} dream=${sc.dream.toFixed(2)} surpriseBudget=${MAX_BUDGET}`);
+        console.log(`[SCORE] drums: ${section} | motion=${sc.motion.toFixed(2)} warmth=${sc.warmth.toFixed(2)} surpriseBudget=${MAX_BUDGET} drumCost=${drumCost.toFixed(2)}`);
+      }
+
+      // ── Novelty Cost Accounting ──
+      // Generators write their spend here. scMergeNoveltyReport() in scStartBarClock reads it.
+      // Format: { drums: ClusterReport, harm: ClusterReport, lead: ClusterReport }
+      // ClusterReport: { cost: number, events: string[], warnings: string[] }
+      const NOVELTY_COSTS = {
+        ghost_kick:    0.25,   // each ghost/decorator kick added
+        perc_hit:      0.25,   // each decorator perc accent
+        open_hat:      0.15,   // each open-hat pickup
+        ride_hit:      0.10,   // each ride bell
+        triplet_fill:  0.50,   // whole triplet fill window
+        chord_change:  0.50,   // harmony chose a new chord plan (not reusing lastChordPlan)
+        lead_new_motif: 0.50,  // LEAD generated a fresh motif seed
+        lead_pitch_mut: 0.15,  // per pitch-mutation op applied
+        lead_insert:    0.20,  // per note-insertion op applied
+      };
+      let scNoveltyReport = { drums: null, harm: null, lead: null };
+
+      function scMergeNoveltyReport() {
+        const r = scNoveltyReport;
+        const drumCost = r.drums?.cost ?? 0;
+        const harmCost = r.harm?.cost  ?? 0;
+        const leadCost = r.lead?.cost  ?? 0;
+        const totalCost = drumCost + harmCost + leadCost;
+        chScene.surpriseAccum = (chScene.surpriseAccum ?? 0) + totalCost;
+        const over = chScene.surpriseAccum > chScene.surpriseBudget;
+        if (over) console.warn(`[EXEC] novelty over-budget: spent=${totalCost.toFixed(2)} accum=${chScene.surpriseAccum.toFixed(2)} budget=${chScene.surpriseBudget}`);
+        // Log events from each cluster in debug mode
+        const allEvents = [...(r.drums?.events||[]), ...(r.harm?.events||[]), ...(r.lead?.events||[])];
+        if (allEvents.length) console.log(`[EXEC] bar novelty: [${allEvents.join(', ')}] cost=${totalCost.toFixed(2)}`);
+        // Reset per-bar slot ready for next generators
+        scNoveltyReport = { drums: null, harm: null, lead: null };
       }
 
       // ── Piano + lead note generation per section ──
@@ -6414,17 +6507,18 @@
 
         // ── Skeleton mode: harm not the novelty leader — reuse last chord plan ──
         if (chScene.noveltyLeader !== null && chScene.noveltyLeader !== 'harm' && scLastChordPlan.length > 0) {
-          // Slight velocity humanization so it doesn't sound literally identical
           tracks.alois = scLastChordPlan.map(n => ({
             ...n,
             vel: Math.max(25, Math.min(110, n.vel + Math.round((Math.random() - 0.5) * 12))),
           }));
           tracks.jason = [];
           tracks.arp   = [];
-          // Lead skeleton: also reuse seed
           if (scLeadMotifSeed.length > 0) {
             scLeadNotes = scLeadMotifSeed.map(n => ({ ...n }));
           }
+          // Both harm and lead held in skeleton — zero novelty cost
+          scNoveltyReport.harm = { cost: 0, events: ['harm_skeleton'], warnings: [] };
+          scNoveltyReport.lead = { cost: 0, events: ['lead_skeleton'], warnings: [] };
           prDraw();
           return;
         }
@@ -6590,46 +6684,134 @@
         tracks.jason = [];
         tracks.arp   = [];        // reserved — not used
 
-        // ── Melody layer: soprano voice extracted from MIDI fragment ──
-        // Picks a fragment, groups notes by half-beat slot, keeps only the highest pitch
-        // (the soprano / melody voice). Transposed into melody register (MIDI 60–84).
-        const melFrag = midiFragmentLib.length > 0 ? pickMidiFragment(section, scaleType, rootPc) : null;
-        const melNotes = [];
-        if (melFrag) {
-          const { frag, notes: mNotes } = melFrag;
-          // Play fragment ONCE — no tiling. Leaves the rest of the loop silent.
-          // Tiling was causing the same phrase to repeat 4× per loop ("endless fill").
-          const slots = new Map();
-          for (const n of mNotes) {
-            const slot = Math.round(n.start * 2) / 2; // quantize to 0.5-beat grid
-            if (slot >= beats) continue;
-            if (!slots.has(slot) || n.pitch > slots.get(slot).pitch) {
-              slots.set(slot, { pitch: n.pitch, start: slot, dur: n.dur, vel: n.vel });
-            }
-          }
-          for (const note of slots.values()) {
-            if (Math.random() < 0.28) continue; // breathe — skip ~28% of notes
-            let pitch = note.pitch;
-            while (pitch < 60) pitch += 12;
-            while (pitch > 84) pitch -= 12;
-            const pc = ((pitch % 12) + 12) % 12;
-            if (!scalePCs.includes(pc)) {
-              let bestPc = scalePCs[0], bestDist = 99;
-              for (const sp of scalePCs) { let d = Math.abs(pc - sp); if (d > 6) d = 12 - d; if (d < bestDist) { bestDist = d; bestPc = sp; } }
-              const diff = ((bestPc - pc + 12) % 12);
-              pitch += diff <= 6 ? diff : diff - 12;
-            }
-            const dur = Math.min(0.88, note.dur, beats - note.start);
-            melNotes.push({ pitch, start: note.start, dur, vel: Math.min(92, note.vel + 8) });
-          }
-          if (melNotes.length > 0) console.log(`[SCORE] melody: ${melNotes.length} notes from "${melFrag.frag.label}"`);
-        }
-        // Lead skeleton: if not leading and a seed exists, reuse it; else save new motif
+        // ── LEAD Citizen: true motif generator ──
+        // Generates scLeadMotifSeed from scale + rhythm templates instead of borrowing
+        // from MIDI fragments. Mutation ops are applied when noveltyLeader === 'lead'.
+        // When not leading, the seed is frozen (skeleton mode: vel ±8 only).
+
+        // Rhythm templates per section — beat offsets within 4 beats, values are duration
+        // { o: onset_beat, d: dur_beats } — tighter templates for breakdown, busier for peak
+        const LEAD_RHYTHMS = {
+          breakdown: [{ o:0, d:1.5 }, { o:2, d:1.0 }],
+          verse:     [{ o:0, d:0.5 }, { o:1, d:0.5 }, { o:2.5, d:0.75 }, { o:3.5, d:0.5 }],
+          chorus:    [{ o:0, d:0.5 }, { o:0.5, d:0.5 }, { o:1.5, d:0.5 }, { o:2.5, d:0.5 }, { o:3, d:0.75 }],
+          peak:      [{ o:0, d:0.5 }, { o:0.5, d:0.25 }, { o:1, d:0.5 }, { o:2, d:0.5 }, { o:2.5, d:0.5 }, { o:3.5, d:0.5 }],
+        };
+        // Pick a scale degree index to start the phrase from
+        const LEAD_START_DEGREE = { breakdown: [4, 5], verse: [0, 2, 4], chorus: [0, 2, 4, 6], peak: [0, 1, 2, 4] };
+        const snapToScale = (pitch) => {
+          const pc = ((pitch % 12) + 12) % 12;
+          if (scalePCs.includes(pc)) return pitch;
+          let bestPc = scalePCs[0], bestDist = 99;
+          for (const sp of scalePCs) { let d = Math.abs(pc - sp); if (d > 6) d = 12 - d; if (d < bestDist) { bestDist = d; bestPc = sp; } }
+          const diff = ((bestPc - pc + 12) % 12);
+          return pitch + (diff <= 6 ? diff : diff - 12);
+        };
+
+        // mutationStrength: tension drives chaos, clarity allows it, combination = expressiveness
+        const mutStrength = Math.min(1, chScene.tension * 0.6 + (1 - chScene.clarity) * 0.4);
+
+        // ── Lead skeleton: non-leader path ──
+        const leadCost = 0;
+        const leadEvents = [];
+        let finalLeadCost = 0;
+
         if (chScene.noveltyLeader !== null && chScene.noveltyLeader !== 'lead' && scLeadMotifSeed.length > 0) {
-          scLeadNotes = scLeadMotifSeed.map(n => ({ ...n }));
+          // Skeleton: reuse seed with velocity humanization only
+          scLeadNotes = scLeadMotifSeed.map(n => ({
+            ...n,
+            vel: Math.max(28, Math.min(105, n.vel + Math.round((Math.random() - 0.5) * 8))),
+          }));
+          scNoveltyReport.lead = { cost: 0, events: ['lead_skeleton'], warnings: [] };
+
         } else {
-          scLeadNotes = melNotes;
-          if (melNotes.length > 0) scLeadMotifSeed = [...melNotes]; // persist new motif as seed
+          // ── Generate fresh motif ──
+          const rhythm     = LEAD_RHYTHMS[section] || LEAD_RHYTHMS.verse;
+          const startDegs  = LEAD_START_DEGREE[section] || [0, 2, 4];
+          const startDeg   = startDegs[Math.floor(Math.random() * startDegs.length)];
+          const baseOctave = rootMidi + 12; // one octave above pad root (melody register)
+          const velBase    = def.velLo + Math.floor(Math.random() * (def.velHi - def.velLo) * 0.5);
+
+          const motif = [];
+          let degCursor = startDeg;
+          // Generate one bar of motif from rhythm template, repeat/truncate to fill loop
+          const barsToFill = Math.min(loopBars, 2); // motif spans 1-2 bars max
+          for (let bar = 0; bar < barsToFill; bar++) {
+            // Gentle contour per bar — step up first bar, step down or hold second
+            const barDir = bar === 0 ? 1 : (Math.random() < 0.55 ? -1 : 0);
+            for (const { o, d } of rhythm) {
+              const start = bar * beatsPerBar + o;
+              if (start >= beats) break;
+              // Walk scale degree
+              const degStep = barDir + Math.round((Math.random() - 0.5) * 2);
+              degCursor = ((degCursor + degStep) % scalePCs.length + scalePCs.length) % scalePCs.length;
+              const pc    = (rootPc + scalePCs[degCursor] % 12) % 12;
+              let pitch   = baseOctave + ((pc - rootPc + 12) % 12);
+              while (pitch < 62) pitch += 12;
+              while (pitch > 84) pitch -= 12;
+              pitch = snapToScale(pitch);
+              const dur   = Math.min(d * 0.9, beats - start);
+              const vel   = Math.max(35, Math.min(100, velBase + Math.round((Math.random() - 0.5) * 14)));
+              motif.push({ pitch, start, dur, vel });
+            }
+          }
+
+          // ── Mutation pass (only when noveltyLeader === 'lead') ──
+          let mutPitchCount = 0, mutInsertCount = 0;
+          if (chScene.noveltyLeader === 'lead') {
+            for (const n of motif) {
+              // Op 1: pitch ±1 semitone (probability = mutStrength * 0.40)
+              if (Math.random() < mutStrength * 0.40) {
+                const shift = Math.random() < 0.5 ? 1 : -1;
+                n.pitch = snapToScale(n.pitch + shift);
+                mutPitchCount++;
+              }
+              // Op 2: duration stretch/compress (probability = mutStrength * 0.30)
+              if (Math.random() < mutStrength * 0.30) {
+                n.dur = Math.max(0.1, n.dur * (0.85 + Math.random() * 0.30));
+              }
+              // Op 3: note omission (probability = mutStrength * 0.20, never first note)
+              if (n !== motif[0] && Math.random() < mutStrength * 0.20) {
+                n._omit = true;
+              }
+            }
+            // Op 4: note insertion (probability = mutStrength * 0.10, max 1 per bar)
+            const insertCandidates = [];
+            for (let bar = 0; bar < barsToFill; bar++) {
+              const barStart = bar * beatsPerBar;
+              const used     = new Set(motif.filter(n => !n._omit && n.start >= barStart && n.start < barStart + beatsPerBar).map(n => Math.round(n.start * 2) / 2));
+              for (let h = 0; h < beatsPerBar * 2; h++) {
+                const slot = barStart + h * 0.5;
+                if (!used.has(slot) && slot < beats) insertCandidates.push(slot);
+              }
+            }
+            if (insertCandidates.length && Math.random() < mutStrength * 0.10) {
+              const ins = insertCandidates[Math.floor(Math.random() * insertCandidates.length)];
+              const pc  = scalePCs[Math.floor(Math.random() * scalePCs.length)];
+              let ip    = baseOctave + ((pc - rootPc + 12) % 12);
+              while (ip < 62) ip += 12; while (ip > 84) ip -= 12;
+              motif.push({ pitch: snapToScale(ip), start: ins, dur: 0.25, vel: velBase - 10 });
+              mutInsertCount++;
+            }
+          }
+
+          const freshMotif = motif.filter(n => !n._omit).sort((a, b) => a.start - b.start);
+          scLeadNotes    = freshMotif;
+          scLeadMotifSeed = [...freshMotif];
+
+          finalLeadCost = NOVELTY_COSTS.lead_new_motif
+            + mutPitchCount  * NOVELTY_COSTS.lead_pitch_mut
+            + mutInsertCount * NOVELTY_COSTS.lead_insert;
+          const evts = ['lead_new_motif'];
+          if (mutPitchCount)  evts.push(`pitch_mut×${mutPitchCount}`);
+          if (mutInsertCount) evts.push(`insert×${mutInsertCount}`);
+          scNoveltyReport.lead = { cost: finalLeadCost, events: evts, warnings: [] };
+          console.log(`[SCORE] lead: ${freshMotif.length} notes | mut=${mutStrength.toFixed(2)} cost=${finalLeadCost.toFixed(2)} leader=${chScene.noveltyLeader}`);
+        }
+
+        // Harm cost: 0 if we reused lastChordPlan (harm skeleton), chord_change if fresh
+        if (!scNoveltyReport.harm) {
+          scNoveltyReport.harm = { cost: NOVELTY_COSTS.chord_change, events: ['chord_change'], warnings: [] };
         }
         prDraw();
       }
@@ -6734,16 +6916,37 @@
             }
           }
 
+          // ── ARR: advance horizon cursor, replan every 8 bars ──
+          scHorizonBar = scBarCount % 8;
+          if (scHorizonBar === 0) scPlanHorizon();
+          const permit = scHorizonPlan[scHorizonBar] ?? scHorizonPlan[0];
+
+          // Section change from horizon plan
+          if (permit && permit.section !== scSection) {
+            scSection = permit.section;
+            scApplySectionToDrone(scSection);
+            scLeadMotifSeed = []; // new section = fresh motif
+          }
+
+          // ── ARR permissions override probabilistic novelty leader ──
+          // If ARR says a cluster can't change, force it into skeleton regardless of who won the leader election.
+          if (permit) {
+            if (!permit.drumsCanDecorate) chScene.surpriseBudget = 0;
+            if (!permit.harmCanChange && chScene.noveltyLeader === 'harm') chScene.noveltyLeader = null;
+            if (!permit.leadCanMutate  && chScene.noveltyLeader === 'lead') chScene.noveltyLeader = null;
+          }
+
           // Drums regen every 4 bars
           if (scSectionBar % 4 === 0) {
-            const next = scChooseSection();
-            if (next !== scSection) { scSection = next; }
             scApplySectionToDrone(scSection);
             if (!playing) {
               scGenerateDrumPattern(scSection);
-              console.log(`[SCORE] bar-clock drum regen — section: ${scSection}`);
+              console.log(`[SCORE] bar-clock drum regen — section: ${scSection} | leader: ${chScene.noveltyLeader}`);
             }
           }
+
+          // Merge novelty spend from this bar's generators into surpriseAccum
+          scMergeNoveltyReport();
 
           // SceneState update every 8 bars (full scene cycle)
           if (scBarCount % 8 === 0) {
@@ -6911,19 +7114,19 @@
           <div class="ep-ctrl-section">
             <div class="ep-ctrl-title" style="color:#c47eda">SCENE STATE &mdash; CLOUDHOP ENGINE</div>
             <div class="ep-ctrl-row">
-              <span class="ep-label">DENSITY</span>
-              <input type="range" class="ep-ctrl-slider" id="ch-density" min="0" max="100" value="${Math.round(chScene.density*100)}">
-              <span class="ep-ctrl-val" id="ch-val-density">${Math.round(chScene.density*100)}%</span>
+              <span class="ep-label">MOTION</span>
+              <input type="range" class="ep-ctrl-slider" id="ch-motion" min="0" max="100" value="${Math.round(chScene.motion*100)}">
+              <span class="ep-ctrl-val" id="ch-val-motion">${Math.round(chScene.motion*100)}%</span>
             </div>
             <div class="ep-ctrl-row">
-              <span class="ep-label">DREAM</span>
-              <input type="range" class="ep-ctrl-slider" id="ch-dream" min="0" max="100" value="${Math.round(chScene.dream*100)}">
-              <span class="ep-ctrl-val" id="ch-val-dream">${Math.round(chScene.dream*100)}%</span>
+              <span class="ep-label">WARMTH</span>
+              <input type="range" class="ep-ctrl-slider" id="ch-warmth" min="0" max="100" value="${Math.round(chScene.warmth*100)}">
+              <span class="ep-ctrl-val" id="ch-val-warmth">${Math.round(chScene.warmth*100)}%</span>
             </div>
             <div class="ep-ctrl-row">
-              <span class="ep-label">DIRT</span>
-              <input type="range" class="ep-ctrl-slider" id="ch-dirt" min="0" max="100" value="${Math.round(chScene.dirt*100)}">
-              <span class="ep-ctrl-val" id="ch-val-dirt">${Math.round(chScene.dirt*100)}%</span>
+              <span class="ep-label">TENSION</span>
+              <input type="range" class="ep-ctrl-slider" id="ch-tension" min="0" max="100" value="${Math.round(chScene.tension*100)}">
+              <span class="ep-ctrl-val" id="ch-val-tension">${Math.round(chScene.tension*100)}%</span>
             </div>
             <div class="ep-ctrl-row">
               <span class="ep-label">CLARITY</span>
@@ -6976,9 +7179,9 @@
         });
         // ── Scene state sliders ──
         [
-          { id:'ch-density', key:'density', valId:'ch-val-density', fmt: v => Math.round(v)+'%' },
-          { id:'ch-dream',   key:'dream',   valId:'ch-val-dream',   fmt: v => Math.round(v)+'%' },
-          { id:'ch-dirt',    key:'dirt',    valId:'ch-val-dirt',    fmt: v => Math.round(v)+'%' },
+          { id:'ch-motion',  key:'motion',  valId:'ch-val-motion',  fmt: v => Math.round(v)+'%' },
+          { id:'ch-warmth',  key:'warmth',  valId:'ch-val-warmth',  fmt: v => Math.round(v)+'%' },
+          { id:'ch-tension', key:'tension', valId:'ch-val-tension', fmt: v => Math.round(v)+'%' },
           { id:'ch-clarity', key:'clarity', valId:'ch-val-clarity', fmt: v => Math.round(v)+'%' },
         ].forEach(({ id, key, valId, fmt }) => {
           const el = panel.querySelector(`#${id}`); if (!el) return;
@@ -6987,8 +7190,8 @@
             chScene[key] = v01;
             panel.querySelector(`#${valId}`).textContent = fmt(e.target.value);
             // Update downstream params
-            chScene.surpriseBudget  = Math.min(2, Math.round(1 + chScene.density));
-            chScene.chordChangeBars = chScene.density > 0.65 ? 2 : 4;
+            chScene.surpriseBudget  = Math.min(2, Math.round(1 + chScene.motion));
+            chScene.chordChangeBars = chScene.motion > 0.65 ? 2 : 4;
             chScene.hatRate         = chScene.clarity > 0.7 ? '1/32' : '1/16';
           });
         });
@@ -7019,7 +7222,9 @@
         const nextEl = document.getElementById('sc-next-section');
         if (nameEl) { nameEl.textContent = scSection.toUpperCase(); nameEl.style.color = SC_SECTION_COLORS[scSection] || '#c47eda'; }
         if (barEl) barEl.textContent = `bar ${scSectionBar + 1} / 8`;
-        if (nextEl) nextEl.textContent = scChooseSection();
+        // Show next planned section from horizon, or recompute if plan empty
+        const nextSec = scHorizonPlan[(scHorizonBar + 1) % 8]?.section ?? scChooseSection();
+        if (nextEl) nextEl.textContent = nextSec;
         const genreEl = document.getElementById('sc-genre-label');
         if (genreEl) genreEl.textContent = (SC_GENRES[scGenre] || SC_GENRES.cloudhop).name.toUpperCase();
         for (let i = 0; i < 8; i++) {
@@ -7033,9 +7238,9 @@
             const el = document.getElementById(id); if (el) el.value = Math.round(val01 * 100);
             const vEl = document.getElementById(valId); if (vEl) vEl.textContent = Math.round(val01 * 100) + '%';
           };
-          sync('ch-density', chScene.density, 'ch-val-density');
-          sync('ch-dream',   chScene.dream,   'ch-val-dream');
-          sync('ch-dirt',    chScene.dirt,    'ch-val-dirt');
+          sync('ch-motion',  chScene.motion,  'ch-val-motion');
+          sync('ch-warmth',  chScene.warmth,  'ch-val-warmth');
+          sync('ch-tension', chScene.tension, 'ch-val-tension');
           sync('ch-clarity', chScene.clarity, 'ch-val-clarity');
         }
       }
