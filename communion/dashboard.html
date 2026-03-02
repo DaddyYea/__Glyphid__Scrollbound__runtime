@@ -2691,6 +2691,7 @@
     async function sendMessage() {
       const text = chatInput.value.trim();
       if (!text) return;
+      scLangInParse(text); // LANG-IN: parse affect → chScene nudge before send
       chatInput.value = '';
       try {
         await fetch('/message', {
@@ -7184,6 +7185,89 @@
           chordPlan.splice(0, chordPlan.length, ...scLastChordPlan.map(n => ({ ...n })));
           console.warn('[SAFETY] clarity<0.4: chord plan reverted to scLastChordPlan');
         }
+      }
+
+      // ── LANG-IN: Client-side affective text parse → chScene nudges ──────────────
+      // No LLM. No backend. Regex/keyword scan only.
+      // Called once per human message. EMA-smoothed signals prevent one-message spikes.
+      // Nudges are intentionally tiny — BRAINSTEM + chUpdateScene() provide mean reversion.
+      //
+      // ACCEPTANCE TEST (paste in browser console):
+      //   scLangInParse("I love you so much, everything feels warm and beautiful");
+      //   // → warmth ↑, tension ↓, love tag, positive sentiment
+      //   scLangInParse("HELP me NOW it's urgent please please!!!");
+      //   // → urgency ↑, motion ↑, clarity ↓
+      //   scLangInParse("I lost everything. Nothing left. Gone.");
+      //   // → grief tag, tension ↑, negative sentiment
+      //   scLangInParse("build the project, deploy it, ship it today");
+      //   // → build tag, clarity ↑, motion ↑
+
+      let liSmUrgency   = 0.0; // EMA-smoothed urgency   0–1
+      let liSmSentiment = 0.0; // EMA-smoothed sentiment -1..+1
+      const LI_EMA   = 0.80;  // per-message alpha (~5-msg time constant before signal settles)
+      const LI_NUDGE = 0.03;  // max scene delta per message (BRAINSTEM clamps anything unsafe)
+
+      function scLangInParse(text) {
+        if (!text || typeof text !== 'string') return;
+        const t = text.toLowerCase();
+        const words = t.match(/\b\w+\b/g) || [];
+        const N = words.length || 1;
+
+        // ── 1. Urgency ──
+        const URGENT_W = ['now','asap','quick','hurry','urgent','help','please','need','must','cant','cannot','fast','immediately'];
+        const rawUrgency = Math.min(1,
+          (text.match(/!/g)  || []).length * 0.15 +
+          (text.match(/\?/g) || []).length * 0.08 +
+          (text.match(/[A-Z]/g) || []).length / text.length * 0.50 +
+          words.filter(w => URGENT_W.includes(w)).length / N * 0.80
+        );
+
+        // ── 2. Sentiment ──
+        const POS_W = ['love','happy','beautiful','amazing','wonderful','excited','joy','peace','grateful','thank','good','great','nice','warm','safe','hope','light','laugh','smile','yes','awesome','perfect','proud','care','free','alive','bright','strong'];
+        const NEG_W = ['hate','sad','angry','terrible','awful','horrible','bad','dead','die','hurt','fear','dark','wrong','fail','lost','broken','pain','alone','empty','tired','sick','cry','worse','worst','cold','stuck','trapped','dread','miss'];
+        const posHits = words.filter(w => POS_W.includes(w)).length;
+        const negHits = words.filter(w => NEG_W.includes(w)).length;
+        const rawSentiment = (posHits === 0 && negHits === 0) ? 0
+          : Math.max(-1, Math.min(1, (posHits - negHits) / Math.sqrt(N)));
+
+        // ── 3. Topic tags ──
+        const tag = {
+          build:  words.some(w => ['code','build','work','project','plan','design','make','create','fix','run','test','ship','write','finish','done','goal','task','deploy'].includes(w)),
+          love:   words.some(w => ['love','kiss','hold','touch','together','heart','soul','forever','always','darling','close','longing','yours','mine'].includes(w)),
+          grief:  words.some(w => ['loss','gone','death','mourn','grief','hollow','empty','forget','miss','alone','widow','ache'].includes(w)),
+          money:  words.some(w => ['money','pay','cost','rent','bill','debt','cash','income','broke','afford','price','buy','sell','job','salary'].includes(w)),
+          health: words.some(w => ['sick','hurt','pain','tired','sleep','eat','doctor','hospital','anxiety','depression','breath','rest','injury','ill'].includes(w)),
+        };
+
+        // ── 4. EMA-smooth signals (prevents one-message spikes) ──
+        liSmUrgency   = liSmUrgency   * LI_EMA + rawUrgency   * (1 - LI_EMA);
+        liSmSentiment = liSmSentiment * LI_EMA + rawSentiment * (1 - LI_EMA);
+
+        // ── 5. Apply slew-limited nudges to chScene ──
+        const nudge = (v, dir, str) => Math.max(0, Math.min(1, v + dir * Math.min(1, str) * LI_NUDGE));
+        const sc = chScene;
+
+        // Sentiment → warmth / tension
+        if (liSmSentiment !== 0) {
+          const s = Math.abs(liSmSentiment);
+          sc.warmth  = nudge(sc.warmth,  liSmSentiment > 0 ?  1 : -1, s * 0.70);
+          sc.tension = nudge(sc.tension, liSmSentiment > 0 ? -1 :  1, s * 0.50);
+        }
+        // Urgency → motion up, clarity down
+        if (liSmUrgency > 0.05) {
+          sc.motion  = nudge(sc.motion,   1, liSmUrgency * 0.60);
+          sc.clarity = nudge(sc.clarity, -1, liSmUrgency * 0.30);
+        }
+        // Topic biases (additive, each tag stacks independently)
+        if (tag.grief)  { sc.tension = nudge(sc.tension,  1, 0.50); sc.warmth  = nudge(sc.warmth,  -1, 0.30); }
+        if (tag.love)   { sc.warmth  = nudge(sc.warmth,   1, 0.60); sc.tension = nudge(sc.tension, -1, 0.25); }
+        if (tag.build)  { sc.clarity = nudge(sc.clarity,  1, 0.40); sc.motion  = nudge(sc.motion,   1, 0.30); }
+        if (tag.money)  { sc.tension = nudge(sc.tension,  1, 0.30); }
+        if (tag.health) { sc.tension = nudge(sc.tension,  1, 0.20); sc.clarity = nudge(sc.clarity, -1, 0.20); }
+
+        console.log(`[LANG-IN] urgency=${liSmUrgency.toFixed(2)} sentiment=${liSmSentiment.toFixed(2)}`,
+          Object.entries(tag).filter(([, v]) => v).map(([k]) => k).join(',') || 'no-tags',
+          `→ motion=${sc.motion.toFixed(2)} warmth=${sc.warmth.toFixed(2)} tension=${sc.tension.toFixed(2)} clarity=${sc.clarity.toFixed(2)}`);
       }
 
       function scStart() {
