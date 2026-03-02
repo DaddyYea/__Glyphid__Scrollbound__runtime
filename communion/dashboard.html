@@ -5796,6 +5796,8 @@
         chordChangeBars:  4,     // 2 or 4 — bars per chord change
         hatRate:         '1/16', // '1/16' or '1/32' — hat density mode
         tripletFillBars:  2,     // triplet fill every N bars (law: max 2)
+        noveltyLeader:    null,  // 'drums'|'harm'|'lead'|null — one citizen leads per bar
+        surpriseAccum:    0.0,   // accumulated surprise spend; reset each bar
       };
 
       // Smoothly evolve scene state each 8-bar cycle
@@ -5833,6 +5835,48 @@
       };
 
       let _chScenePanelDirty = false;
+
+      // ── BRAINSTEM stability gate ──
+      // Called at start of every bar tick. Enforces floor constraint: when clarity is low
+      // no module may spend novelty budget — prevents musical chaos under stress.
+      function scBrainstemClamp() {
+        if (chScene.clarity < 0.4) {
+          // Hard clamp — all citizens in hold, no novelty permitted
+          chScene.noveltyLeader  = null;
+          chScene.surpriseAccum  = 0;
+          chScene.surpriseBudget = 0;
+          chScene.chordChangeBars = Math.max(chScene.chordChangeBars, 4); // freeze at slow rate
+          chScene.hatRate = '1/16'; // pull back to base hat density
+        } else {
+          // Gradually refill surprise budget toward scene-driven cap (0.15/bar)
+          const target = Math.min(2, Math.round(1 + chScene.density));
+          chScene.surpriseBudget = Math.min(target, chScene.surpriseBudget + 0.15);
+          chScene.surpriseAccum  = Math.max(0, chScene.surpriseAccum - chScene.surpriseBudget);
+        }
+      }
+
+      // ── Novelty Leader Law ──
+      // One module per bar may introduce novelty. Others output skeleton-only.
+      // Weighted by SceneState: density→drums, dream→harm, dirt×clarity→lead.
+      // Returns nothing; sets chScene.noveltyLeader in place.
+      function chSelectNoveltyLeader() {
+        const sc = chScene;
+        // Gate: brainstem already suppressed or budget too low
+        if (sc.clarity < 0.4 || sc.surpriseBudget < 0.5) {
+          sc.noveltyLeader = null;
+          return;
+        }
+        const wDrums = sc.density;           // motion proxy — more density → drums lead
+        const wHarm  = sc.dream;             // warmth proxy — more dream → pads lead
+        const wLead  = sc.dirt * sc.clarity; // expressiveness — dirt+clarity → lead leads
+        const total  = wDrums + wHarm + wLead;
+        if (total < 0.1) { sc.noveltyLeader = null; return; }
+        const r = Math.random() * total;
+        if (r < wDrums)              sc.noveltyLeader = 'drums';
+        else if (r < wDrums + wHarm) sc.noveltyLeader = 'harm';
+        else                          sc.noveltyLeader = 'lead';
+        sc.surpriseAccum = 0; // reset accumulator at bar start
+      }
 
       // ── Drone audio context ──
       let scCtx = null, scGain = null;
@@ -6240,6 +6284,19 @@
           }
         }
 
+        // ── Skeleton mode: drums not the novelty leader — strip everything above anchors ──
+        // Mandatory anchors (kick 0,16 / snare 8,24 / sub mirrors) and basic hats survive.
+        // All section fills, ghost kicks, perc, and ride are stripped.
+        if (sc.noveltyLeader !== null && sc.noveltyLeader !== 'drums') {
+          // Thin hats by ~30% on non-beat positions for some breath
+          for (let s = 0; s < DR_STEPS; s++) {
+            if (drPattern[chhi][s] > 0 && s % 8 !== 0 && Math.random() < 0.3) drPattern[chhi][s] = 0;
+          }
+          drRenderGrid();
+          console.log(`[SCORE] drums: skeleton (leader=${sc.noveltyLeader})`);
+          return;
+        }
+
         // Section-driven hat groove variation (accent pattern, not density)
         if (section === 'breakdown') {
           // Sparse — thin out the hat stream heavily
@@ -6348,10 +6405,30 @@
 
       // scLeadNotes stores {pitch, start, dur, vel} for scheduling by the loop
       let scLeadNotes = [];
+      let scLastChordPlan = []; // saved pad-note array — reused by harm skeleton mode
+      let scLeadMotifSeed = []; // saved lead-note array — reused by lead skeleton mode
 
       function scGeneratePianoPattern(section) {
         const def = SECTION_DEFS[section];
         if (!def) return;
+
+        // ── Skeleton mode: harm not the novelty leader — reuse last chord plan ──
+        if (chScene.noveltyLeader !== null && chScene.noveltyLeader !== 'harm' && scLastChordPlan.length > 0) {
+          // Slight velocity humanization so it doesn't sound literally identical
+          tracks.alois = scLastChordPlan.map(n => ({
+            ...n,
+            vel: Math.max(25, Math.min(110, n.vel + Math.round((Math.random() - 0.5) * 12))),
+          }));
+          tracks.jason = [];
+          tracks.arp   = [];
+          // Lead skeleton: also reuse seed
+          if (scLeadMotifSeed.length > 0) {
+            scLeadNotes = scLeadMotifSeed.map(n => ({ ...n }));
+          }
+          prDraw();
+          return;
+        }
+
         const scale = activeMoodScale?.intervals || SC_SCALES.minor;
         const rootPc = activeMoodScale?.rootPc ?? scRootPc;
         const beats = loopBars * beatsPerBar;
@@ -6508,6 +6585,7 @@
         // beats as the sub kick, creating an audibly identical repeating bass sound.
         // Re-enable when 808 samples are wired up with proper timing design.
 
+        scLastChordPlan = [...padNotes]; // save for harm skeleton mode
         tracks.alois = padNotes;
         tracks.jason = [];
         tracks.arp   = [];        // reserved — not used
@@ -6546,7 +6624,13 @@
           }
           if (melNotes.length > 0) console.log(`[SCORE] melody: ${melNotes.length} notes from "${melFrag.frag.label}"`);
         }
-        scLeadNotes = melNotes;
+        // Lead skeleton: if not leading and a seed exists, reuse it; else save new motif
+        if (chScene.noveltyLeader !== null && chScene.noveltyLeader !== 'lead' && scLeadMotifSeed.length > 0) {
+          scLeadNotes = scLeadMotifSeed.map(n => ({ ...n }));
+        } else {
+          scLeadNotes = melNotes;
+          if (melNotes.length > 0) scLeadMotifSeed = [...melNotes]; // persist new motif as seed
+        }
         prDraw();
       }
 
@@ -6635,6 +6719,10 @@
           if (Math.abs(currentMs - msPerBar) > 50) { scStartBarClock(); return; }
           scBarCount++;
           scSectionBar = (scSectionBar + 1) % 8;
+
+          // BRAINSTEM gate + novelty leader — must run first, before any generators
+          scBrainstemClamp();
+          chSelectNoveltyLeader();
 
           // Triplet fill: every 2 bars (law: triplet_fill_windows_per_2_bars >= 1)
           if (scBarCount % chScene.tripletFillBars === 0) {
