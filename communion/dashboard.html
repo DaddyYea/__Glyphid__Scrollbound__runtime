@@ -151,7 +151,7 @@
 
     /* ── Sound settings panel ── */
     #soundWrap { flex-shrink: 0; height: 0; overflow: hidden; transition: height 0.22s ease; }
-    #soundWrap.open { height: 178px; border-top: 1px solid #1a2030; }
+    #soundWrap.open { height: 210px; border-top: 1px solid #1a2030; }
 
     /* ── Preset bank panel ── */
     #presetWrap { flex-shrink: 0; height: 0; overflow: hidden; transition: height 0.22s ease; }
@@ -3679,15 +3679,16 @@
       // ── Instrument / FX settings ──
       const pluckSettings = {
         fmRatio: 3.5, fmBright: 1.0, decay: 0.55,
-        drive: 0.0, mangle: 0.0, delaySend: 0.0, reverbSend: 0.08,
+        drive: 0.0, mangle: 0.0, delaySend: 0.28, reverbSend: 0.18,
       };
       const padSettings = {
-        detune: 10, filterCutoff: 2200, filterQ: 0.7,
-        attack: 0.12, release: 0.10, reverbSend: 0.18,
+        detune: 12, filterCutoff: 1800, filterQ: 1.4,
+        attack: 0.18, release: 0.45, reverbSend: 0.55,
+        lfoRate: 0.35, lfoDepth: 320,  // filter LFO: Hz/s (rate), Hz range (depth)
       };
       const fxSettings = {
-        revSize: 1.4, revDecay: 1.8, delayFeedback: 0.18,
-        delayReturn: 0.18, compThreshold: -18, masterVol: 0.72,
+        revSize: 2.4, revDecay: 5.0, delayFeedback: 0.34,
+        delayReturn: 0.22, compThreshold: -18, masterVol: 0.72,
       };
 
       let activeMoodScale = null;    // { rootPc, intervals, color } | null
@@ -4072,7 +4073,21 @@
         filter.Q.value = ps.filterQ;
         filter.frequency.setValueAtTime(140, t0);
         filter.frequency.linearRampToValueAtTime(ps.filterCutoff, t0 + ps.attack * 1.5);
-        filter.frequency.exponentialRampToValueAtTime(ps.filterCutoff * 0.38, t0 + durS * 0.75);
+        filter.frequency.exponentialRampToValueAtTime(ps.filterCutoff * 0.42, t0 + durS * 0.78);
+
+        // LFO — sinusoidal filter cutoff modulation for pad movement
+        const endT = t0 + durS + ps.release + 0.1;
+        if (ps.lfoDepth > 0 && ps.lfoRate > 0) {
+          const lfo = ctx.createOscillator();
+          lfo.type = 'sine';
+          lfo.frequency.value = ps.lfoRate;
+          const lfoAmt = ctx.createGain();
+          lfoAmt.gain.value = ps.lfoDepth;
+          lfo.connect(lfoAmt);
+          lfoAmt.connect(filter.frequency);
+          lfo.start(t0);
+          lfo.stop(endT);
+        }
 
         // Amp envelope
         const ampEnv = ctx.createGain();
@@ -4085,12 +4100,11 @@
         filter.connect(ampEnv);
 
         // Routing: mostly reverb, thin dry presence
-        const dA  = ctx.createGain(); dA.gain.value  = 0.22;
+        const dA  = ctx.createGain(); dA.gain.value  = 0.28;
         const rvA = ctx.createGain(); rvA.gain.value = ps.reverbSend;
         ampEnv.connect(dA);  dA.connect(prDryBus);
         ampEnv.connect(rvA); rvA.connect(prReverbBus);
 
-        const endT = t0 + durS + ps.release + 0.1;
         oscs.forEach(o => { o.start(t0); o.stop(endT); });
       }
 
@@ -4873,7 +4887,7 @@
         const wrap = document.getElementById('soundWrap');
         if (!wrap) return;
 
-        // Helper: one slider row
+        // Helper: one slider row — val computed from live settings, always in sync
         const row = (id, label, min, max, step, val) =>
           `<div class="synth-row">
             <span class="synth-label">${label}</span>
@@ -4881,38 +4895,45 @@
             <span class="synth-val" id="${id}V">${val}</span>
           </div>`;
 
+        const R = (v, d = 0) => +v.toFixed(d); // clean rounding
+        const ps = pluckSettings, pd = padSettings, fx = fxSettings;
+
         wrap.innerHTML = `<div class="sound-panel-inner">
           <div class="synth-col">
             <div class="synth-col-title" style="color:#7eb8da">◆ PLUCK</div>
-            ${row('spFmRatio',  'FM RATIO',  1,   8,    0.1,  3.5)}
-            ${row('spFmBright', 'BRIGHT',    0,   100,  1,    100)}
-            ${row('spDecay',    'DECAY',     0,   100,  1,    55)}
-            ${row('spDrive',    'DRIVE',     0,   100,  1,    0)}
-            ${row('spMangle',   'MANGLE',    0,   100,  1,    0)}
-            ${row('spDlySend',  'DELAY →',   0,   100,  1,    28)}
-            ${row('spRevSend',  'REVERB →',  0,   100,  1,    18)}
+            ${row('spFmRatio',  'FM RATIO',  1,   8,    0.1,  R(ps.fmRatio, 1))}
+            ${row('spFmBright', 'BRIGHT',    0,   100,  1,    R(ps.fmBright * 100))}
+            ${row('spDecay',    'DECAY',     0,   100,  1,    R(ps.decay * 100))}
+            ${row('spDrive',    'DRIVE',     0,   100,  1,    R(ps.drive * 100))}
+            ${row('spMangle',   'MANGLE',    0,   100,  1,    R(ps.mangle * 100))}
+            ${row('spDlySend',  'DELAY →',   0,   100,  1,    R(ps.delaySend * 100))}
+            ${row('spRevSend',  'REVERB →',  0,   100,  1,    R(ps.reverbSend * 100))}
           </div>
           <div class="synth-col">
             <div class="synth-col-title" style="color:#c47eda">◆ PAD</div>
-            ${row('sdDetune',   'DETUNE',    0,   50,   1,    10)}
-            ${row('sdCutoff',   'CUTOFF',    200, 8000, 50,   2400)}
-            ${row('sdReso',     'RESO',      1,   80,   1,    22)}
-            ${row('sdAttack',   'ATTACK ms', 20,  800,  5,    140)}
-            ${row('sdRelease',  'RELEASE ms',100, 2000, 50,   380)}
-            ${row('sdRevSend',  'REVERB →',  0,   100,  1,    85)}
+            ${row('sdDetune',   'DETUNE',    0,   50,   1,    R(pd.detune))}
+            ${row('sdCutoff',   'CUTOFF',    200, 8000, 50,   R(pd.filterCutoff))}
+            ${row('sdReso',     'RESO',      1,   80,   1,    R(pd.filterQ * 10))}
+            ${row('sdAttack',   'ATTACK ms', 20,  800,  5,    R(pd.attack * 1000))}
+            ${row('sdRelease',  'RELEASE ms',100, 2000, 50,   R(pd.release * 1000))}
+            ${row('sdRevSend',  'REVERB →',  0,   100,  1,    R(pd.reverbSend * 100))}
+            ${row('sdLfoRate',  'LFO RATE',  0,   4,    0.05, R(pd.lfoRate, 2))}
+            ${row('sdLfoDepth', 'LFO DEPTH', 0,   2000, 10,   R(pd.lfoDepth))}
           </div>
           <div class="synth-col">
             <div class="synth-col-title" style="color:#7ec87e">◆ FX</div>
-            ${row('sfRevSize',  'REV SIZE',  0.5, 6,    0.1,  2.4)}
-            ${row('sfRevDecay', 'REV DECAY', 1,   12,   0.5,  5.0)}
-            ${row('sfDlyFb',    'DLY FB',    0,   70,   1,    34)}
-            ${row('sfDlyRtn',   'DLY RTN',   0,   100,  1,    22)}
-            ${row('sfComp',     'COMP THR',  -40, 0,    1,    -18)}
-            ${row('sfMaster',   'MASTER',    0,   100,  1,    72)}
+            ${row('sfRevSize',  'REV SIZE',  0.5, 6,    0.1,  R(fx.revSize, 1))}
+            ${row('sfRevDecay', 'REV DECAY', 1,   12,   0.5,  R(fx.revDecay, 1))}
+            ${row('sfDlyFb',    'DLY FB',    0,   70,   1,    R(fx.delayFeedback * 100))}
+            ${row('sfDlyRtn',   'DLY RTN',   0,   100,  1,    R(fx.delayReturn * 100))}
+            ${row('sfComp',     'COMP THR',  -40, 0,    1,    R(fx.compThreshold))}
+            ${row('sfMaster',   'MASTER',    0,   100,  1,    R(fx.masterVol * 100))}
           </div>
         </div>`;
 
-        // Wire all sliders — update settings objects and live audio nodes
+        // Wire slider → settings update + fire once immediately to guarantee sync.
+        // The immediate call ensures settings always match what the slider shows,
+        // even if the panel was never opened or the user never dragged a slider.
         const wire = (id, fn) => {
           const el = document.getElementById(id);
           if (!el) return;
@@ -4921,6 +4942,7 @@
             document.getElementById(id + 'V').textContent = v;
             fn(v);
           });
+          fn(parseFloat(el.value)); // sync immediately — no desync ever
         };
 
         // Pluck
@@ -4932,21 +4954,23 @@
         wire('spDlySend',  v => pluckSettings.delaySend  = v / 100);
         wire('spRevSend',  v => pluckSettings.reverbSend = v / 100);
 
-        // Pad
-        wire('sdDetune',   v => padSettings.detune      = v);
-        wire('sdCutoff',   v => padSettings.filterCutoff= v);
+        // Pad (including new LFO params)
+        wire('sdDetune',   v => padSettings.detune       = v);
+        wire('sdCutoff',   v => padSettings.filterCutoff = v);
         wire('sdReso',     v => padSettings.filterQ      = v / 10);
         wire('sdAttack',   v => padSettings.attack       = v / 1000);
         wire('sdRelease',  v => padSettings.release      = v / 1000);
         wire('sdRevSend',  v => padSettings.reverbSend   = v / 100);
+        wire('sdLfoRate',  v => padSettings.lfoRate      = v);
+        wire('sdLfoDepth', v => padSettings.lfoDepth     = v);
 
-        // FX — these update live audio nodes immediately
+        // FX — also update live audio nodes immediately
         wire('sfRevSize',  v => { fxSettings.revSize    = v; rebuildReverb(); });
         wire('sfRevDecay', v => { fxSettings.revDecay   = v; rebuildReverb(); });
-        wire('sfDlyFb',    v => { fxSettings.delayFeedback = v / 100; if (prDelayFb) prDelayFb.gain.setTargetAtTime(v / 100, prAudioCtx.currentTime, 0.05); });
-        wire('sfDlyRtn',   v => { fxSettings.delayReturn   = v / 100; if (prDelReturn) prDelReturn.gain.setTargetAtTime(v / 100, prAudioCtx.currentTime, 0.05); });
-        wire('sfComp',     v => { fxSettings.compThreshold = v; if (prCompressor) prCompressor.threshold.setTargetAtTime(v, prAudioCtx.currentTime, 0.05); });
-        wire('sfMaster',   v => { fxSettings.masterVol     = v / 100; if (prMasterGain) prMasterGain.gain.setTargetAtTime(v / 100, prAudioCtx.currentTime, 0.05); });
+        wire('sfDlyFb',    v => { fxSettings.delayFeedback = v / 100; if (prDelayFb) prDelayFb.gain.setTargetAtTime(v / 100, prAudioCtx?.currentTime ?? 0, 0.05); });
+        wire('sfDlyRtn',   v => { fxSettings.delayReturn   = v / 100; if (prDelReturn) prDelReturn.gain.setTargetAtTime(v / 100, prAudioCtx?.currentTime ?? 0, 0.05); });
+        wire('sfComp',     v => { fxSettings.compThreshold = v; if (prCompressor) prCompressor.threshold.setTargetAtTime(v, prAudioCtx?.currentTime ?? 0, 0.05); });
+        wire('sfMaster',   v => { fxSettings.masterVol     = v / 100; if (prMasterGain) prMasterGain.gain.setTargetAtTime(v / 100, prAudioCtx?.currentTime ?? 0, 0.05); });
       }
 
       // ═══════════════════════════════════════════════════════
@@ -6347,8 +6371,10 @@
               group.sort((a, b) => b.pitch - a.pitch);
               for (const n of group.slice(0, 3)) {
                 const start = n.absStart;
-                // Scale-snap to active key — keeps fragment in-key regardless of mode/mood
-                let pitch = Math.max(64, Math.min(88, n.pitch)); // 64=E4 — keep pad clear of bass register
+                // Transpose to active key while preserving chord voicing — use octave shift not clamp
+                let pitch = n.pitch;
+                while (pitch < 60) pitch += 12;   // bring up to mid-register (C4+)
+                while (pitch > 84) pitch -= 12;   // bring down to max G5 — keep in pad register
                 const pc = ((pitch % 12) + 12) % 12;
                 if (!scalePCs.includes(pc)) {
                   let bestPc = scalePCs[0], bestDist = 99;
@@ -6356,7 +6382,7 @@
                   const diff = ((bestPc - pc + 12) % 12);
                   pitch += diff <= 6 ? diff : diff - 12;
                 }
-                pitch = Math.max(60, pitch); // re-clamp after scale snap
+                pitch = Math.max(57, Math.min(88, pitch)); // clamp to safe range after snap
                 padNotes.push({ pitch, start, dur: Math.min(n.dur, spacing * 0.88, loopBeats - start - 0.05), vel: n.vel });
               }
             }
@@ -6399,8 +6425,8 @@
             voices.sort((a, b) => a - b);
             const noteDur = padSpacing * 0.88; // sustain to near-next chord, no rhythmic stab feel
             const vel = Math.max(35, def.velLo + Math.floor(Math.random() * (def.velHi - def.velLo)));
-            // Top 2 voices (highest pitches) — stays in mid/upper register, not bass
-            voices.slice(-2).forEach((pitch, vi) => {
+            // Top 3 voices — root omitted (bass covers it), inner 3 make a full audible chord
+            voices.slice(-3).forEach((pitch, vi) => {
               const start = chordBeat + vi * STAGGER;
               if (start >= beats) return;
               padNotes.push({ pitch, start, dur: noteDur, vel });
