@@ -4734,6 +4734,7 @@
       let drNextBeat = 0;       // Web Audio timestamp of next step
       let drLookahead = 0.08;   // seconds to look ahead when scheduling
       const drSamples = {};     // trackId → AudioBuffer (null = use synthesis fallback)
+      const drSampleMeta = {};  // trackId → { semitone: number|null, isLoop: boolean }
       let drSamplesLoading = false; // guard against concurrent loads
       let drScheduleTick = 25;  // ms between scheduler ticks
       let _drNoiseBuffer = null; // shared noise buffer for hi-hat synthesis (lazy-initialized)
@@ -4937,21 +4938,25 @@
         src.start(t);
       }
 
-      // Loop sample — plays once per pattern cycle, fades out at end, stops on drStop()
-      function drPlaySampleLoop(buffer, t, vel, ctx, out, dur) {
+      // Loop sample — plays once per 4-bar cycle, one pass only (no src.loop)
+      // semitoneShift: transpose from sample's native pitch to current key (0 = no shift)
+      function drPlaySampleLoop(buffer, t, vel, ctx, out, dur, semitoneShift) {
         const src = ctx.createBufferSource();
         src.buffer = buffer;
-        src.loop = true;
+        src.playbackRate.value = Math.pow(2, (semitoneShift || 0) / 12);
+        // playbackRate also scales duration — adjust cap accordingly
+        const effectiveDur = buffer.duration / src.playbackRate.value;
+        const playDur = Math.min(effectiveDur, dur);
         const g = ctx.createGain();
         const v = vel / 127;
         g.gain.setValueAtTime(v, t);
-        g.gain.setValueAtTime(v, t + dur - 0.05);       // hold then fade
-        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        g.gain.setValueAtTime(v, t + playDur - 0.05);
+        g.gain.exponentialRampToValueAtTime(0.001, t + playDur);
         src.connect(g); g.connect(out);
         _drLoopSrcs.add(src);
         src.onended = () => _drLoopSrcs.delete(src);
         src.start(t);
-        src.stop(t + dur + 0.01);
+        src.stop(t + playDur + 0.01);
       }
 
       function drTrigger(trackId, t, vel) {
@@ -5004,16 +5009,22 @@
 
         const ctx = forceCtx || prAudioCtx || drEnsureCtx();
         let loaded = 0;
-        for (const [trackKey, filename] of entries) {
+        for (const [trackKey, entry] of entries) {
+          // Manifest entries are now { file, semitone, isLoop } objects
+          const filename = (typeof entry === 'string') ? entry : entry.file;
+          const semitone = (typeof entry === 'object') ? entry.semitone : null;
+          const isLoop   = (typeof entry === 'object') ? entry.isLoop   : false;
           try {
-            const encodedPath = (filename).split('/').map(encodeURIComponent).join('/');
+            const encodedPath = filename.split('/').map(encodeURIComponent).join('/');
             const r = await fetch(`/sample-files/${encodedPath}`);
             if (!r.ok) { console.warn(`[SAMPLES] ${filename}: HTTP ${r.status}`); continue; }
             const ab = await r.arrayBuffer();
             drSamples[trackKey] = await ctx.decodeAudioData(ab);
+            drSampleMeta[trackKey] = { semitone, isLoop };
             loaded++;
             drMarkSampleLoaded(trackKey, filename);
-            console.log(`[SAMPLES] ✓ ${trackKey} ← ${filename.split('/').pop()}`);
+            const pitchStr = semitone !== null ? ` pitch=${['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][semitone]}` : '';
+            console.log(`[SAMPLES] ✓ ${trackKey} ← ${filename.split('/').pop()}${pitchStr}${isLoop ? ' [loop]' : ''}`);
           } catch (e) {
             console.warn(`[SAMPLES] Failed to load ${filename}:`, e);
           }
@@ -5052,12 +5063,20 @@
             const vel = drPattern[ti][step];
             if (vel > 0) drTrigger(tr.id, t, Math.round(vel * drVol[ti]));
           });
-          // Loop-mode sub sample: fire once every 4 bars (2 drum cycles) to match piano loop
+          // Loop-mode sub sample: fires occasionally (every ~8–16 drum cycles) — not every pass
           if (step === 0) {
             _drPatternCycle++;
-            if (_drPatternCycle % 2 === 1 && drSamples['sub']?.duration > 2.0) {
+            // Fire at multiples of 8 cycles, with 50% probability so timing isn't mechanical.
+            // At 120 BPM this averages ~once per 32 bars — a sparse texture/transition element.
+            if (_drPatternCycle % 8 === 1 && Math.random() < 0.5 && drSamples['sub']?.duration > 2.0) {
               const lCtx = prAudioCtx || drAudioCtx;
-              if (lCtx) drPlaySampleLoop(drSamples['sub'], t, 100, lCtx, drGetOut(), DR_STEPS * stepS * 2);
+              if (lCtx) {
+                // Transpose to current root: playbackRate = 2^(semitoneShift/12)
+                const meta = drSampleMeta['sub'];
+                const nativeSemi = (meta?.semitone != null) ? meta.semitone : 0; // default C
+                const shift = ((typeof scRootPc !== 'undefined' ? scRootPc : 0) - nativeSemi + 12) % 12;
+                drPlaySampleLoop(drSamples['sub'], t, 100, lCtx, drGetOut(), DR_STEPS * stepS * 2, shift);
+              }
             }
           }
           // Advance playhead in DOM (next animation frame)

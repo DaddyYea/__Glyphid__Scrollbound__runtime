@@ -1165,7 +1165,26 @@ async function main() {
       let files: string[] = [];
       try { files = readdirSync(samplesDir, { recursive: true }) as string[]; } catch {}
 
-      const manifest: Record<string, string> = {};
+      // Parse pitch letter from filename convention: "(C)", "(F#)", "(Bb)" etc.
+      const NOTE_SEMI: Record<string, number> = {
+        'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'F':5,
+        'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11,
+      };
+      function parseSemitone(name: string): number | null {
+        const m = name.match(/\(([A-G][#b]?)\)/i);
+        if (!m) return null;
+        const raw = m[1];
+        const norm = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+        return NOTE_SEMI[norm] ?? null;
+      }
+
+      // Loops and shots preference
+      const LOOP_RE = /\bloop[s]?\b|\b\d+[\s_\-]?bpm\b|\b\d+[\s_\-]?bar[s]?\b/i;
+      const SHOT_RE = /\bshot[s]?\b|\bone[\s._\-]?shot[s]?\b/i;
+      type Candidate = { path: string; isShot: boolean; isLoop: boolean };
+      const candidates: Record<string, Candidate[]> = {};
+      for (const track of Object.keys(TRACK_PATTERNS)) candidates[track] = [];
+
       for (const relPath of files) {
         const parts    = relPath.replace(/\\/g, '/').split('/');
         const basename = parts[parts.length - 1] || '';
@@ -1173,14 +1192,30 @@ async function main() {
         const ext = basename.slice(basename.lastIndexOf('.')).toLowerCase();
         if (!AUDIO_EXTS.has(ext)) continue;
         const normalRel = relPath.replace(/\\/g, '/');
+        const isLoop = LOOP_RE.test(basename) || LOOP_RE.test(folder);
+        const isShot = SHOT_RE.test(basename) || SHOT_RE.test(folder);
         for (const [track, patterns] of Object.entries(TRACK_PATTERNS)) {
-          if (manifest[track]) continue; // first match wins
-          // Test against both the filename AND the parent folder name
           if (patterns.some(p => p.test(basename) || p.test(folder))) {
-            manifest[track] = normalRel;
-            break;
+            candidates[track].push({ path: normalRel, isShot, isLoop });
           }
         }
+      }
+
+      const manifest: Record<string, { file: string; semitone: number | null; isLoop: boolean }> = {};
+      for (const [track, cands] of Object.entries(candidates)) {
+        if (cands.length === 0) continue;
+        cands.sort((a, b) => {
+          if (a.isShot !== b.isShot) return a.isShot ? -1 : 1;
+          if (a.isLoop !== b.isLoop) return a.isLoop ? 1 : -1;
+          return a.path.localeCompare(b.path);
+        });
+        const best = cands.find(c => !c.isLoop) ?? cands[0];
+        const fname = best.path.split('/').pop() ?? '';
+        manifest[track] = {
+          file: best.path,
+          semitone: parseSemitone(fname),
+          isLoop: best.isLoop,
+        };
       }
 
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
