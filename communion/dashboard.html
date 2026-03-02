@@ -5117,7 +5117,7 @@
         const noise = ctx.createBufferSource(); noise.buffer = buf;
         const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = s.snap; bp.Q.value = 0.7;
         const ng = ctx.createGain();
-        ng.gain.setValueAtTime(v * 0.7, t);
+        ng.gain.setValueAtTime(v * (0.7 + scDrumTensionTexture * 0.35), t);
         ng.gain.exponentialRampToValueAtTime(0.001, t + dur);
         noise.connect(bp); bp.connect(ng); ng.connect(out);
         noise.start(t);
@@ -5764,6 +5764,23 @@
         breakdown: { detune: 8,  drive: 0.2, filterHz: 500,  filterQ: 4,  lfoRate: 0.4, lfoDepth: 80,  density: 0.08 },
       };
 
+      // ── TIMBRE base values — frozen at definition, NEVER written after this ──
+      // scUpdateTimbreFromScene() computes deltas from here, not from live settings,
+      // so EMA-smoothing never accumulates drift away from the intended baseline.
+      const TIMBRE_LEAD_BASE = Object.freeze({
+        verse:     { drive: 0.4, filterHz: 900,  filterQ: 6,  lfoRate: 0.8, lfoDepth: 200 },
+        chorus:    { drive: 0.7, filterHz: 1800, filterQ: 8,  lfoRate: 1.4, lfoDepth: 500 },
+        peak:      { drive: 1.0, filterHz: 3200, filterQ: 12, lfoRate: 2.2, lfoDepth: 900 },
+        breakdown: { drive: 0.2, filterHz: 500,  filterQ: 4,  lfoRate: 0.4, lfoDepth: 80  },
+      });
+      const TIMBRE_PAD_BASE = Object.freeze({
+        filterCutoff: 1800, filterQ: 1.4, attack: 0.18, reverbSend: 0.55,
+        lfoRate: 0.35, lfoDepth: 320,
+      });
+      const TIMBRE_PLUCK_BASE = Object.freeze({
+        drive: 0.0, mangle: 0.0, reverbSend: 0.18, fmBright: 1.0,
+      });
+
       // ── Genre definitions ──
       const SC_GENRES = {
         cloudhop: {
@@ -5986,6 +6003,7 @@
       let scLastMagnitude = 0.35; // starts at verse level
       let scHumanSpeaking = false, scAloisSpeaking = false;
       // scLowAffectCount declared above with scHorizonPlan
+      let scDrumTensionTexture = 0; // 0-1: snare noise rattle boost from tension (TIMBRE only, not velocity/pattern)
 
       // ── Volume / key ──
       let scDroneVol = 0.35, scRootPc = 0;
@@ -6905,6 +6923,7 @@
           // BRAINSTEM gate + novelty leader — must run first, before any generators
           scBrainstemClamp();
           chSelectNoveltyLeader();
+          scUpdateTimbreFromScene();   // EMA-smooth scene → pad/lead/pluck timbre before scheduling
 
           // Triplet fill: every 2 bars (law: triplet_fill_windows_per_2_bars >= 1)
           if (scBarCount % chScene.tripletFillBars === 0) {
@@ -7030,6 +7049,70 @@
           };
           scRootPc = genre.defaultRootPc;
         }
+      }
+
+      // ── TIMBRE cluster — SceneState → padSettings / pluckSettings / SC_LEAD_PROFILES ──
+      // EMA-smoothed once per bar. Reads chScene canonical fields; writes into the live
+      // settings objects so every note scheduled in that bar automatically uses new values.
+      // No jumps: EMA alphas 0.62 (fast ~2 bars) / 0.78 (mid ~4 bars) / 0.88 (slow ~8 bars).
+      function scUpdateTimbreFromScene() {
+        const sc  = chScene;
+        const cl  = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+        // EMA coefficients — different rates per perception threshold
+        const AF  = 0.62; // fast: LFO rate/depth, drive, fmBright, drum texture
+        const AM  = 0.78; // mid:  filter cutoff, filterQ, lfoDepth
+        const AS  = 0.88; // slow: reverb send, attack (room-scale changes)
+
+        // ── PAD — padSettings ──
+        const tPad = {
+          filterCutoff: cl(500  + (1 - sc.tension) * 2700, 400,  4200),  // tension → close filter
+          filterQ:      cl(0.7  + sc.tension * 3.8,        0.7,  4.5),   // tension → add resonance
+          attack:       cl(0.06 + sc.warmth  * 0.30,       0.06, 0.40),  // warmth  → softer onset
+          reverbSend:   cl(0.18 + sc.warmth  * 0.32 + (1 - sc.clarity) * 0.14, 0.18, 0.75), // wash = warmth + low-clarity
+          lfoRate:      cl(0.12 + sc.motion  * 0.95,       0.12, 1.15),  // motion  → faster LFO
+          lfoDepth:     cl(80   + sc.motion  * 520,        80,   650),   // motion  → wider sweep
+        };
+        padSettings.filterCutoff = padSettings.filterCutoff * AM + tPad.filterCutoff * (1 - AM);
+        padSettings.filterQ      = padSettings.filterQ      * AM + tPad.filterQ      * (1 - AM);
+        padSettings.attack       = padSettings.attack       * AS + tPad.attack       * (1 - AS);
+        padSettings.reverbSend   = padSettings.reverbSend   * AS + tPad.reverbSend   * (1 - AS);
+        padSettings.lfoRate      = padSettings.lfoRate      * AF + tPad.lfoRate      * (1 - AF);
+        padSettings.lfoDepth     = padSettings.lfoDepth     * AF + tPad.lfoDepth     * (1 - AF);
+
+        // ── PLUCK — pluckSettings ──
+        const tPluck = {
+          drive:      cl(sc.tension * 0.55,                              0,    0.60), // tension → grit
+          mangle:     cl(Math.max(0, sc.tension - 0.60) * 0.75,         0,    0.30), // only > 0.6 tension
+          reverbSend: cl(0.06 + sc.warmth * 0.14 + (1 - sc.clarity) * 0.12, 0.06, 0.35), // warmth/clarity
+          fmBright:   cl(0.4  + sc.motion * 1.2,                        0.4,  1.8), // motion → attack transients
+        };
+        pluckSettings.drive      = pluckSettings.drive      * AF + tPluck.drive      * (1 - AF);
+        pluckSettings.mangle     = pluckSettings.mangle     * AF + tPluck.mangle     * (1 - AF);
+        pluckSettings.reverbSend = pluckSettings.reverbSend * AS + tPluck.reverbSend * (1 - AS);
+        pluckSettings.fmBright   = pluckSettings.fmBright   * AM + tPluck.fmBright   * (1 - AM);
+
+        // ── LEAD — SC_LEAD_PROFILES[scSection] mutated in place ──
+        // Deltas are applied relative to TIMBRE_LEAD_BASE, not relative to current live value,
+        // so the EMA only smooths the transition, never drifts from the designed range.
+        const base = TIMBRE_LEAD_BASE[scSection];
+        const lp   = SC_LEAD_PROFILES[scSection];
+        if (base && lp) {
+          const tLead = {
+            drive:    cl(base.drive    + sc.tension * 0.40,                 0.1,  1.4),  // tension → more bite
+            filterHz: cl(base.filterHz * (0.45 + (1 - sc.tension) * 0.80), 280,  5000), // tension → close filter
+            filterQ:  cl(base.filterQ  * (0.55 + sc.tension * 0.65),        2,   18),   // tension → edge
+            lfoRate:  cl(base.lfoRate  * (0.5  + sc.motion  * 1.5),         0.2,  5.0), // motion  → faster worm
+            lfoDepth: cl(base.lfoDepth * (0.4  + sc.motion  * 1.2),         50,  1200), // motion  → wider sweep
+          };
+          lp.drive    = lp.drive    * AF + tLead.drive    * (1 - AF);
+          lp.filterHz = lp.filterHz * AM + tLead.filterHz * (1 - AM);
+          lp.filterQ  = lp.filterQ  * AM + tLead.filterQ  * (1 - AM);
+          lp.lfoRate  = lp.lfoRate  * AF + tLead.lfoRate  * (1 - AF);
+          lp.lfoDepth = lp.lfoDepth * AF + tLead.lfoDepth * (1 - AF);
+        }
+
+        // ── DRUMS: tension → snare rattle texture (noise gain only, no pattern/velocity changes) ──
+        scDrumTensionTexture = scDrumTensionTexture * AF + cl(sc.tension * 0.65, 0, 0.65) * (1 - AF);
       }
 
       function scStart() {
