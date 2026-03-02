@@ -6329,14 +6329,24 @@
         const bassNotes = [];
         // Shared vars — must be visible to both if/else paths AND the arp layer below.
         const scalePCs   = scale.map(deg => (rootPc + deg) % 12);
-        let spacing      = { breakdown: 8, verse: 4, chorus: 2, peak: 1.5 }[section] ?? 4;
-        // Pads are sustained wash, not rhythm — clamp to 4-beat minimum regardless of section.
-        // Dense chord hits (chorus/peak at 1.5–2 beats) sound like a repeating bass fill.
-        const padSpacing = Math.max(4, spacing);
-        let numChords    = Math.min(4, Math.floor(beats / padSpacing));
         const progPool0  = ALT_ROCK_PROGS[scaleType] || ALT_ROCK_PROGS.minor;
         let prog         = progPool0[Math.floor(Math.random() * progPool0.length)];
         let intervals    = CHORD_TYPES.min7; // overridden by procedural path
+
+        // ── Pad timing patterns (beat offsets in a 16-beat reference loop) ──
+        // Cloud hop = slow alt-rock: few chords, long sustains, natural pacing.
+        // Each sub-array is one timing layout. Picked randomly per loop.
+        const PAD_TIMING_PATTERNS = {
+          breakdown: [[0, 12], [0, 8], [0]],
+          verse:     [[0, 8, 12], [0, 6, 12], [0, 8, 14], [0, 4, 12], [0, 6, 14]],
+          chorus:    [[0, 4, 8, 12], [0, 4, 10, 14], [0, 6, 10, 14], [0, 4, 8, 14], [0, 3, 8, 12]],
+          peak:      [[0, 4, 8, 12], [0, 3, 6, 10], [0, 4, 6, 12], [0, 6, 10, 14]],
+        };
+        const patternPool = PAD_TIMING_PATTERNS[section] || PAD_TIMING_PATTERNS.verse;
+        const rawPattern  = patternPool[Math.floor(Math.random() * patternPool.length)];
+        // Scale beat offsets from 16-beat reference to actual loop length
+        const beatScale   = beats / 16;
+        const chordBeats  = rawPattern.map(b => b * beatScale);
 
         // ── Hybrid pad layer: MIDI fragment (70%) or procedural (30%) ──
         // Fragment library loaded from free-midi-chords (MIT). Falls back to procedural
@@ -6350,44 +6360,53 @@
           prLastFragLabel = frag.label; // remember for next loop — avoids back-to-back repeat
           const loopBeats = beats;
           const fragLen = frag.bars * 4; // fragment length in beats
-          // Sort by start time — multi-track MIDI arrives in track order, not time order.
-          // Sorting lets the break statement work correctly and spreads notes evenly.
           const sortedFrag = [...fragNotes].sort((a, b) => a.start - b.start);
-          // Play fragment once only — no tiling. Avoids rhythmic stab repetition within the loop.
-          const maxTiles = 1;
-          for (let tileIdx = 0; tileIdx < maxTiles; tileIdx++) {
+          // Tile if fragment is shorter than loop (e.g. 4-bar fragment in 8-bar loop)
+          const tiles = fragLen < loopBeats ? Math.floor(loopBeats / fragLen) : 1;
+
+          // Build a time→notes map for the whole (possibly tiled) region
+          const slotMap = new Map();
+          for (let tileIdx = 0; tileIdx < tiles; tileIdx++) {
             const offset = tileIdx * fragLen;
-            // Group fragment notes by quantised time slot — keep max 3 voices (top pitches = soprano voicing)
-            const slotMap = new Map();
             for (const n of sortedFrag) {
               const absStart = offset + n.start;
               if (absStart >= loopBeats) break;
-              const slot = Math.round(n.start * 4) / 4; // quantise to 16th-note slots
+              const slot = Math.round(absStart * 4) / 4; // quantise to 16th-note grid
               if (!slotMap.has(slot)) slotMap.set(slot, []);
               slotMap.get(slot).push({ ...n, absStart });
             }
-            for (const [, group] of slotMap) {
-              // Sort descending by pitch, take top 3 — soprano + inner voices, no doubling in bass register
-              group.sort((a, b) => b.pitch - a.pitch);
-              for (const n of group.slice(0, 3)) {
-                const start = n.absStart;
-                // Transpose to active key while preserving chord voicing — use octave shift not clamp
-                let pitch = n.pitch;
-                while (pitch < 60) pitch += 12;   // bring up to mid-register (C4+)
-                while (pitch > 84) pitch -= 12;   // bring down to max G5 — keep in pad register
-                const pc = ((pitch % 12) + 12) % 12;
-                if (!scalePCs.includes(pc)) {
-                  let bestPc = scalePCs[0], bestDist = 99;
-                  for (const sp of scalePCs) { let d = Math.abs(pc - sp); if (d > 6) d = 12 - d; if (d < bestDist) { bestDist = d; bestPc = sp; } }
-                  const diff = ((bestPc - pc + 12) % 12);
-                  pitch += diff <= 6 ? diff : diff - 12;
-                }
-                pitch = Math.max(57, Math.min(88, pitch)); // clamp to safe range after snap
-                padNotes.push({ pitch, start, dur: Math.min(n.dur, spacing * 0.88, loopBeats - start - 0.05), vel: n.vel });
+          }
+
+          // Sorted slot list for computing next-slot gap (drives varied note duration)
+          const slotTimes = [...slotMap.keys()].sort((a, b) => a - b);
+
+          for (let si = 0; si < slotTimes.length; si++) {
+            const slot  = slotTimes[si];
+            const group = slotMap.get(slot);
+            // Natural gap to next chord slot — pad sustains into that space
+            const nextSlot = si < slotTimes.length - 1 ? slotTimes[si + 1] : loopBeats;
+            const gap = nextSlot - slot;
+            const holdFrac = 0.72 + Math.random() * 0.24; // 72–96% of gap
+
+            // Top 3 voices (soprano voicing) — fewer in sparse sections
+            const maxVoices = ['chorus', 'peak'].includes(section) ? 3 : 2;
+            group.sort((a, b) => b.pitch - a.pitch);
+            for (const n of group.slice(0, maxVoices)) {
+              let pitch = n.pitch;
+              while (pitch < 60) pitch += 12;
+              while (pitch > 84) pitch -= 12;
+              const pc = ((pitch % 12) + 12) % 12;
+              if (!scalePCs.includes(pc)) {
+                let bestPc = scalePCs[0], bestDist = 99;
+                for (const sp of scalePCs) { let d = Math.abs(pc - sp); if (d > 6) d = 12 - d; if (d < bestDist) { bestDist = d; bestPc = sp; } }
+                const diff = ((bestPc - pc + 12) % 12);
+                pitch += diff <= 6 ? diff : diff - 12;
               }
+              pitch = Math.max(57, Math.min(88, pitch));
+              padNotes.push({ pitch, start: slot, dur: Math.max(0.25, gap * holdFrac), vel: n.vel });
             }
           }
-          console.log(`[SCORE] fragment: "${frag.label}" [${section}]`);
+          console.log(`[SCORE] fragment: "${frag.label}" [${section}] tiles:${tiles}`);
         } else {
           // ── Procedural path: algorithmic alt-rock progression ──
           // spacing / numChords / prog already set in outer scope; only intervals changes.
@@ -6399,19 +6418,25 @@
           };
           const chordType = (SECTION_CHORDS[section] || SECTION_CHORDS.verse)[Math.floor(Math.random() * 3)];
           intervals = CHORD_TYPES[chordType] || CHORD_TYPES.min7;
-          const STAGGER   = 0.02;
+          const STAGGER   = 0.025;
 
-          for (let ci = 0; ci < numChords; ci++) {
-            const chordBeat = ci * padSpacing;
+          for (let ci = 0; ci < chordBeats.length; ci++) {
+            const chordBeat = chordBeats[ci];
             if (chordBeat >= beats) break;
             const chordRoot = rootMidi + prog[ci % prog.length];
+
+            // Duration: time until next chord × varied hold fraction (0.72–0.96)
+            const nextBeat  = ci < chordBeats.length - 1 ? chordBeats[ci + 1] : beats;
+            const gap        = nextBeat - chordBeat;
+            const holdFrac   = 0.72 + Math.random() * 0.24;
+            const noteDur    = gap * holdFrac;
 
             const voices = [];
             intervals.forEach(semis => {
               let pitch = chordRoot + semis;
               while (pitch > 72) pitch -= 12;
-              while (pitch < 64) pitch += 12;  // keep pads above bass register (E4+)
-              pitch = Math.max(64, Math.min(88, pitch));
+              while (pitch < 60) pitch += 12;
+              pitch = Math.max(60, Math.min(88, pitch));
               const pc = ((pitch % 12) + 12) % 12;
               if (!scalePCs.includes(pc)) {
                 let bestPc = scalePCs[0], bestDist = 99;
@@ -6419,19 +6444,18 @@
                 const diff = ((bestPc - pc + 12) % 12);
                 pitch += diff <= 6 ? diff : diff - 12;
               }
-              pitch = Math.max(60, pitch); // re-clamp after scale snap — snap can shift down 5 semitones
+              pitch = Math.max(57, pitch);
               voices.push(pitch);
             });
             voices.sort((a, b) => a - b);
-            const noteDur = padSpacing * 0.88; // sustain to near-next chord, no rhythmic stab feel
+            // Voices to play: 2 in breakdown/verse, 3 in chorus/peak — fuller chords in busier sections
+            const numVoices = ['chorus', 'peak'].includes(section) ? 3 : 2;
             const vel = Math.max(35, def.velLo + Math.floor(Math.random() * (def.velHi - def.velLo)));
-            // Top 3 voices — root omitted (bass covers it), inner 3 make a full audible chord
-            voices.slice(-3).forEach((pitch, vi) => {
+            voices.slice(-numVoices).forEach((pitch, vi) => {
               const start = chordBeat + vi * STAGGER;
               if (start >= beats) return;
               padNotes.push({ pitch, start, dur: noteDur, vel });
             });
-
           }
         }
 
