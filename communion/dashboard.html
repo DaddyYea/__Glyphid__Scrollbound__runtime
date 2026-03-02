@@ -6388,10 +6388,8 @@
             const gap = nextSlot - slot;
             const holdFrac = 0.72 + Math.random() * 0.24; // 72–96% of gap
 
-            // Top 3 voices (soprano voicing) — fewer in sparse sections
-            const maxVoices = ['chorus', 'peak'].includes(section) ? 3 : 2;
             group.sort((a, b) => b.pitch - a.pitch);
-            for (const n of group.slice(0, maxVoices)) {
+            for (const n of group.slice(0, 3)) {
               let pitch = n.pitch;
               while (pitch < 60) pitch += 12;
               while (pitch > 84) pitch -= 12;
@@ -6448,10 +6446,8 @@
               voices.push(pitch);
             });
             voices.sort((a, b) => a - b);
-            // Voices to play: 2 in breakdown/verse, 3 in chorus/peak — fuller chords in busier sections
-            const numVoices = ['chorus', 'peak'].includes(section) ? 3 : 2;
             const vel = Math.max(35, def.velLo + Math.floor(Math.random() * (def.velHi - def.velLo)));
-            voices.slice(-numVoices).forEach((pitch, vi) => {
+            voices.slice(-3).forEach((pitch, vi) => {
               const start = chordBeat + vi * STAGGER;
               if (start >= beats) return;
               padNotes.push({ pitch, start, dur: noteDur, vel });
