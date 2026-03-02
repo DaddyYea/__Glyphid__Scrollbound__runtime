@@ -4395,6 +4395,26 @@
         return entries[entries.length - 1][0];
       }
 
+      // ── Fragment harmony helpers ───────────────────────────────────────────────
+      // Compute the starting chord degree (semitones above frag.rootPc) by examining
+      // the lowest pitch in the fragment's first note group (earliest start ± 0.25 beats).
+      // Returns null if the fragment has no notes.
+      function scFragStartDeg(frag) {
+        if (!frag.notes || frag.notes.length === 0) return null;
+        const firstStart = frag.notes.reduce((mn, n) => Math.min(mn, n.start), Infinity);
+        const firstGroup = frag.notes.filter(n => n.start <= firstStart + 0.25);
+        const lowestPitch = firstGroup.reduce((lo, n) => n.pitch < lo ? n.pitch : lo, 999);
+        const lowestPc = ((lowestPitch % 12) + 12) % 12;
+        return (lowestPc - frag.rootPc + 12) % 12;
+      }
+
+      // Query grammar for preferred next chord degree without advancing state.
+      // Pure — safe to call before deciding fragment vs procedural path.
+      function scGetTargetChordDeg() {
+        if (scChordCadenceDue) return scChordHomeDeg;
+        return scGrammarPick(scChordRootDeg);
+      }
+
       function autoComposePr(texture) {
         if (Date.now() - lastAutoCompose < 45000) return;
         lastAutoCompose = Date.now();
@@ -6004,17 +6024,42 @@
         }
       }
 
-      // Pick a random fragment matching section+mode, return notes transposed to targetRootPc.
+      // Pick a fragment matching section+mode, transposed to targetRootPc.
+      // targetDeg: grammar's preferred next chord degree (semitones above rootPc).
+      //   Scored: +1.0 exact match, +0.5 grammar-allowed neighbor, +jitter tie-breaker.
+      //   Falls back to random pick if no scoring is possible.
       // excludeLabel: skip the previously-used fragment to prevent back-to-back repeats.
-      function pickMidiFragment(section, mode, targetRootPc, excludeLabel = '') {
+      // Returns { frag, chosenDeg, notes[] } — chosenDeg is the fragment's actual starting degree.
+      function pickMidiFragment(section, mode, targetRootPc, excludeLabel = '', targetDeg = null) {
         let pool = (midiFragLibBySection[section] || []).filter(f => f.mode === mode);
         if (pool.length === 0) return null;
         // Avoid the last-used fragment if the pool is large enough
         if (pool.length > 1 && excludeLabel) pool = pool.filter(f => f.label !== excludeLabel);
         if (pool.length === 0) return null; // all same label — allow repeat
-        const frag = pool[Math.floor(Math.random() * pool.length)];
+
+        let frag, chosenDeg;
+        if (targetDeg !== null && pool.length > 1) {
+          // Score each candidate by how closely its starting degree matches grammar's target.
+          // grammarRow defines all degrees reachable from current state — neighbors score 0.5.
+          const grammarRow = CHORD_GRAMMAR_MINOR[scChordRootDeg] ?? CHORD_GRAMMAR_MINOR[0];
+          const scored = pool.map(f => {
+            const fragDeg = scFragStartDeg(f);
+            let score = 0;
+            if (fragDeg === targetDeg) score = 1.0;
+            else if (fragDeg !== null && grammarRow.some(([d]) => d === fragDeg)) score = 0.5;
+            return { f, fragDeg, score: score + Math.random() * 0.04 }; // tiny jitter as tie-breaker
+          });
+          scored.sort((a, b) => b.score - a.score);
+          frag      = scored[0].f;
+          chosenDeg = scored[0].fragDeg;
+        } else {
+          // Single candidate or no targetDeg — plain random pick
+          frag      = pool[Math.floor(Math.random() * pool.length)];
+          chosenDeg = scFragStartDeg(frag);
+        }
+
         const shift = ((targetRootPc - frag.rootPc) + 12) % 12;
-        return { frag, notes: frag.notes.map(n => ({
+        return { frag, chosenDeg, notes: frag.notes.map(n => ({
           pitch: Math.max(28, Math.min(96, n.pitch + shift)),
           start: n.start,
           dur:   n.dur,
@@ -6552,6 +6597,7 @@
       let scChordRootDeg    = 0;     // last played chord root (semitones above scale root, minor)
       let scChordHomeDeg    = 0;     // home = i, always 0 for Aeolian
       let scChordCadenceDue = false; // true → next harmony change must resolve to home (i)
+      let scHarmonyDebug    = false; // set true to enable [FRAG-GRAMMAR] console logs
 
       function scGeneratePianoPattern(section) {
         const def = SECTION_DEFS[section];
@@ -6623,9 +6669,11 @@
         // ── Hybrid pad layer: MIDI fragment (70%) or procedural (30%) ──
         // Fragment library loaded from free-midi-chords (MIT). Falls back to procedural
         // if library not yet loaded or no matching fragment found.
-        // Bypass fragment path when cadence is due — grammar must handle the resolution
+        // Bypass fragment path when cadence is due — grammar must handle the resolution.
+        // targetDeg: grammar's preferred next chord — passed to pickMidiFragment for scoring.
+        const targetDeg   = scGetTargetChordDeg();
         const useFragment = !scChordCadenceDue && midiFragmentLib.length > 0 && Math.random() < 0.70;
-        const fragResult  = useFragment ? pickMidiFragment(section, scaleType, rootPc, prLastFragLabel) : null;
+        const fragResult  = useFragment ? pickMidiFragment(section, scaleType, rootPc, prLastFragLabel, targetDeg) : null;
 
         if (fragResult) {
           // ── Fragment path: real human-written chord progression ──
@@ -6677,7 +6725,13 @@
               padNotes.push({ pitch, start: slot, dur: Math.max(0.25, gap * holdFrac), vel: n.vel });
             }
           }
-          scChordRootDeg = scChordHomeDeg; // approximate: fragments tend toward tonic; keep state consistent
+          // Update grammar state from the fragment's actual starting degree.
+          // This replaces the old forced-home reset — chord motion now flows through the grammar
+          // on the fragment path the same way it does on the procedural path.
+          const resolvedDeg = fragResult.chosenDeg ?? scChordHomeDeg;
+          scChordRootDeg = resolvedDeg;
+          if (scChordCadenceDue && resolvedDeg === scChordHomeDeg) scChordCadenceDue = false;
+          if (scHarmonyDebug) console.log('[FRAG-GRAMMAR]', { targetDeg, chosenDeg: resolvedDeg, match: resolvedDeg === targetDeg });
           console.log(`[SCORE] fragment: "${frag.label}" [${section}] tiles:${tiles}`);
         } else {
           // ── Procedural path: chord grammar walk + voice leading ──
