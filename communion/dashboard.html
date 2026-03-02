@@ -4737,6 +4737,8 @@
       let drSamplesLoading = false; // guard against concurrent loads
       let drScheduleTick = 25;  // ms between scheduler ticks
       let _drNoiseBuffer = null; // shared noise buffer for hi-hat synthesis (lazy-initialized)
+      const _drLoopSrcs = new Set(); // active loop BufferSource nodes — killed on drStop()
+      let _drPatternCycle = 0;       // increments each time step 0 fires (2 cycles = 4 bars)
 
       // ── Drum voice settings (tweakable from the TUNE panel) ──
       const drSettings = {
@@ -4935,6 +4937,23 @@
         src.start(t);
       }
 
+      // Loop sample — plays once per pattern cycle, fades out at end, stops on drStop()
+      function drPlaySampleLoop(buffer, t, vel, ctx, out, dur) {
+        const src = ctx.createBufferSource();
+        src.buffer = buffer;
+        src.loop = true;
+        const g = ctx.createGain();
+        const v = vel / 127;
+        g.gain.setValueAtTime(v, t);
+        g.gain.setValueAtTime(v, t + dur - 0.05);       // hold then fade
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        src.connect(g); g.connect(out);
+        _drLoopSrcs.add(src);
+        src.onended = () => _drLoopSrcs.delete(src);
+        src.start(t);
+        src.stop(t + dur + 0.01);
+      }
+
       function drTrigger(trackId, t, vel) {
         const v = vel || 100;
         // Use sample if loaded, otherwise fall back to synthesis
@@ -4942,7 +4961,11 @@
                             chh:'hihatC', ohh:'hihatO', ride:'ride', perc:'perc' }[trackId];
         if (sampleKey && drSamples[sampleKey]) {
           const ctx = prAudioCtx || drEnsureCtx();
-          drPlaySample(drSamples[sampleKey], t, v, ctx, drGetOut());
+          const buf = drSamples[sampleKey];
+          // Loop samples (>2s) on the sub track fire once per pattern cycle in drScheduler —
+          // suppress per-hit re-triggering here to avoid overlapping loops on every kick
+          if (trackId === 'sub' && buf.duration > 2.0) return;
+          drPlaySample(buf, t, v, ctx, drGetOut());
           return;
         }
         switch (trackId) {
@@ -5029,6 +5052,14 @@
             const vel = drPattern[ti][step];
             if (vel > 0) drTrigger(tr.id, t, Math.round(vel * drVol[ti]));
           });
+          // Loop-mode sub sample: fire once every 4 bars (2 drum cycles) to match piano loop
+          if (step === 0) {
+            _drPatternCycle++;
+            if (_drPatternCycle % 2 === 1 && drSamples['sub']?.duration > 2.0) {
+              const lCtx = prAudioCtx || drAudioCtx;
+              if (lCtx) drPlaySampleLoop(drSamples['sub'], t, 100, lCtx, drGetOut(), DR_STEPS * stepS * 2);
+            }
+          }
           // Advance playhead in DOM (next animation frame)
           const capturedStep = step;
           requestAnimationFrame(() => drUpdatePlayhead(capturedStep));
@@ -5046,6 +5077,7 @@
         const ctx = prAudioCtx || drEnsureCtx();
         drAudioCtx = ctx;
         drStep = 0;
+        _drPatternCycle = 0;
         drNextBeat = ctx.currentTime + 0.05;
         drPlaying = true;
         drScheduler();
@@ -5059,6 +5091,11 @@
         drPlaying = false;
         clearTimeout(drScheduleId);
         drStep = 0;
+        _drPatternCycle = 0;
+        // Kill all active loop samples immediately
+        const now = (prAudioCtx || drAudioCtx)?.currentTime ?? 0;
+        for (const src of _drLoopSrcs) { try { src.stop(now); } catch {} }
+        _drLoopSrcs.clear();
         document.getElementById('drPlay').textContent = '▶ PLAY';
         document.getElementById('drPlay').classList.remove('on');
         drClearPlayhead();
