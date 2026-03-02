@@ -4372,17 +4372,27 @@
         ],
       };
 
-      // ── Chord Grammar (Aeolian/minor) — semitone offsets from root ──────────
-      // Markov transition table for procedural chord root selection.
-      // Every loop must cadence to i (0). ♭VII→i and iv→i are the strong cadences.
+      // ── Chord Grammar (Aeolian/minor) — weighted Markov table ─────────────
+      // [degree, weight] pairs per row. Comfort-dark profile:
+      //   iv→i is primary cadence (soft landing), ♭VII→i is secondary.
+      //   No major/dominant brightness by default. v is rarely reached.
       const CHORD_GRAMMAR_MINOR = {
-        0:  [8, 5, 3],   // i     → ♭VI, iv, ♭III
-        8:  [10, 5],     // ♭VI   → ♭VII, iv
-        10: [0],         // ♭VII  → i    (cadence)
-        5:  [0, 10],     // iv    → i, ♭VII
-        7:  [0],         // v     → i    (cadence)
-        3:  [5, 8],      // ♭III  → iv, ♭VI
+        0:  [[5, 40], [8, 30], [3, 30]],  // i    → iv(40%) ♭VI(30%) ♭III(30%)
+        8:  [[10, 70], [5, 30]],          // ♭VI  → ♭VII(70%) iv(30%)
+        10: [[0, 80], [8, 20]],           // ♭VII → i(80%) ♭VI(20%)
+        5:  [[0, 70], [10, 30]],          // iv   → i(70%) ♭VII(30%)
+        7:  [[0, 100]],                   // v    → i(100%) — rarely reached
+        3:  [[5, 60], [8, 40]],           // ♭III → iv(60%) ♭VI(40%)
       };
+
+      // Proportional weighted pick from a grammar row
+      function scGrammarPick(deg) {
+        const entries = CHORD_GRAMMAR_MINOR[deg] ?? CHORD_GRAMMAR_MINOR[0];
+        const total   = entries.reduce((s, [, w]) => s + w, 0);
+        let r = Math.random() * total;
+        for (const [d, w] of entries) { r -= w; if (r <= 0) return d; }
+        return entries[entries.length - 1][0];
+      }
 
       function autoComposePr(texture) {
         if (Date.now() - lastAutoCompose < 45000) return;
@@ -6538,6 +6548,9 @@
       let scLeadMotifSeed  = []; // saved lead-note array — reused by lead skeleton mode
       let scCurrentScalePCs = []; // last computed scalePCs — shared with SAFETY validator
       let scLastVoicing     = null; // [p0,p1,p2] MIDI pitches from last procedural chord — voice leading
+      let scChordRootDeg    = 0;     // last played chord root (semitones above scale root, minor)
+      let scChordHomeDeg    = 0;     // home = i, always 0 for Aeolian
+      let scChordCadenceDue = false; // true → next harmony change must resolve to home (i)
 
       function scGeneratePianoPattern(section) {
         const def = SECTION_DEFS[section];
@@ -6677,28 +6690,27 @@
           const numChords = chordBeats.length;
           const maxJump   = chScene.tension > 0.7 ? 3 : 2; // voice-leading semitone cap
 
-          // ── Grammar walk: minor builds cadence to i, major falls back to ALT_ROCK_PROGS ──
+          // ── Grammar walk: weighted Markov from scChordRootDeg, cadence on demand ──
           let progDegs;
           if (scaleType === 'minor' && numChords > 0) {
-            const G = CHORD_GRAMMAR_MINOR;
-            if (numChords === 1) {
-              progDegs = [0];
-            } else if (numChords === 2) {
-              const APR = [10, 5]; // ♭VII→i or iv→i
-              progDegs = [APR[Math.floor(Math.random() * APR.length)], 0];
-            } else if (numChords === 3) {
-              const MID = [10, 5, 8]; // color chord before cadence
-              progDegs = [0, MID[Math.floor(Math.random() * MID.length)], 0];
-            } else {
-              progDegs = [0];
-              let cur = 0;
-              for (let i = 1; i < numChords - 1; i++) {
-                const nexts = G[cur] || G[0];
-                cur = nexts[Math.floor(Math.random() * nexts.length)];
-                progDegs.push(cur);
+            const prevDeg = scChordRootDeg;
+            progDegs = [];
+            let cur = scChordRootDeg; // continue from wherever we currently are
+            for (let i = 0; i < numChords; i++) {
+              if (i > 0) {
+                // Last chord: force home if cadence due, else follow weighted grammar
+                cur = (i === numChords - 1 && scChordCadenceDue)
+                  ? scChordHomeDeg
+                  : scGrammarPick(cur);
               }
-              progDegs.push(0); // always cadence home
+              progDegs.push(cur);
             }
+            // Consume cadence flag only if we actually resolved to home
+            if (scChordCadenceDue && progDegs[numChords - 1] === scChordHomeDeg) {
+              scChordCadenceDue = false;
+            }
+            scChordRootDeg = progDegs[numChords - 1];
+            console.log('[HARM-GRAMMAR]', { bar: scBarCount, from: prevDeg, to: scChordRootDeg, cadenceDue: scChordCadenceDue, prog: progDegs });
           } else {
             progDegs = Array.from({ length: numChords }, (_, i) => prog[i % prog.length]);
           }
@@ -7027,7 +7039,10 @@
 
           // ── ARR: advance horizon cursor, replan every 8 bars ──
           scHorizonBar = scBarCount % 8;
-          if (scHorizonBar === 0) scPlanHorizon();
+          if (scHorizonBar === 0) {
+            scPlanHorizon();
+            scChordCadenceDue = true; // guarantee ≥1 cadence to i this horizon
+          }
           const permit = scHorizonPlan[scHorizonBar] ?? scHorizonPlan[0];
 
           // Section change from horizon plan
