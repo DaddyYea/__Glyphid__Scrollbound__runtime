@@ -6620,10 +6620,14 @@
       let scChordCadenceDue = false; // true → next harmony change must resolve to home (i)
       let scHarmonyDebug    = false; // set true to enable [FRAG-GRAMMAR] console logs
       let scChordChangeBars = 2;    // bars per chord change — authoritative gate; set each horizon by scPickChordChangeBarsForHorizon()
+      let scLeadChangedThisHorizon = false; // stagnation breaker — reset each horizon, set on fresh motif gen
 
       function scGeneratePianoPattern(section) {
         const def = SECTION_DEFS[section];
         if (!def) return;
+
+        // harmReuseMode: harmony held (skeleton or carry-forward) — lead section still runs below
+        let harmReuseMode = false;
 
         // ── Skeleton mode: harm not the novelty leader — reuse last chord plan ──
         if (chScene.noveltyLeader !== null && chScene.noveltyLeader !== 'harm' && scLastChordPlan.length > 0) {
@@ -6633,14 +6637,9 @@
           }));
           tracks.jason = [];
           tracks.arp   = [];
-          if (scLeadMotifSeed.length > 0) {
-            scLeadNotes = scLeadMotifSeed.map(n => ({ ...n }));
-          }
-          // Both harm and lead held in skeleton — zero novelty cost
+          // Harm held — zero novelty cost; lead section continues below
           scNoveltyReport.harm = { cost: 0, events: ['harm_skeleton'], warnings: [] };
-          scNoveltyReport.lead = { cost: 0, events: ['lead_skeleton'], warnings: [] };
-          prDraw();
-          return;
+          harmReuseMode = true;
         }
 
         const scale = activeMoodScale?.intervals || SC_SCALES.minor;
@@ -6678,18 +6677,17 @@
         }
         if (chordBeats.length === 0) {
           if (scLastChordPlan.length > 0) {
-            // Carry chord forward — re-schedule same notes, no harmony state change
+            // Carry chord forward — re-schedule same notes, no harmony state change; lead still runs
             tracks.alois = scLastChordPlan.map(n => ({ ...n }));
             tracks.jason = []; tracks.arp = [];
-            if (scLeadMotifSeed.length > 0) scLeadNotes = scLeadMotifSeed.map(n => ({ ...n }));
             scNoveltyReport.harm = { cost: 0, events: ['harm_carried'], warnings: [] };
-            scNoveltyReport.lead = { cost: 0, events: ['lead_carried'], warnings: [] };
-            prDraw();
-            return;
+            harmReuseMode = true;
+          } else {
+            chordBeats.push(0); // no previous plan — generate at beat 0 as fallback
           }
-          chordBeats.push(0); // no previous plan — generate at beat 0 as fallback
         }
 
+        if (!harmReuseMode) {
         // ── Hybrid pad layer: MIDI fragment (70%) or procedural (30%) ──
         // Fragment library loaded from free-midi-chords (MIT). Falls back to procedural
         // if library not yet loaded or no matching fragment found.
@@ -6858,6 +6856,7 @@
         tracks.alois = padNotes;
         tracks.jason = [];
         tracks.arp   = [];        // reserved — not used
+        } // end if (!harmReuseMode)
 
         // ── LEAD Citizen: true motif generator ──
         // Generates scLeadMotifSeed from scale + rhythm templates instead of borrowing
@@ -6892,7 +6891,11 @@
         const leadEvents = [];
         let finalLeadCost = 0;
 
-        if (chScene.noveltyLeader !== null && chScene.noveltyLeader !== 'lead' && scLeadMotifSeed.length > 0) {
+        // Stagnation breaker: if lead hasn't generated a fresh motif in ≥6 bars this horizon,
+        // force fresh generation regardless of noveltyLeader — prevents frozen lead lines.
+        const forceLeadGen = !scLeadChangedThisHorizon && scHorizonBar >= 6 && chScene.clarity >= 0.4;
+
+        if (!forceLeadGen && chScene.noveltyLeader !== null && chScene.noveltyLeader !== 'lead' && scLeadMotifSeed.length > 0) {
           // Skeleton: reuse seed with velocity humanization only
           scLeadNotes = scLeadMotifSeed.map(n => ({
             ...n,
@@ -6998,6 +7001,7 @@
           const freshMotif = motif.filter(n => !n._omit).sort((a, b) => a.start - b.start);
           scLeadNotes    = freshMotif;
           scLeadMotifSeed = [...freshMotif];
+          scLeadChangedThisHorizon = true;
 
           finalLeadCost = NOVELTY_COSTS.lead_new_motif
             + mutPitchCount  * NOVELTY_COSTS.lead_pitch_mut
@@ -7124,6 +7128,7 @@
             scPlanHorizon();
             scChordCadenceDue = true;          // guarantee ≥1 cadence to i this horizon
             scPickChordChangeBarsForHorizon(); // set chord-change cadence for upcoming 8 bars
+            scLeadChangedThisHorizon = false;  // stagnation breaker: reset each horizon
           }
           const permit = scHorizonPlan[scHorizonBar] ?? scHorizonPlan[0];
 
