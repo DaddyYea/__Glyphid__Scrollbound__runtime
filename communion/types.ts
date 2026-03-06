@@ -30,6 +30,12 @@ export interface AgentConfig {
   temperature?: number;
   /** Max tokens per response (default 512) */
   maxTokens?: number;
+  /** Max provider context window (prompt + completion). */
+  maxContextTokens?: number;
+  /** Safety margin reserved for tokenizer/provider overhead (default 512). */
+  safetyTokens?: number;
+  /** Token estimation mode for context budgeting. */
+  tokenEstimationMode?: 'heuristic';
   /** Voice configuration */
   voice?: {
     voiceId: string;

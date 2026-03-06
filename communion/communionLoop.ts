@@ -21,7 +21,7 @@
 import crypto from 'crypto';
 import { mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync, statSync, openSync, readSync, closeSync, watch } from 'fs';
 import { join } from 'path';
-import { AgentBackend, GenerateOptions, createBackend } from './backends';
+import { ActionReceipt, AgentBackend, GenerateOptions, GenerateResult, SearchIntent, SearchReceipt, createBackend } from './backends';
 import { AgentConfig, CommunionConfig, CommunionMessage } from './types';
 import { ScrollPulseBuffer } from '../src/memory/scrollPulseBuffer';
 import { ScrollPulseMemory } from '../src/memory/scrollPulseMemory';
@@ -33,6 +33,13 @@ import { SessionPersistence } from '../src/persistence/sessionPersistence';
 import { AdaptationEngine } from '../src/learning/adaptationEngine';
 import { ScrollGraph } from '../src/memory/scrollGraph';
 import { ContextRAM, parseRAMCommands, SlotName, ReflectiveSweepResult } from './contextRAM';
+import {
+  ContextBudgetExceededError,
+  PromptSegment,
+  RequiredLatestHumanTurnTooLargeError,
+  RequiredSegmentsExceedBudgetError,
+} from './contextBudget';
+import { registerScrollGraphStore } from './graph/scrollGraphStore';
 import { pulseBrainwaves, classifyBand, tagForBand, decayAndPromote } from './brainwaves';
 import { synthesize, getDefaultVoiceConfig, AgentVoiceConfig } from './voice';
 import { ArchiveIngestion } from './archiveIngestion';
@@ -171,6 +178,62 @@ const INTERRUPT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes between interrupts per
 const MICRO_TICK_MIN_MS = 200;            // Stagger offset range: 0.2-1 second (was 1-4s)
 const MICRO_TICK_MAX_MS = 1000;
 
+type DocAutonomyMode = 'quiet' | 'balanced' | 'bold';
+
+interface RuntimeDocHit {
+  id: string;
+  title: string;
+  uri?: string;
+  score: number;
+  source: 'ram' | 'drive';
+  hasContent: boolean;
+  fullPath?: string;
+}
+
+interface LLMReceiptMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+interface LLMReceiptPayload {
+  model: string;
+  messages: LLMReceiptMessage[];
+}
+
+interface LLMReceiptDebug {
+  requestId: string;
+  tickId: number;
+  timestamp: string;
+  agentId: string;
+  model: string;
+  payload: LLMReceiptPayload;
+  messages: LLMReceiptMessage[];
+  charCounts: {
+    total: number;
+    system: number;
+    user: number;
+    assistant: number;
+  };
+  clusterChars: {
+    WM: number;
+    SEM_R: number;
+    SOCIO: number;
+  };
+  clusterCharsWire: {
+    WM: number;
+    SEM_R: number;
+    SOCIO: number;
+  };
+  clusterSnippets: {
+    WM: string;
+    SEM_R: string;
+    SOCIO: string;
+  };
+  wmMissingStreak: number;
+  issues: string[];
+  lastError?: string;
+}
+
 // ── Loop ──
 
 export class CommunionLoop {
@@ -199,6 +262,7 @@ export class CommunionLoop {
 
   // Graph — the interconnected web of all memory
   private graph: ScrollGraph;
+  private graphSaveRequested = false;
 
   // Shared documents
   private documentsContext: string = '';
@@ -232,6 +296,17 @@ export class CommunionLoop {
   private speechTimeout: ReturnType<typeof setTimeout> | null = null;
   // Timestamp of the last human message — drives time-based social pressure
   private lastHumanMessageAt: number = 0;
+  // Prevent repeated doc-search execution for the same human request per agent
+  private lastDocSearchByAgent: Map<string, string> = new Map();
+  private lastSearchReceiptByAgentTurn: Map<string, SearchReceipt> = new Map();
+  private lastActionReceiptByAgentTurn: Map<string, ActionReceipt> = new Map();
+  private lastAutoDocsTextByAgentTurn: Map<string, string> = new Map();
+  private docSearchCache: Map<string, { expiresAt: number; hits: RuntimeDocHit[]; totalCount: number }> = new Map();
+  private recentDocActionsByAgent: Map<string, Array<{ query: string; at: number; action: 'browse' | 'read' | 'load_excerpt' }>> = new Map();
+  private docAutonomyMode: DocAutonomyMode = 'balanced';
+  private llmReceiptsByAgent: Map<string, LLMReceiptDebug> = new Map();
+  private llmAblationFlags: Record<string, boolean> = {};
+  private llmWmMissingStreakByAgent: Map<string, number> = new Map();
 
   constructor(config: CommunionConfig) {
     this.tickIntervalMs = config.tickIntervalMs || 15000;
@@ -384,6 +459,15 @@ export class CommunionLoop {
 
     // ── Load graph from disk ──
     await this.graph.load();
+    registerScrollGraphStore(this.graph, {
+      requestSave: () => {
+        this.graphSaveRequested = true;
+      },
+      flushSaveNow: async () => {
+        await this.graph.save();
+        this.graphSaveRequested = false;
+      },
+    });
 
     // ── Initialize session persistence (loads previous session data) ──
     const sessionState = await this.session.initializeSession();
@@ -392,6 +476,10 @@ export class CommunionLoop {
       sessionId: sessionState.metadata.sessionId,
       startTime: sessionState.metadata.startTime,
     });
+    this.ensureSessionCurrentNode(sessionUri, sessionState.metadata.sessionId);
+    if (!this.graph.hasNode('session:current')) {
+      throw new Error('session:current bootstrap failed');
+    }
     console.log(`[PERSISTENCE] Session initialized: ${sessionState.metadata.sessionId}`);
 
     // Restore scrolls from previous session into buffer + graph
@@ -870,8 +958,20 @@ export class CommunionLoop {
   private browseFiles(keyword: string, ram: ContextRAM): string {
     const CHUNK_SIZE = 2000;
     const CONTEXT_LINES = 5; // lines of context around each match
-    const MAX_RESULTS = 5;
-    const searchLower = keyword.toLowerCase();
+    const MAX_RESULTS = 10;
+    const searchLower = (keyword || '').toLowerCase().trim();
+    if (!searchLower) return 'BROWSE requires a keyword';
+    const searchNormalized = searchLower.replace(/[^a-z0-9]+/g, ' ').trim();
+    const stopWords = new Set([
+      'the', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'on', 'for', 'with', 'from',
+      'please', 'again', 'all', 'right', 'try', 'load', 'read', 'open', 'find', 'search',
+      'browse', 'check', 'verify', 'look', 'up', 'file', 'files', 'doc', 'docs', 'document',
+      'documents', 'manuscript', 'chapter', 'outline', 'archive',
+    ]);
+    const rawTokens = searchNormalized.split(/\s+/).filter(t => t.length > 1);
+    const searchTokens = rawTokens.filter(t => !stopWords.has(t));
+    const effectiveTokens = searchTokens.length > 0 ? searchTokens : rawTokens;
+    const requiredTokenHits = effectiveTokens.length <= 2 ? 1 : 2;
 
     // Collect all Document nodes from the graph
     const results: { path: string; fullPath: string; matchCount: number; excerpts: string[] }[] = [];
@@ -892,16 +992,29 @@ export class CommunionLoop {
         }
         // Score: filename match is high-confidence, content match is lower
         const pathLower = fullPath.toLowerCase();
-        const exactFilenameMatch = pathLower.includes(searchLower);
-        const tokenFilenameMatch = !exactFilenameMatch &&
-          searchLower.split(/[\s\-_]+/).filter(t => t.length > 2).every(t => pathLower.includes(t));
-        const contentMatch = content.toLowerCase().includes(searchLower);
+        const pathNormalized = pathLower.replace(/[^a-z0-9]+/g, ' ');
+        const contentLower = content.toLowerCase();
+        const exactFilenameMatch = pathLower.includes(searchLower) || (searchNormalized.length > 0 && pathNormalized.includes(searchNormalized));
+        const tokenHits = effectiveTokens.filter(t => pathNormalized.includes(t)).length;
+        const tokenFilenameMatch = !exactFilenameMatch
+          && effectiveTokens.length > 0
+          && tokenHits >= Math.max(1, Math.ceil(effectiveTokens.length * 0.5));
+        const contentTokenHits = effectiveTokens.filter(t => contentLower.includes(t)).length;
+        const contentMatch = contentLower.includes(searchLower)
+          || (searchNormalized.length > 0 && contentLower.includes(searchNormalized))
+          || contentTokenHits >= requiredTokenHits;
         if (!contentMatch && !exactFilenameMatch && !tokenFilenameMatch) continue;
 
         const lines = content.split('\n');
         const matchLines: number[] = [];
         for (let i = 0; i < lines.length; i++) {
-          if (lines[i].toLowerCase().includes(searchLower)) {
+          const lineLower = lines[i].toLowerCase();
+          const lineTokenHits = effectiveTokens.filter(t => lineLower.includes(t)).length;
+          if (
+            lineLower.includes(searchLower)
+            || (searchNormalized.length > 0 && lineLower.includes(searchNormalized))
+            || lineTokenHits >= requiredTokenHits
+          ) {
             matchLines.push(i);
           }
         }
@@ -924,10 +1037,13 @@ export class CommunionLoop {
           excerpts.push(lines.slice(0, 60).join('\n'));
         }
 
-        // Filename matches rank above content matches regardless of line count
-        const score = exactFilenameMatch ? 100000 + matchLines.length
-                    : tokenFilenameMatch  ? 10000  + matchLines.length
-                    :                       matchLines.length;
+        // Rank by filename similarity first, then content evidence.
+        const nameScore = this.scoreDoc((node.data.path as string) || fullPath, keyword);
+        const score = nameScore
+          + (exactFilenameMatch ? 30 : 0)
+          + (tokenFilenameMatch ? 15 : 0)
+          + contentTokenHits
+          + Math.min(matchLines.length, 20);
 
         results.push({
           path: node.data.path as string,
@@ -942,11 +1058,18 @@ export class CommunionLoop {
 
     if (results.length === 0) return `No files contain "${keyword}"`;
 
-    // Sort by match count, take top results
-    results.sort((a, b) => b.matchCount - a.matchCount);
-    const loaded: string[] = [];
+    // Ensure documents slot is active so loaded chunks are visible in assembled context.
+    if (!ram.isLoaded('documents')) {
+      ram.processCommand({ action: 'load', target: 'documents' });
+    }
 
-    for (const result of results.slice(0, MAX_RESULTS)) {
+    // Sort by score, cap to top results only.
+    results.sort((a, b) => b.matchCount - a.matchCount);
+    const rankedResults = results.slice(0, MAX_RESULTS);
+    const loaded: string[] = [];
+    const failed: string[] = [];
+
+    for (const result of rankedResults) {
       // Create a chunk from the excerpts and offer it to RAM
       const chunkContent = `--- ${result.path} (${result.matchCount} matches for "${keyword}") ---\n\n${result.excerpts.join('\n\n...\n\n')}`;
       const chunkId = `doc:${result.path}:browse-${keyword.replace(/\s+/g, '-').substring(0, 20)}`;
@@ -959,11 +1082,508 @@ export class CommunionLoop {
         chars: chunkContent.length,
         tags: [...tags, ...keyword.toLowerCase().split(/\s+/)],
       });
-      ram.processCommand({ action: 'load', target: chunkId });
-      loaded.push(`${result.path} (${result.matchCount} matches)`);
+      const loadFeedback = ram.processCommand({ action: 'load', target: chunkId });
+      if (/^loaded\b|already loaded/i.test(loadFeedback)) {
+        loaded.push(`${result.path} (${result.matchCount} matches)`);
+      } else {
+        failed.push(`${result.path} (${loadFeedback})`);
+      }
     }
 
-    return `BROWSE "${keyword}": found in ${results.length} files, loaded excerpts from: ${loaded.join(', ')}`;
+    if (loaded.length === 0) {
+      return `BROWSE "${keyword}": found in ${rankedResults.length} files, but could not load excerpts (${failed.slice(0, 3).join('; ') || 'no capacity'})`;
+    }
+    if (failed.length > 0) {
+      return `BROWSE "${keyword}": loaded ${loaded.length}/${rankedResults.length} excerpts: ${loaded.join(', ')}. Skipped: ${failed.slice(0, 3).join('; ')}`;
+    }
+    return `BROWSE "${keyword}": found in ${rankedResults.length} files, loaded excerpts from: ${loaded.join(', ')}`;
+  }
+
+  private scoreDoc(name: string, query: string): number {
+    const n = (name || '').toLowerCase();
+    const q = (query || '').toLowerCase().trim();
+    if (!n || !q) return 0;
+    if (n === q) return 100;
+    if (n.includes(q)) return 50;
+
+    const tokens = q.split(/\s+/).filter(Boolean);
+    let score = 0;
+    for (const token of tokens) {
+      if (token.length < 2) continue;
+      if (n.includes(token)) score += 5;
+    }
+    return score;
+  }
+
+  private shouldAutoBrowseFromHumanRequest(text: string): boolean {
+    if (!text) return false;
+    return /\b(open|read|load|find|search|browse|lookup|look up|where is|show me|pull up|check|verify)\b[\s\S]{0,120}\b(file|doc|document|documents|manuscript|chapter|outline|archive)?\b/i.test(text);
+  }
+
+  private deriveSearchIntent(latestHumanText: string, uiSelection?: { docId?: string; title?: string; corpus?: 'ram' | 'drive' | 'local' | 'web' }): SearchIntent {
+    if (uiSelection && (uiSelection.docId || uiSelection.title)) {
+      return {
+        kind: 'open_doc',
+        query: uiSelection.title || uiSelection.docId,
+        uiSelection,
+      };
+    }
+    const text = (latestHumanText || '').trim();
+    if (!text) return { kind: 'none' };
+    if (/\[RAM:(BROWSE|READ|GRAPH)\s+[^\]]+\]/i.test(text)) {
+      return { kind: 'open_doc', query: this.extractDocQuery(text) || undefined };
+    }
+    if (this.shouldAutoBrowseFromHumanRequest(text) || this.extractDocQuery(text)) {
+      const verb = /\b(search|find|lookup|look up|where is|show me)\b/i.test(text) ? 'search' : 'open_doc';
+      return {
+        kind: verb,
+        query: this.extractDocQuery(text) || undefined,
+      };
+    }
+    return { kind: 'none' };
+  }
+
+  private isDocSearchRequest(text: string): boolean {
+    if (!text) return false;
+    if (/\[RAM:(BROWSE|READ|GRAPH)\s+[^\]]+\]/i.test(text)) return true;
+    if (this.shouldAutoBrowseFromHumanRequest(text)) return true;
+    return !!this.extractDocQuery(text);
+  }
+
+  private deriveSearchQuery(latestHumanText: string, searchIntent?: SearchIntent): string | null {
+    const normalize = (value: string) => value
+      .replace(/^["']|["']$/g, '')
+      .replace(/[^A-Za-z0-9\s._\-\\/]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 120);
+    const sanitize = (value: string) => this.sanitizeDocQuery(value);
+
+    if ((searchIntent?.kind === 'open_doc' || searchIntent?.kind === 'search') && searchIntent.query) {
+      const q = sanitize(normalize(searchIntent.query));
+      return this.isValidDocQuery(q) ? q : null;
+    }
+
+    const source = (latestHumanText || '').trim();
+    if (!source) return null;
+
+    const commandMatch = source.match(/^(?:please\s+)?(?:open|read|load|find|search|browse|lookup|look up|where is|show me|pull up)\s+(.+)$/i);
+    const inlineCommandMatch = source.match(/(?:^|[,;]\s*|\b)(?:open|read|load|find|search|browse|lookup|look up|where is|show me|pull up)\s+(.+)$/i);
+    const commandQuery = (commandMatch?.[1] || inlineCommandMatch?.[1] || '').trim();
+    if (commandQuery) {
+      const q = sanitize(this.extractDocQuery(commandQuery) || normalize(commandQuery));
+      return this.isValidDocQuery(q) ? q : null;
+    }
+
+    const extracted = this.extractDocQuery(source);
+    if (extracted && this.isValidDocQuery(extracted)) return extracted;
+    const fallback = sanitize(this.sanitizeDocQueryTokens(normalize(source)));
+    return this.isValidDocQuery(fallback) ? fallback : null;
+  }
+
+  private recordDocAction(agentId: string, query: string, action: 'browse' | 'read' | 'load_excerpt'): void {
+    const now = Date.now();
+    const arr = this.recentDocActionsByAgent.get(agentId) || [];
+    const next = arr
+      .filter(entry => now - entry.at <= 60000)
+      .concat([{ query: query.toLowerCase(), at: now, action }]);
+    this.recentDocActionsByAgent.set(agentId, next);
+  }
+
+  private shouldThrottleDocQuery(agentId: string, query: string): boolean {
+    const now = Date.now();
+    const normalized = query.toLowerCase();
+    const arr = this.recentDocActionsByAgent.get(agentId) || [];
+    const recent = arr.filter(entry => now - entry.at <= 60000 && entry.query === normalized && entry.action === 'browse');
+    return recent.length >= 3;
+  }
+
+  private searchDocsForQuery(agentId: string, query: string, ram: ContextRAM, topK = 10): { hits: RuntimeDocHit[]; totalCount: number; top?: RuntimeDocHit; ms: number } {
+    const cacheKey = `${agentId}:${query.toLowerCase()}`;
+    const now = Date.now();
+    const cached = this.docSearchCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return {
+        hits: cached.hits.slice(0, topK),
+        totalCount: cached.totalCount,
+        top: cached.hits[0],
+        ms: 0,
+      };
+    }
+
+    const startedAt = Date.now();
+    const ramSearch = ram.searchDocsFuzzy(query, Math.min(25, topK));
+    const driveSearch = this.searchDriveDocsFuzzy(query, 25);
+    const merged = new Map<string, RuntimeDocHit>();
+    for (const hit of ramSearch.hits) {
+      merged.set(hit.id, {
+        id: hit.id,
+        title: hit.title,
+        uri: hit.uri,
+        score: hit.score,
+        source: 'ram',
+        hasContent: hit.hasContent,
+      });
+    }
+    for (const hit of driveSearch.hits) {
+      const existing = merged.get(hit.id);
+      if (!existing || hit.score > existing.score) {
+        merged.set(hit.id, hit);
+      }
+    }
+    const hits = Array.from(merged.values())
+      .sort((a, b) => b.score - a.score)
+      .slice(0, Math.min(25, topK));
+    const totalCount = Math.max(ramSearch.totalCount, hits.length) + Math.max(0, driveSearch.totalCount - driveSearch.hits.length);
+    this.docSearchCache.set(cacheKey, {
+      expiresAt: now + 60000,
+      hits,
+      totalCount,
+    });
+    return {
+      hits: hits.slice(0, topK),
+      totalCount,
+      top: hits[0],
+      ms: Date.now() - startedAt,
+    };
+  }
+
+  private searchDriveDocsFuzzy(query: string, topK = 25): { hits: RuntimeDocHit[]; totalCount: number } {
+    const normalized = this.sanitizeDocQueryTokens(this.sanitizeDocQuery(query).toLowerCase());
+    const tokens = normalized.split(/\s+/).filter(Boolean);
+    const hits: RuntimeDocHit[] = [];
+    for (const node of this.graph.getByType('Document')) {
+      const fullPath = String(node.data.fullPath || '');
+      if (!fullPath || !existsSync(fullPath)) continue;
+      const title = String(node.data.filename || node.data.path || fullPath);
+      const lower = `${title} ${String(node.data.path || '')}`.toLowerCase();
+      let score = this.scoreDoc(lower, normalized);
+      if (tokens.length > 0) {
+        const overlap = tokens.filter(t => lower.includes(t)).length;
+        score += overlap * 8;
+        const jaccard = overlap / Math.max(tokens.length, new Set(lower.split(/[^a-z0-9]+/).filter(Boolean)).size || 1);
+        score += Math.round(jaccard * 40);
+      }
+      if (score <= 0) continue;
+      hits.push({
+        id: `drive:${fullPath}`,
+        title,
+        uri: `doc:${String(node.data.path || title)}`,
+        score,
+        source: 'drive',
+        hasContent: true,
+        fullPath,
+      });
+    }
+    hits.sort((a, b) => b.score - a.score);
+    return {
+      hits: hits.slice(0, topK),
+      totalCount: hits.length,
+    };
+  }
+
+  private loadExcerptForHit(hit: RuntimeDocHit, query: string, ram: ContextRAM): { ok: boolean; summary: string; metadataOnly?: boolean; excerptText?: string } {
+    if (hit.source === 'ram') {
+      const loaded = ram.loadDocExcerptById(hit.id);
+      if (loaded.ok && loaded.text) {
+        return {
+          ok: true,
+          summary: `Loaded excerpts from ${loaded.title || hit.title}.`,
+          excerptText: loaded.text.slice(0, 9000),
+        };
+      }
+      if (loaded.metadataOnly) {
+        return { ok: false, summary: 'I found metadata but no content is indexed yet.', metadataOnly: true };
+      }
+      return { ok: false, summary: `Unable to load excerpt for ${loaded.title || hit.title}.` };
+    }
+
+    const fullPath = hit.fullPath || hit.id.replace(/^drive:/, '');
+    if (!fullPath || !existsSync(fullPath)) {
+      return { ok: false, summary: `File unavailable: ${hit.title}` };
+    }
+    try {
+      let content = '';
+      const isDocx = fullPath.toLowerCase().endsWith('.docx');
+      if (isDocx) {
+        content = this.docxCache.get(fullPath) ?? '';
+        if (!content) {
+          return { ok: false, summary: 'I found metadata but no content is indexed yet.', metadataOnly: true };
+        }
+      } else {
+        content = readFileSync(fullPath, 'utf-8');
+      }
+      const lines = content.split('\n');
+      const tokens = this.sanitizeDocQueryTokens(query.toLowerCase()).split(/\s+/).filter(Boolean);
+      let startLine = 0;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].toLowerCase();
+        if (tokens.some(t => line.includes(t))) {
+          startLine = Math.max(0, i - 3);
+          break;
+        }
+      }
+      const excerpt = lines.slice(startLine, Math.min(lines.length, startLine + 30)).join('\n').trim();
+      const snippet = excerpt || content.slice(0, 2400);
+      const itemId = `doc:${fullPath}:excerpt-${Date.now()}`;
+      ram.offerItem('documents', {
+        id: itemId,
+        label: hit.title,
+        content: snippet,
+        chars: snippet.length,
+        tags: this.sanitizeDocQueryTokens(query).split(/\s+/).filter(Boolean),
+      });
+      ram.processCommand({ action: 'load', target: itemId });
+      return { ok: true, summary: `Loaded excerpts from: ${hit.title}.`, excerptText: snippet.slice(0, 9000) };
+    } catch (err) {
+      return { ok: false, summary: `Unable to load excerpt: ${String(err)}` };
+    }
+  }
+
+  private runRuntimeDocSearch(opts: {
+    agentId: string;
+    turnId: string;
+    query: string;
+    ram: ContextRAM;
+    originalHumanText: string;
+  }): { searchReceipt: SearchReceipt; actionReceipt?: ActionReceipt; autoDocsText?: string } {
+    const startedAt = Date.now();
+    const { agentId, turnId, query, ram, originalHumanText } = opts;
+    console.log('SEARCH_CALL', {
+      query,
+      source: 'human_turn',
+      humanMsgId: turnId,
+      agentId,
+      originalHumanText,
+    });
+
+    if (this.shouldThrottleDocQuery(agentId, query)) {
+      const throttled: SearchReceipt = {
+        didSearch: false,
+        query,
+        corpus: 'ram',
+        resultsCount: 0,
+        error: 'query_throttled_narrow',
+        ms: Date.now() - startedAt,
+        turnId,
+        agentId,
+        humanMessageId: turnId,
+      };
+      console.log('SEARCH_RESULT', { query, resultsCount: 0, topResultTitle: '', err: throttled.error });
+      return { searchReceipt: throttled };
+    }
+
+    const found = this.searchDocsForQuery(agentId, query, ram, 10);
+    this.recordDocAction(agentId, query, 'browse');
+    const top = found.top;
+    const searchReceipt: SearchReceipt = {
+      didSearch: true,
+      query,
+      corpus: top?.source === 'drive' ? 'drive' : 'ram',
+      resultsCount: found.totalCount,
+      resultsShown: found.hits.length,
+      top: top ? { title: top.title, id: top.id, uri: top.uri, score: Number(top.score.toFixed(3)) } : undefined,
+      ms: Date.now() - startedAt,
+      turnId,
+      agentId,
+      humanMessageId: turnId,
+    };
+
+    if (found.totalCount > 200) {
+      searchReceipt.metadataOnly = true;
+      searchReceipt.error = 'too_many_matches';
+      console.log('SEARCH_RESULT', { query, resultsCount: found.totalCount, topResultTitle: top?.title || '', err: 'too_many_matches' });
+      return { searchReceipt };
+    }
+
+    let actionReceipt: ActionReceipt | undefined;
+    let autoDocsText = '';
+    if (top) {
+      this.recordDocAction(agentId, query, 'load_excerpt');
+      const load = this.loadExcerptForHit(top, query, ram);
+      actionReceipt = {
+        didExecute: true,
+        action: 'load_excerpt',
+        target: top.id,
+        ok: load.ok,
+        summary: load.summary,
+        doc: { id: top.id, title: top.title },
+        ms: Date.now() - startedAt,
+        turnId,
+        agentId,
+      };
+      searchReceipt.loadedContent = load.ok;
+      searchReceipt.metadataOnly = !load.ok && !!load.metadataOnly;
+      if (load.ok && load.excerptText) {
+        autoDocsText = `AUTO DOC EXCERPT (${top.title}):\n${load.excerptText}`;
+      }
+    }
+
+    console.log('SEARCH_RESULT', {
+      query,
+      resultsCount: searchReceipt.resultsCount,
+      topResultTitle: searchReceipt.top?.title || '',
+      err: searchReceipt.error || '',
+    });
+    return { searchReceipt, actionReceipt, autoDocsText };
+  }
+
+
+  private extractDocQuery(text: string): string | null {
+    const source = (text || '').trim();
+    if (!source) return null;
+    const normalize = (value: string) => value
+      .replace(/^["']|["']$/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 120);
+
+    const quoted = source.match(/"([^"]{1,240})"/);
+    if (quoted?.[1]) return this.sanitizeDocQuery(normalize(quoted[1])) || null;
+
+    const fileMatch = source.match(/[A-Za-z0-9_\-]+\.(md|txt|pdf|docx|json|ts|js)/i);
+    if (fileMatch?.[0]) return this.sanitizeDocQuery(normalize(fileMatch[0])) || null;
+
+    const slugMatch = source.match(/\b([A-Za-z0-9]+(?:[_-][A-Za-z0-9]+)+)\b/);
+    if (slugMatch?.[1]) return this.sanitizeDocQuery(normalize(slugMatch[1])) || null;
+
+    const titleCase = source.match(/\b([A-Z][a-z0-9]+(?:\s+[A-Z][a-z0-9]+)+)\b/);
+    if (titleCase?.[1]) return this.sanitizeDocQuery(normalize(titleCase[1])) || null;
+
+    return null;
+  }
+
+  private sanitizeDocQuery(query: string): string {
+    const profanity = /\b(fuck|fucking|shit|bitch|asshole|motherfucker|dick|cunt|jesus christ)\b/gi;
+    return (query || '')
+      .replace(profanity, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 120);
+  }
+
+  private sanitizeDocQueryTokens(query: string): string {
+    const stopWords = new Set([
+      'the', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'on', 'for', 'with', 'from',
+      'please', 'again', 'all', 'right', 'try', 'load', 'read', 'open', 'find', 'search',
+      'browse', 'check', 'verify', 'look', 'up', 'file', 'files', 'doc', 'docs', 'document',
+      'documents', 'manuscript', 'chapter', 'outline', 'archive', 'what', 'are', 'you', 'doing',
+    ]);
+    const profanity = new Set(['fuck', 'fucking', 'shit', 'bitch', 'asshole', 'motherfucker', 'dick', 'cunt']);
+    const tokens = this.sanitizeDocQuery(query).toLowerCase().split(/\s+/).filter(Boolean);
+    return tokens
+      .filter(t => t.length > 1)
+      .filter(t => !stopWords.has(t))
+      .filter(t => !profanity.has(t))
+      .slice(0, 6)
+      .join(' ');
+  }
+
+  private isValidDocQuery(query: string): boolean {
+    const q = (query || '').trim();
+    if (q.length < 3) return false;
+    if (!/[A-Za-z]/.test(q)) return false;
+    const words = q.split(/\s+/).filter(Boolean);
+    if (words.length > 8) return false;
+    const meaningful = q.match(/[A-Za-z0-9]{3,}/g) || [];
+    if (meaningful.length < 1) return false;
+    const punctChars = (q.match(/[^A-Za-z0-9\s._\-\\/]/g) || []).length;
+    if (punctChars > q.length * 0.5) return false;
+    return true;
+  }
+
+  private extractResultsCount(feedback: string): number {
+    const foundMatch = feedback.match(/found in\s+(\d+)\s+files/i);
+    if (foundMatch) return parseInt(foundMatch[1], 10) || 0;
+    if (/^Loaded\b/i.test(feedback) || /\bloaded\b/i.test(feedback)) return 1;
+    return 0;
+  }
+
+  private extractTopResultTitle(feedback: string): string {
+    const fromMatch = feedback.match(/from:\s*([^,;]+)/i);
+    if (fromMatch?.[1]) return fromMatch[1].trim();
+    const loadedMatch = feedback.match(/loaded[^:]*:\s*([^,;]+)/i);
+    if (loadedMatch?.[1]) return loadedMatch[1].trim();
+    return '';
+  }
+
+  private enforceSearchTruth(responseText: string, receipt?: SearchReceipt, actionReceipt?: ActionReceipt): string {
+    const text = (responseText || '').trim();
+    if (!text) return text;
+
+    const mentionsSearch = /\b(searched|search|looked up|lookup)\b/i.test(text);
+    const mentionsFound = /\b(found|opened|located|loaded)\b/i.test(text);
+    const mentionsOpen = /\b(opened|loaded)\b/i.test(text);
+
+    if ((mentionsSearch || mentionsFound) && !receipt?.didSearch) {
+      return 'I did not run a document search.';
+    }
+
+    if (!receipt?.didSearch) return text;
+
+    if (receipt.error && receipt.error !== 'too_many_matches') {
+      return `Search failed: ${receipt.error}`;
+    }
+
+    if (receipt.error === 'too_many_matches') {
+      return `Too many matches (${receipt.resultsCount}). Give 1-2 more keywords.`;
+    }
+
+    if (receipt.metadataOnly) {
+      return 'I located metadata for the document but do not have its content.';
+    }
+
+    if (mentionsOpen && !actionReceipt?.didExecute) {
+      if (receipt.resultsCount > 0) {
+        const top = receipt.top?.title ? ` Top: ${receipt.top.title}.` : '';
+        return `I searched for "${receipt.query}" and found ${receipt.resultsCount} results.${top}`;
+      }
+      return `I searched for "${receipt.query}" and found 0 results.`;
+    }
+
+    if (mentionsFound && receipt.resultsCount <= 0) {
+      return `I searched for "${receipt.query}" and found 0 results.`;
+    }
+
+    if (receipt.resultsCount > 0 && /\b(could not find|not found|found 0)\b/i.test(text)) {
+      const top = receipt.top?.title ? `; top: ${receipt.top.title}` : '';
+      return `Search returned ${receipt.resultsCount}${top}. ${text}`;
+    }
+
+    return text;
+  }
+
+  private collapseRunawayEcho(text: string): string {
+    const raw = (text || '').trim();
+    if (!raw) return raw;
+    const normalized = raw.replace(/\s+/g, ' ').trim();
+    const directRepeat = normalized.match(/^(.{8,220}?)(?:\s+\1){2,}$/i);
+    if (directRepeat?.[1]) {
+      return directRepeat[1].trim();
+    }
+
+    const sentences = normalized
+      .split(/(?<=[.!?])\s+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (sentences.length < 4) return raw;
+
+    const counts = new Map<string, { sentence: string; count: number }>();
+    for (const sentence of sentences) {
+      const key = sentence.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+      if (!key) continue;
+      const found = counts.get(key);
+      if (found) {
+        found.count += 1;
+      } else {
+        counts.set(key, { sentence, count: 1 });
+      }
+    }
+    const top = [...counts.values()].sort((a, b) => b.count - a.count)[0];
+    if (top && top.count >= 3) {
+      return top.sentence;
+    }
+    return raw;
   }
 
   /**
@@ -1178,6 +1798,364 @@ export class CommunionLoop {
     return this.state;
   }
 
+  getLLMReceipt(agentId?: string): LLMReceiptDebug | null {
+    if (agentId) {
+      return this.llmReceiptsByAgent.get(agentId) || null;
+    }
+    const receipts = Array.from(this.llmReceiptsByAgent.values());
+    if (receipts.length === 0) return null;
+    receipts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return receipts[0];
+  }
+
+  getLLMAblations(): Record<string, boolean> {
+    return { ...this.llmAblationFlags };
+  }
+
+  setLLMAblationFlags(flags: Record<string, boolean>, reset = false): Record<string, boolean> {
+    if (reset) {
+      this.llmAblationFlags = {};
+    }
+    for (const [key, value] of Object.entries(flags || {})) {
+      this.llmAblationFlags[key] = !!value;
+    }
+    return { ...this.llmAblationFlags };
+  }
+
+  private buildLLMReceiptMessages(options: GenerateOptions): LLMReceiptMessage[] {
+    if (Array.isArray(options.segments) && options.segments.length > 0) {
+      const messages: LLMReceiptMessage[] = [];
+      const ordered = [...options.segments].sort((a, b) => {
+        if (a.priority !== b.priority) return a.priority - b.priority;
+        return a.id.localeCompare(b.id);
+      });
+      for (const seg of ordered) {
+        const role = seg.role || 'user';
+        if (Array.isArray(seg.messages) && seg.messages.length > 0) {
+          for (const msg of seg.messages) {
+            const content = String(msg.content || '').trim();
+            if (!content) continue;
+            messages.push({ role: msg.role, content });
+          }
+          continue;
+        }
+        if (Array.isArray(seg.items) && seg.items.length > 0) {
+          for (const item of seg.items) {
+            const content = String(item.text || '').trim();
+            if (!content) continue;
+            messages.push({ role: item.role || role, content });
+          }
+          continue;
+        }
+        if (typeof seg.text === 'string' && seg.text.trim()) {
+          messages.push({ role, content: seg.text.trim() });
+        }
+      }
+      if (messages.length > 0) return messages;
+    }
+
+    const fallback: LLMReceiptMessage[] = [];
+    if (options.systemPrompt?.trim()) {
+      fallback.push({ role: 'system', content: options.systemPrompt.trim() });
+    }
+    if (options.conversationContext?.trim()) {
+      fallback.push({ role: 'user', content: options.conversationContext.trim() });
+    }
+    if (options.journalContext?.trim()) {
+      fallback.push({ role: 'user', content: options.journalContext.trim() });
+    }
+    if (options.documentsContext?.trim()) {
+      fallback.push({ role: 'user', content: options.documentsContext.trim() });
+    }
+    if (options.memoryContext?.trim()) {
+      fallback.push({ role: 'user', content: options.memoryContext.trim() });
+    }
+    return fallback;
+  }
+
+  private estimateSegmentClusterChars(segments: PromptSegment[] | undefined): {
+    WM: number;
+    SEM_R: number;
+    SOCIO: number;
+    snippets: { WM: string; SEM_R: string; SOCIO: string };
+  } {
+    const clusterChars = { WM: 0, SEM_R: 0, SOCIO: 0 };
+    const snippets = { WM: '', SEM_R: '', SOCIO: '' };
+    if (!Array.isArray(segments) || segments.length === 0) {
+      return { ...clusterChars, snippets };
+    }
+
+    const appendSnippet = (key: 'WM' | 'SEM_R' | 'SOCIO', text: string): void => {
+      if (!text || snippets[key].length >= 220) return;
+      const next = text.replace(/\s+/g, ' ').trim();
+      if (!next) return;
+      const remaining = 220 - snippets[key].length;
+      const slice = next.slice(0, remaining);
+      snippets[key] = snippets[key] ? `${snippets[key]} ${slice}`.trim() : slice;
+    };
+
+    const memorySignal = /\b(MEMORY SYSTEM STATE|MEMORY ITEMS|CONTEXT RAM|ScrollGraph:|Short-term buffer:|Permanent archive:)\b/i;
+    const semanticSignal = /\b(SHARED DOCUMENTS|AUTO DOC EXCERPT|BROWSE\s+"|\.docx\b|\.md\b|\.pdf\b|\.txt\b)\b/i;
+    const extractSignalSnippet = (text: string, signal: RegExp): string => {
+      const match = signal.exec(text);
+      if (!match || typeof match.index !== 'number') return text;
+      const start = Math.max(0, match.index - 80);
+      const end = Math.min(text.length, match.index + 260);
+      return text.slice(start, end);
+    };
+
+    for (const seg of segments) {
+      let content = '';
+      if (Array.isArray(seg.messages) && seg.messages.length > 0) {
+        content = seg.messages.map(m => m.content || '').join('\n');
+      } else if (Array.isArray(seg.items) && seg.items.length > 0) {
+        content = seg.items.map(i => i.text || '').join('\n');
+      } else if (typeof seg.text === 'string') {
+        content = seg.text;
+      }
+      if (!content) continue;
+
+      const chars = content.length;
+      const id = seg.id.toLowerCase();
+      let bucket: 'WM' | 'SEM_R' | 'SOCIO' = 'SOCIO';
+      const hasMemorySignal = memorySignal.test(content);
+      const hasSemanticSignal = semanticSignal.test(content);
+
+      if (id.includes('doc') || id.includes('sem') || hasSemanticSignal) bucket = 'SEM_R';
+      if (id.includes('memory') || id.includes('ram') || id.includes('tissue') || id.includes('brain') || hasMemorySignal) bucket = 'WM';
+      if (id.includes('conversation') || id.includes('social')) bucket = 'SOCIO';
+      if (id.includes('context-main') && !hasMemorySignal) bucket = 'SOCIO';
+
+      clusterChars[bucket] += chars;
+      if (bucket === 'WM' && hasMemorySignal) {
+        appendSnippet(bucket, extractSignalSnippet(content, memorySignal));
+      } else {
+        appendSnippet(bucket, content);
+      }
+    }
+
+    return { ...clusterChars, snippets };
+  }
+
+  private recordLLMReceipt(
+    agentId: string,
+    model: string,
+    options: GenerateOptions,
+    result?: GenerateResult,
+    error?: unknown,
+  ): void {
+    const messages = this.buildLLMReceiptMessages(options);
+    if (result?.text) {
+      messages.push({ role: 'assistant', content: result.text });
+    }
+
+    const charCounts = { total: 0, system: 0, user: 0, assistant: 0 };
+    for (const msg of messages) {
+      const len = (msg.content || '').length;
+      charCounts.total += len;
+      if (msg.role === 'system') charCounts.system += len;
+      if (msg.role === 'user') charCounts.user += len;
+      if (msg.role === 'assistant') charCounts.assistant += len;
+    }
+
+    const clusters = this.estimateSegmentClusterChars(options.segments);
+    const wmMissingStreak = clusters.WM <= 0
+      ? (this.llmWmMissingStreakByAgent.get(agentId) || 0) + 1
+      : 0;
+    this.llmWmMissingStreakByAgent.set(agentId, wmMissingStreak);
+
+    const issues: string[] = [];
+    if (!messages.some(m => m.role === 'system' && m.content.trim().length > 0)) {
+      issues.push('missing_system');
+    }
+    if (wmMissingStreak > 0) {
+      issues.push('wm_missing');
+    }
+    if (error) {
+      issues.push('request_failed');
+    }
+
+    const receipt: LLMReceiptDebug = {
+      requestId: `${agentId}-${this.state.tickCount}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      tickId: this.state.tickCount,
+      timestamp: new Date().toISOString(),
+      agentId,
+      model,
+      payload: {
+        model,
+        messages,
+      },
+      messages,
+      charCounts,
+      clusterChars: {
+        WM: clusters.WM,
+        SEM_R: clusters.SEM_R,
+        SOCIO: clusters.SOCIO,
+      },
+      clusterCharsWire: {
+        WM: clusters.WM,
+        SEM_R: clusters.SEM_R,
+        SOCIO: clusters.SOCIO,
+      },
+      clusterSnippets: {
+        WM: clusters.snippets.WM,
+        SEM_R: clusters.snippets.SEM_R,
+        SOCIO: clusters.snippets.SOCIO,
+      },
+      wmMissingStreak,
+      issues,
+      lastError: error ? (error instanceof Error ? error.message : String(error)) : undefined,
+    };
+
+    this.llmReceiptsByAgent.set(agentId, receipt);
+  }
+
+  setDocAutonomyMode(mode: DocAutonomyMode): void {
+    if (mode !== 'quiet' && mode !== 'balanced' && mode !== 'bold') return;
+    this.docAutonomyMode = mode;
+  }
+
+  getDocAutonomyMode(): DocAutonomyMode {
+    return this.docAutonomyMode;
+  }
+
+  getDocDebugState(): { autonomyMode: DocAutonomyMode; lastSearch: SearchReceipt | null; lastAction: ActionReceipt | null } {
+    const latestSearch = Array.from(this.lastSearchReceiptByAgentTurn.values()).pop() || null;
+    const latestAction = Array.from(this.lastActionReceiptByAgentTurn.values()).pop() || null;
+    return {
+      autonomyMode: this.docAutonomyMode,
+      lastSearch: latestSearch,
+      lastAction: latestAction,
+    };
+  }
+
+  private getLatestActionReceiptForAgent(agentId: string): ActionReceipt | null {
+    const all = Array.from(this.lastActionReceiptByAgentTurn.values());
+    for (let i = all.length - 1; i >= 0; i--) {
+      if (all[i]?.agentId === agentId) return all[i];
+    }
+    return null;
+  }
+
+  runDocSearchForUi(agentId: string, query: string, action: 'search' | 'open' | 'load_excerpt' | 'pin' | 'undo' = 'search'): { receipt: SearchReceipt; actionReceipt?: ActionReceipt; results: Array<{ id: string; title: string; score: number; source: 'ram' | 'drive' }> } {
+    const ram = this.ram.get(agentId);
+    if (!ram) {
+      return {
+        receipt: {
+          didSearch: false,
+          query,
+          corpus: 'unknown',
+          resultsCount: 0,
+          error: `ram_unavailable:${agentId}`,
+          turnId: 'ui',
+          agentId,
+        },
+        results: [],
+      };
+    }
+
+    const normalized = this.sanitizeDocQuery(this.sanitizeDocQueryTokens(query || ''));
+    if (!normalized || !this.isValidDocQuery(normalized)) {
+      return {
+        receipt: {
+          didSearch: false,
+          query: normalized || '',
+          corpus: 'ram',
+          resultsCount: 0,
+          error: 'invalid_query',
+          turnId: 'ui',
+          agentId,
+        },
+        results: [],
+      };
+    }
+
+    const search = this.searchDocsForQuery(agentId, normalized, ram, 10);
+    const receipt: SearchReceipt = {
+      didSearch: true,
+      query: normalized,
+      corpus: search.top?.source === 'drive' ? 'drive' : 'ram',
+      resultsCount: search.totalCount,
+      resultsShown: search.hits.length,
+      top: search.top ? { title: search.top.title, id: search.top.id, uri: search.top.uri, score: Number(search.top.score.toFixed(3)) } : undefined,
+      ms: search.ms,
+      turnId: 'ui',
+      agentId,
+    };
+
+    let actionReceipt: ActionReceipt | undefined;
+    if ((action === 'open' || action === 'load_excerpt') && search.top) {
+      const load = this.loadExcerptForHit(search.top, normalized, ram);
+      actionReceipt = {
+        didExecute: true,
+        action: action === 'open' ? 'read' : 'load_excerpt',
+        target: search.top.id,
+        ok: load.ok,
+        summary: load.summary,
+        doc: { id: search.top.id, title: search.top.title },
+        turnId: 'ui',
+        agentId,
+      };
+      if (actionReceipt.ok) {
+        receipt.loadedContent = true;
+      } else if (load.metadataOnly) {
+        receipt.metadataOnly = true;
+      }
+    } else if (action === 'pin' && search.top) {
+      const feedback = ram.processCommand({ action: 'pin', target: search.top.id });
+      actionReceipt = {
+        didExecute: true,
+        action: 'pin',
+        target: search.top.id,
+        ok: /^pinned/i.test(feedback),
+        summary: feedback,
+        doc: { id: search.top.id, title: search.top.title },
+        turnId: 'ui',
+        agentId,
+      };
+    } else if (action === 'undo') {
+      const latest = this.getLatestActionReceiptForAgent(agentId);
+      if (latest?.target) {
+        let feedback = 'Nothing to undo.';
+        if (latest.action === 'pin') {
+          feedback = ram.processCommand({ action: 'release', target: latest.target });
+        } else if (latest.action === 'load_excerpt' || latest.action === 'read' || latest.action === 'browse') {
+          feedback = ram.processCommand({ action: 'drop', target: latest.target });
+        }
+        actionReceipt = {
+          didExecute: true,
+          action: 'undo',
+          target: latest.target,
+          ok: !/not found|cannot/i.test(feedback),
+          summary: feedback,
+          doc: latest.doc,
+          turnId: 'ui',
+          agentId,
+        };
+      } else {
+        actionReceipt = {
+          didExecute: false,
+          action: 'undo',
+          target: '',
+          ok: false,
+          summary: 'No previous action to undo.',
+          turnId: 'ui',
+          agentId,
+        };
+      }
+    }
+
+    if (actionReceipt) {
+      this.lastActionReceiptByAgentTurn.set(`${agentId}:ui:${Date.now()}:action`, actionReceipt);
+    }
+
+    return {
+      receipt,
+      actionReceipt,
+      results: search.hits.map(hit => ({ id: hit.id, title: hit.title, score: Number(hit.score.toFixed(3)), source: hit.source })),
+    };
+  }
+
   /** Pond saturation state for the mycelium cabinet Pi to poll */
   getAloisSaturation(): object | null {
     for (const [, agent] of this.agents) {
@@ -1311,17 +2289,13 @@ export class CommunionLoop {
 
     // Feed human message into Alois tissue
     this.feedAloisBrains(this.state.humanName, text, true);
-
-    // Human spoke — trigger immediate tick and reset the clock.
-    // Only if the human has actually stopped talking (silence detected).
-    // Whisper bridge sends chunks mid-speech, so we must respect humanSpeaking.
-    if (!this.processing && !this.speaking && !this.paused && !this.humanSpeaking) {
-      console.log('[COMMUNION] Human spoke — advancing clock and triggering tick');
-      if (this.timer) {
-        clearTimeout(this.timer);
-      }
-      this.tick().catch(err => console.error('[COMMUNION] Immediate tick error:', err));
+    if (this.humanSpeaking) {
+      this.humanSpeaking = false;
     }
+
+    // Human spoke — request a fast-lane tick. If blocked, scheduleRetry() will keep
+    // checking quickly instead of waiting for a full interval.
+    this.requestImmediateTick('human_message');
 
     return msg;
   }
@@ -1637,9 +2611,13 @@ export class CommunionLoop {
       }
     }
 
-    // Save graph every 10 ticks
-    if (this.state.tickCount % 10 === 0) {
-      this.graph.save().catch(err => console.error('[GRAPH] Auto-save error:', err));
+    // Save graph every 10 ticks (or when explicitly requested by store callers)
+    if (this.state.tickCount % 10 === 0 || this.graphSaveRequested) {
+      this.graph.save()
+        .then(() => {
+          this.graphSaveRequested = false;
+        })
+        .catch(err => console.error('[GRAPH] Auto-save error:', err));
     }
 
     // Save Alois brain every 50 ticks
@@ -1671,7 +2649,24 @@ export class CommunionLoop {
     agent: { backend: AgentBackend; config: AgentConfig; systemPrompt: string },
     conversationContext: string
   ): Promise<void> {
+    const latestHumanMessage = [...this.state.messages]
+      .reverse()
+      .find(m => m.speaker === 'human');
+    const hasLatestHuman = !!latestHumanMessage;
     const ram = this.ram.get(agentId);
+    const latestHumanText = latestHumanMessage?.text?.trim() || '';
+    const latestHumanSpeaker = latestHumanMessage?.speakerName || this.state.humanName;
+    const latestHumanMessageId = latestHumanMessage?.id || '';
+    const searchIntent = this.deriveSearchIntent(latestHumanText);
+    const canonicalDocQuery = hasLatestHuman ? this.deriveSearchQuery(latestHumanText, searchIntent) : null;
+    const hasCanonicalDocQuery = !!canonicalDocQuery;
+    const lastLatchedHumanMsgId = this.lastDocSearchByAgent.get(agentId) || null;
+    const canAutoBrowseThisTurn = !!(latestHumanMessageId && latestHumanMessageId !== lastLatchedHumanMsgId);
+    const runtimeDocIntentRequested = hasLatestHuman && searchIntent.kind !== 'none';
+    const turnKey = `${agentId}:${latestHumanMessageId}:docsearch`;
+    let preSearchReceipt: SearchReceipt | undefined;
+    let preActionReceipt: ActionReceipt | undefined;
+    let preAutoDocsText = '';
 
     // ── Load context into RAM slots ──
     if (ram) {
@@ -1715,6 +2710,75 @@ export class CommunionLoop {
       if (ram.isLoaded('documents') && this.documentItems.length > 0) {
         for (const doc of this.documentItems) {
           ram.offerItem('documents', doc);
+        }
+      }
+
+      // Runtime-owned doc intent execution (canonical search path, one attempt per human turn)
+      if (hasLatestHuman && searchIntent.kind !== 'none') {
+        if (!canAutoBrowseThisTurn) {
+          preSearchReceipt = this.lastSearchReceiptByAgentTurn.get(turnKey);
+          preActionReceipt = this.lastActionReceiptByAgentTurn.get(turnKey);
+          preAutoDocsText = this.lastAutoDocsTextByAgentTurn.get(turnKey) || '';
+          if (!preSearchReceipt && hasCanonicalDocQuery) {
+            const query = canonicalDocQuery as string;
+            const run = this.runRuntimeDocSearch({
+              agentId,
+              turnId: latestHumanMessageId,
+              query,
+              ram,
+              originalHumanText: latestHumanText,
+            });
+            preSearchReceipt = run.searchReceipt;
+            preActionReceipt = run.actionReceipt;
+            this.lastSearchReceiptByAgentTurn.set(turnKey, preSearchReceipt);
+            if (preActionReceipt) {
+              this.lastActionReceiptByAgentTurn.set(turnKey, preActionReceipt);
+            }
+            if (run.autoDocsText) {
+              preAutoDocsText = run.autoDocsText;
+              this.lastAutoDocsTextByAgentTurn.set(turnKey, run.autoDocsText);
+            }
+          }
+        } else {
+          this.lastDocSearchByAgent.set(agentId, latestHumanMessageId);
+          if (!hasCanonicalDocQuery) {
+            preSearchReceipt = {
+              didSearch: false,
+              query: '',
+              corpus: 'unknown',
+              resultsCount: 0,
+              error: 'no_query',
+              humanMessageId: latestHumanMessageId,
+              turnId: latestHumanMessageId,
+              agentId,
+            };
+            this.lastSearchReceiptByAgentTurn.set(turnKey, preSearchReceipt);
+            console.log('SEARCH_RESULT', {
+              query: '',
+              resultsCount: 0,
+              topResultTitle: '',
+              err: 'no_query',
+            });
+          } else {
+            const query = canonicalDocQuery as string;
+            const run = this.runRuntimeDocSearch({
+              agentId,
+              turnId: latestHumanMessageId,
+              query,
+              ram,
+              originalHumanText: latestHumanText,
+            });
+            preSearchReceipt = run.searchReceipt;
+            preActionReceipt = run.actionReceipt;
+            this.lastSearchReceiptByAgentTurn.set(turnKey, preSearchReceipt);
+            if (preActionReceipt) {
+              this.lastActionReceiptByAgentTurn.set(turnKey, preActionReceipt);
+            }
+            if (run.autoDocsText) {
+              preAutoDocsText = run.autoDocsText;
+              this.lastAutoDocsTextByAgentTurn.set(turnKey, run.autoDocsText);
+            }
+          }
         }
       }
     }
@@ -1863,32 +2927,212 @@ export class CommunionLoop {
       journalContext: '',
       documentsContext: isLocalProvider ? undefined : (this.documentsContext || undefined),
       memoryContext: undefined,
+      segments: this.buildPromptSegmentsForAgent(
+        agentId,
+        systemPrompt,
+        finalContext,
+        isLocalProvider ? undefined : (this.documentsContext || undefined),
+        preAutoDocsText,
+      ),
+      maxContextTokens: agent.config.maxContextTokens,
+      safetyTokens: agent.config.safetyTokens,
+      onBudgetReceipt: (receipt) => {
+        console.log(`[BUDGET] ${agent.config.name} in=${receipt.estimatedInputTokensAfterTrim}/${receipt.inputBudgetTokens} dropped=${receipt.droppedSegments.join(',') || 'none'} trimmed=${receipt.trimmedSegments.length}`);
+      },
+      latestHumanText,
+      latestHumanSpeaker,
+      latestHumanMessageId: latestHumanMessageId || undefined,
+      searchIntent: {
+        kind: hasCanonicalDocQuery ? searchIntent.kind : 'none',
+        query: canonicalDocQuery || undefined,
+        uiSelection: searchIntent.uiSelection,
+      },
+      onSearchReceipt: (receipt) => {
+        console.log(`[SEARCH_DONE] query="${receipt.query}" results=${receipt.resultsCount} top="${receipt.top?.title || ''}" err="${receipt.error || ''}"`);
+      },
+      onActionReceipt: (receipt) => {
+        console.log(`[ACTION_DONE] action="${receipt.action}" target="${receipt.target}" ok=${receipt.ok} summary="${receipt.summary}"`);
+      },
       provider: agent.config.provider,
       prefill,
     };
+    if (preSearchReceipt) {
+      options.onSearchReceipt?.(preSearchReceipt);
+    }
+    if (preActionReceipt) {
+      options.onActionReceipt?.(preActionReceipt);
+    }
 
-    const result = await agent.backend.generate(options);
+    let result: GenerateResult;
+    try {
+      result = await agent.backend.generate(options);
+    } catch (err: any) {
+      if (err instanceof RequiredLatestHumanTurnTooLargeError
+        || err instanceof RequiredSegmentsExceedBudgetError
+        || err instanceof ContextBudgetExceededError) {
+        this.recordLLMReceipt(agentId, agent.config.model, options, undefined, err);
+        console.error(`[${agent.config.name}] ${err.name} ${JSON.stringify(err.diagnostics || {})}`);
+        return;
+      }
+      this.recordLLMReceipt(agentId, agent.config.model, options, undefined, err);
+      throw err;
+    }
+    this.recordLLMReceipt(agentId, agent.config.model, options, result);
 
     // ── Parse and process RAM commands from response ──
     let responseText = result.text || '';
     if (ram && responseText) {
       const { cleanText, commands } = parseRAMCommands(responseText);
       responseText = cleanText;
+      const claimsDocAction = /\b(i|i've|i have)\b[\s\S]{0,120}\b(browsed|loaded|read|opened|pulled)\b[\s\S]{0,160}\b(doc|docs|document|documents|file|files|manuscript|archive)/i.test(responseText);
+      let hasDocCommand = !!preSearchReceipt?.didSearch || !!preActionReceipt?.didExecute
+        || (hasLatestHuman && commands.some(c => c.action === 'browse' || c.action === 'read' || c.action === 'graph'));
       const systemFeedback: string[] = [];
       let readTriggered = false;
+      let browseTriggered = !!preSearchReceipt?.loadedContent || !!preActionReceipt?.ok;
+      let metadataOnly = !!preSearchReceipt?.metadataOnly;
+      let runtimeSearchReceipt: SearchReceipt | undefined = preSearchReceipt;
+      let runtimeActionReceipt: ActionReceipt | undefined = preActionReceipt;
+      const preSearchRan = !!preSearchReceipt?.didSearch;
+      if (claimsDocAction && !hasDocCommand) {
+        responseText = 'I did not run a document search.';
+      }
       for (const cmd of commands) {
-        // [RAM:READ filepath] — load full file, then re-generate immediately with content in context
+        // [RAM:READ filepath] - load full file, then re-generate immediately with content in context
         if (cmd.action === 'read') {
-          const feedback = this.readFileIntoRAM(cmd.target.trim(), ram);
+          if (runtimeDocIntentRequested || preSearchRan) continue;
+          if (!hasLatestHuman || !hasCanonicalDocQuery) continue;
+          const readQuery = canonicalDocQuery as string;
+          this.lastDocSearchByAgent.set(agentId, latestHumanMessageId);
+          console.log('SEARCH_CALL', {
+            query: readQuery,
+            source: 'human_turn',
+            humanMsgId: latestHumanMessageId,
+            agentId,
+            originalHumanText: latestHumanText,
+          });
+          const feedback = this.readFileIntoRAM(readQuery, ram);
           console.log(`[${agent.config.name}] RAM:READ ${feedback}`);
-          systemFeedback.push(`[RAM:READ ${cmd.target}] → ${feedback}`);
+          const readResultsCount = /^Loaded\b/i.test(feedback) ? 1 : 0;
+          runtimeSearchReceipt = {
+            didSearch: true,
+            query: readQuery,
+            corpus: 'ram',
+            resultsCount: readResultsCount,
+            resultsShown: readResultsCount,
+            top: readResultsCount > 0 ? { title: readQuery } : undefined,
+            loadedContent: readResultsCount > 0,
+            error: /^Read error:/i.test(feedback) ? feedback : undefined,
+            humanMessageId: latestHumanMessageId,
+            turnId: latestHumanMessageId,
+            agentId,
+          };
+          options.onSearchReceipt?.(runtimeSearchReceipt);
+          runtimeActionReceipt = {
+            didExecute: true,
+            action: 'read',
+            target: readQuery,
+            ok: readResultsCount > 0,
+            summary: feedback,
+            turnId: latestHumanMessageId,
+            agentId,
+          };
+          options.onActionReceipt?.(runtimeActionReceipt);
+          console.log('SEARCH_RESULT', {
+            query: readQuery,
+            resultsCount: readResultsCount,
+            topResultTitle: readResultsCount > 0 ? readQuery : '',
+          });
+          systemFeedback.push(`[RAM:READ ${readQuery}] → ${feedback}`);
           if (feedback.startsWith('Loaded')) readTriggered = true;
+          if (/metadata|DOCX not yet extracted/i.test(feedback)) metadataOnly = true;
+          continue;
+        }
+        if ((cmd.action === 'browse' || cmd.action === 'graph') && !hasLatestHuman) continue;
+        if (cmd.action === 'browse') {
+          if (runtimeDocIntentRequested || preSearchRan) continue;
+          if (!hasCanonicalDocQuery) continue;
+          const browseQuery = canonicalDocQuery as string;
+          this.lastDocSearchByAgent.set(agentId, latestHumanMessageId);
+          console.log('SEARCH_CALL', {
+            query: browseQuery,
+            source: 'human_turn',
+            humanMsgId: latestHumanMessageId,
+            agentId,
+            originalHumanText: latestHumanText,
+          });
+          const feedback = this.browseFiles(browseQuery, ram);
+          console.log(`[${agent.config.name}] RAM:BROWSE ${feedback}`);
+          systemFeedback.push(`[RAM:BROWSE ${browseQuery}] → ${feedback}`);
+          if (/loaded/i.test(feedback)) {
+            browseTriggered = true;
+          } else if (/found in \d+ files/i.test(feedback)) {
+            metadataOnly = true;
+          }
+          const browseResultsCount = this.extractResultsCount(feedback);
+          const browseTopTitle = this.extractTopResultTitle(feedback);
+          runtimeSearchReceipt = {
+            didSearch: true,
+            query: browseQuery,
+            corpus: 'ram',
+            resultsCount: browseResultsCount,
+            resultsShown: browseResultsCount,
+            top: browseTopTitle ? { title: browseTopTitle } : undefined,
+            loadedContent: /\bloaded\b/i.test(feedback),
+            metadataOnly: browseResultsCount > 0 && !/\bloaded\b/i.test(feedback),
+            error: /Read error|could not load|not found/i.test(feedback) ? feedback : undefined,
+            humanMessageId: latestHumanMessageId,
+            turnId: latestHumanMessageId,
+            agentId,
+          };
+          options.onSearchReceipt?.(runtimeSearchReceipt);
+          runtimeActionReceipt = {
+            didExecute: true,
+            action: 'browse',
+            target: browseQuery,
+            ok: browseResultsCount > 0,
+            summary: feedback,
+            turnId: latestHumanMessageId,
+            agentId,
+          };
+          options.onActionReceipt?.(runtimeActionReceipt);
+          console.log('SEARCH_RESULT', {
+            query: browseQuery,
+            resultsCount: browseResultsCount,
+            topResultTitle: browseTopTitle,
+          });
           continue;
         }
         const feedback = ram.processCommand(cmd);
         console.log(`[${agent.config.name}] RAM: ${feedback}`);
-        if (cmd.action === 'browse' || cmd.action === 'graph') {
-          systemFeedback.push(`[RAM:${cmd.action.toUpperCase()} ${cmd.target}] → ${feedback}`);
+        if (cmd.action === 'graph') {
+          systemFeedback.push(`[RAM:${cmd.action.toUpperCase()} ${cmd.target}] -> ${feedback}`);
+        }
+      }
+      if (hasDocCommand && !readTriggered && !browseTriggered) {
+        if ((runtimeSearchReceipt?.resultsCount || 0) <= 0) {
+          responseText = runtimeSearchReceipt?.didSearch
+            ? `I searched for "${runtimeSearchReceipt.query}" and found 0 results.`
+            : 'I could not find that document.';
+        } else if (runtimeSearchReceipt?.error === 'too_many_matches') {
+          responseText = `Too many matches (${runtimeSearchReceipt.resultsCount}). Give 1-2 more keywords.`;
+        } else if (runtimeSearchReceipt?.metadataOnly || metadataOnly) {
+          responseText = 'I located metadata for the document but do not have its content.';
+        } else {
+          const top = runtimeSearchReceipt?.top?.title ? ` Top: ${runtimeSearchReceipt.top.title}.` : '';
+          responseText = `I found ${runtimeSearchReceipt?.resultsCount} candidate docs for "${runtimeSearchReceipt?.query}".${top}`;
+        }
+      }
+      if (runtimeSearchReceipt) {
+        result.searchReceipt = runtimeSearchReceipt;
+        if (latestHumanMessageId) {
+          this.lastSearchReceiptByAgentTurn.set(turnKey, runtimeSearchReceipt);
+        }
+      }
+      if (runtimeActionReceipt) {
+        result.actionReceipt = runtimeActionReceipt;
+        if (latestHumanMessageId) {
+          this.lastActionReceiptByAgentTurn.set(turnKey, runtimeActionReceipt);
         }
       }
       if (systemFeedback.length > 0) {
@@ -1905,9 +3149,9 @@ export class CommunionLoop {
       }
 
       // ── Re-generate immediately after READ so response is grounded in actual content ──
-      if (readTriggered) {
+      if (readTriggered || browseTriggered) {
         try {
-          console.log(`[${agent.config.name}] READ triggered immediate re-generation`);
+          console.log(`[${agent.config.name}] DOC context update triggered immediate re-generation`);
           // Build a clean single-pass context: assemble() has conversation + documents + memory.
           // Do NOT prepend options.conversationContext — that duplicates every slot and pushes
           // the file content beyond what the 14B model can attend to.
@@ -1920,6 +3164,10 @@ export class CommunionLoop {
             journalContext: '',
             documentsContext: undefined,
             memoryContext: undefined,
+            segments: this.buildPromptSegmentsForAgent(agentId, options.systemPrompt, regenConversation, undefined, preAutoDocsText),
+            maxContextTokens: agent.config.maxContextTokens,
+            safetyTokens: agent.config.safetyTokens,
+            onBudgetReceipt: options.onBudgetReceipt,
             provider: agent.config.provider,
             prefill: '[SPEAK] ', // always SPEAK — human asked her to read a file
           };
@@ -1931,6 +3179,50 @@ export class CommunionLoop {
           }
         } catch (err) {
           console.error(`[${agent.config.name}] Re-generation error:`, err);
+        }
+      }
+    }
+
+    if (result.action === 'speak' && responseText) {
+      responseText = this.enforceSearchTruth(responseText, result.searchReceipt, result.actionReceipt);
+      responseText = this.collapseRunawayEcho(responseText);
+    }
+
+    // ── Anti-echo guard: local models sometimes mirror the human text verbatim ──
+    if (result.action === 'speak' && responseText && latestHumanText) {
+      const normalize = (s: string) => s
+        .toLowerCase()
+        .replace(/[`"'“”‘’.,!?;:()[\]{}<>/\\|@#$%^&*_+=~-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const normResp = normalize(responseText);
+      const normHuman = normalize(latestHumanText);
+      const looksLikeEcho =
+        normResp === normHuman
+        || (normHuman.length > 0 && normResp.startsWith(normHuman) && normResp.length <= normHuman.length + 80);
+
+      if (looksLikeEcho) {
+        console.log(`[${agent.config.name}] ECHO guard triggered; retrying with anti-echo clamp`);
+        try {
+          const retry = await agent.backend.generate({
+            ...options,
+            systemPrompt: `${options.systemPrompt}\n\nCRITICAL: Do NOT repeat or paraphrase the user's message as your answer. Respond with one concrete, forward-moving reply.`,
+            conversationContext: `${options.conversationContext}\n\n[SYSTEM FEEDBACK: Your previous draft echoed the user. Reply with substance, not repetition.]`,
+            prefill: '[SPEAK] ',
+          });
+          const retryText = (retry.text || '').trim();
+          const normRetry = normalize(retryText);
+          if (retryText && normRetry !== normHuman) {
+            responseText = retryText;
+            result.action = 'speak';
+          } else {
+            responseText = 'I hear you. Give me one concrete target and I will act on it now.';
+            result.action = 'speak';
+          }
+        } catch (err) {
+          console.error(`[${agent.config.name}] ECHO retry failed:`, err);
+          responseText = 'I hear you. Give me one concrete target and I will act on it now.';
+          result.action = 'speak';
         }
       }
     }
@@ -1950,6 +3242,10 @@ export class CommunionLoop {
         result.action = 'silent';
         responseText = '';
       }
+    }
+
+    if ((result.action === 'speak' || result.action === 'journal') && responseText) {
+      this.recordLLMReceipt(agentId, agent.config.model, options, { ...result, text: responseText });
     }
 
     if (result.action === 'speak' && responseText) {
@@ -2073,6 +3369,106 @@ export class CommunionLoop {
    * Journal a RAM reflective sweep result — spiritual housekeeping becomes visible.
    * "Today I let go of Scroll-421. It no longer reflects who I am becoming."
    */
+  private buildPromptSegmentsForAgent(
+    agentId: string,
+    systemPrompt: string,
+    conversationContext: string,
+    documentsContext?: string,
+    autoDocsText?: string,
+  ): PromptSegment[] {
+    const recent = this.state.messages.slice(-this.contextWindow);
+    const latestHumanMessage = [...this.state.messages]
+      .reverse()
+      .find(m => m.speaker === 'human');
+    const latestHumanMessageId = latestHumanMessage?.id;
+    const latestHumanText = latestHumanMessage?.text?.trim() || '';
+    const latestHumanSpeaker = latestHumanMessage?.speakerName || this.state.humanName;
+    const items = recent.map((m, idx) => {
+      const isLatestHuman = !!latestHumanMessageId && m.speaker === 'human' && m.id === latestHumanMessageId;
+      return {
+        id: isLatestHuman ? 'conversation:latest-human' : `conversation:${idx}`,
+        text: `${m.speakerName}: ${m.text}`,
+        role: 'user' as const,
+        recency: idx,
+        score: m.speaker === 'human' ? 2 : (m.speaker === agentId ? 0.5 : 1),
+        required: isLatestHuman,
+      };
+    });
+    const hasLatestHuman = items.some(item => item.required);
+    if (!hasLatestHuman && latestHumanText) {
+      items.push({
+        id: 'conversation:latest-human',
+        text: `${latestHumanSpeaker}: ${latestHumanText}`,
+        role: 'user' as const,
+        recency: recent.length,
+        score: 2,
+        required: true,
+      });
+    }
+
+    const segments: PromptSegment[] = [
+      {
+        id: 'system',
+        priority: 1,
+        required: true,
+        trimStrategy: 'NONE',
+        role: 'system',
+        text: systemPrompt,
+      },
+      {
+        id: 'conversation',
+        priority: 2,
+        required: items.some(item => item.required),
+        trimStrategy: 'DROP_OLDEST_MESSAGES',
+        role: 'user',
+        items,
+      },
+      {
+        id: 'context-main',
+        priority: 5,
+        required: false,
+        trimStrategy: 'SHRINK_TEXT',
+        role: 'user',
+        text: conversationContext,
+      },
+    ];
+
+    if (autoDocsText && autoDocsText.trim()) {
+      segments.push({
+        id: 'docs:auto',
+        priority: 4,
+        required: false,
+        trimStrategy: 'SHRINK_TEXT',
+        role: 'user',
+        text: autoDocsText.trim(),
+        shrinkTokenSteps: [350, 250, 150, 80],
+      });
+    }
+
+    if (documentsContext) {
+      segments.push({
+        id: 'docs',
+        priority: 6,
+        required: false,
+        trimStrategy: 'SHRINK_TEXT',
+        role: 'user',
+        text: documentsContext,
+        shrinkTokenSteps: [350, 250, 150, 80],
+      });
+    }
+    if (!items.some(item => item.required) && conversationContext) {
+      segments.push({
+        id: 'latest-human-fallback',
+        priority: 2,
+        required: true,
+        trimStrategy: 'NONE',
+        role: 'user',
+        text: conversationContext.slice(-1200),
+      });
+    }
+    return segments;
+  }
+
   private journalRAMReflection(
     agentId: string,
     agent: { backend: AgentBackend; config: AgentConfig; systemPrompt: string },
@@ -2680,6 +4076,22 @@ export class CommunionLoop {
     return this.humanSpeaking;
   }
 
+  /**
+   * Fast-lane trigger for human-turn responsiveness.
+   * If currently blocked by processing/speaking/humanSpeaking, retries quickly.
+   */
+  requestImmediateTick(reason: string = 'manual'): void {
+    if (this.paused || !this.timer) return;
+    if (this.processing || this.speaking || this.humanSpeaking) {
+      this.scheduleRetry();
+      return;
+    }
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => {
+      this.tick().catch(err => console.error(`[TICK] Immediate (${reason}) error:`, err));
+    }, 0);
+  }
+
   // ── Human Presence ──
 
   setHumanPresence(presence: HumanPresence): void {
@@ -2753,6 +4165,17 @@ export class CommunionLoop {
     // Link to session
     if (sessionUri) {
       this.graph.link(uri, 'occurredDuring', sessionUri);
+    }
+  }
+
+  private ensureSessionCurrentNode(sessionUri: string, sessionId: string): void {
+    this.graph.addNode('session:current', 'Session', {
+      sessionId,
+      currentSessionUri: sessionUri,
+      updatedAt: new Date().toISOString(),
+    });
+    if (sessionUri !== 'session:current') {
+      this.graph.link('session:current', 'relatedTo', sessionUri);
     }
   }
 
@@ -3104,8 +4527,12 @@ export class CommunionLoop {
    * Searches graph Document nodes by path match, falls back to disk search.
    */
   private readFileIntoRAM(target: string, ram: ContextRAM): string {
-    const targetLower = target.toLowerCase();
-    const tokens = targetLower.split(/[\s\-_./\\]+/).filter(t => t.length > 2);
+    const targetLower = (target || '').toLowerCase().trim();
+    const targetNormalized = targetLower.replace(/[^a-z0-9]+/g, ' ').trim();
+    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'on', 'for', 'with', 'from']);
+    const rawTokens = targetNormalized.split(/\s+/).filter(t => t.length > 1);
+    const tokens = rawTokens.filter(t => !stopWords.has(t));
+    const effectiveTokens = tokens.length > 0 ? tokens : rawTokens;
 
     // Find the best matching Document node
     let bestPath: string | null = null;
@@ -3114,10 +4541,13 @@ export class CommunionLoop {
       const fullPath = node.data.fullPath as string;
       if (!fullPath || !existsSync(fullPath)) continue;
       const pathLower = fullPath.toLowerCase();
+      const pathNormalized = pathLower.replace(/[^a-z0-9]+/g, ' ');
+      const baseName = fullPath.replace(/^.*[/\\]/, '').toLowerCase();
       // Exact substring match scores highest
-      const exactScore = pathLower.includes(targetLower) ? 1000 : 0;
-      const tokenScore = tokens.filter(t => pathLower.includes(t)).length;
-      const score = exactScore + tokenScore;
+      const exactScore = (pathLower.includes(targetLower) || (targetNormalized.length > 0 && pathNormalized.includes(targetNormalized))) ? 1000 : 0;
+      const baseNameScore = (baseName.includes(targetLower) || (targetNormalized.length > 0 && baseName.replace(/[^a-z0-9]+/g, ' ').includes(targetNormalized))) ? 200 : 0;
+      const tokenScore = effectiveTokens.filter(t => pathNormalized.includes(t)).length;
+      const score = exactScore + baseNameScore + tokenScore;
       if (score > bestScore) { bestScore = score; bestPath = fullPath; }
     }
 
@@ -3152,7 +4582,7 @@ export class CommunionLoop {
       if (!ram.isLoaded('documents')) {
         ram.processCommand({ action: 'load', target: 'documents' });
       }
-      ram.offerItem('documents', { id: itemId, label: `FULL: ${label}`, content: snippet, chars: snippet.length, tags: tokens });
+      ram.offerItem('documents', { id: itemId, label: `FULL: ${label}`, content: snippet, chars: snippet.length, tags: effectiveTokens });
       ram.processCommand({ action: 'pin', target: itemId }); // auto-pin — survives tick auto-curation
       return `Loaded full file: ${label} (${content.length} chars${truncated ? ', truncated to 24k' : ''}) — pinned, will not be auto-evicted`;
     } catch (err) {
@@ -3226,3 +4656,4 @@ export class CommunionLoop {
     console.log('[COMMUNION] Loop stopped');
   }
 }
+

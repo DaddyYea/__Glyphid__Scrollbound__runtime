@@ -14,6 +14,10 @@ import { spawn } from 'child_process';
 import { CommunionLoop, CommunionEvent } from './communionLoop';
 import { CommunionConfig, AgentConfig } from './types';
 import { VOICES } from './voice';
+import { getGraphRef } from './graph/scrollGraphStore';
+import { WORK_NODE_TYPES, WORK_RESOLUTION_TYPES } from './work/workModels';
+import { proposeWork, acceptWork, rejectWork, deferWork, executeWork, getWorkSnippet, WorkExecutionError, normalizeWorkAction, findOpenWorkByDeterministicKey, initializeWorkDedupeIndex, resolveWork, WorkResolveError, getWorkDedupeIndexStats } from './work/workLifecycle';
+import { runWorkPass } from './work/workPass';
 // Import parsing happens in a child worker process (communion/import/worker.ts)
 import dotenv from 'dotenv';
 
@@ -25,12 +29,50 @@ const __dirname = dirname(__filename);
 const PORT = Number(process.env.PORT) || 3000;
 
 let clients: ServerResponse[] = [];
+let lastReceiptClusterLogId = '';
+const WORK_QUEUE_TYPES = WORK_NODE_TYPES.filter(t => t !== 'ActionLog' && t !== 'VetoEvent' && t !== 'WorkExecutionEvent' && t !== 'WorkResolutionEvent');
+const WORK_QUEUE_TYPES_SET = new Set<string>(WORK_QUEUE_TYPES as readonly string[]);
+const WORK_STATUS_VALUES = ['proposed', 'accepted', 'rejected', 'deferred', 'done'] as const;
+const WORK_RESOLUTION_TYPES_SET = new Set<string>(WORK_RESOLUTION_TYPES as readonly string[]);
+
+function readJsonBody(req: IncomingMessage, res: ServerResponse, onValid: (payload: any) => void): void {
+  let body = '';
+  req.on('data', chunk => { body += chunk.toString(); });
+  req.on('end', () => {
+    try {
+      onValid(JSON.parse(body || '{}'));
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }));
+    }
+  });
+}
 
 function broadcast(data: object): void {
   const message = `data: ${JSON.stringify(data)}\n\n`;
   clients.forEach(client => {
     try { client.write(message); } catch { /* disconnected */ }
   });
+}
+
+function extractLinkedIds(node: any, predicate: string): string[] {
+  const out = new Set<string>();
+  const edgeRefs = node?.edges?.[predicate];
+  if (Array.isArray(edgeRefs)) {
+    for (const edge of edgeRefs) {
+      const target = typeof edge?.target === 'string' ? edge.target : '';
+      if (target) out.add(target);
+    }
+  }
+  const topLevelRefs = node?.[predicate];
+  if (Array.isArray(topLevelRefs)) {
+    for (const ref of topLevelRefs) {
+      if (typeof ref === 'string' && ref) out.add(ref);
+      const id = typeof ref?.['@id'] === 'string' ? ref['@id'] : '';
+      if (id) out.add(id);
+    }
+  }
+  return Array.from(out);
 }
 
 /**
@@ -73,7 +115,7 @@ function loadConfig(): CommunionConfig {
     agents.push({
       id: envId.toLowerCase(),
       name,
-      provider: provider as 'anthropic' | 'openai-compatible',
+      provider: provider as 'anthropic' | 'openai-compatible' | 'lmstudio',
       apiKey,
       model,
       baseUrl,
@@ -258,6 +300,7 @@ async function main() {
   // Initialize communion loop
   const communion = new CommunionLoop(config);
   await communion.initialize();
+  initializeWorkDedupeIndex();
 
   // Wire events → SSE broadcast
   communion.on((event: CommunionEvent) => {
@@ -306,6 +349,7 @@ async function main() {
 
   // Pond saturation cache — recomputing getNeuronScores() on every concurrent poll is wasteful
   const pondCache: { payload: object | null; ts: number } = { payload: null, ts: 0 };
+  let isShuttingDown = false;
 
   // HTTP server
   const server = createServer((req, res) => {
@@ -322,6 +366,58 @@ async function main() {
         'Access-Control-Allow-Headers': 'Content-Type',
       });
       res.end();
+      return;
+    }
+
+    if (url === '/debug/routes' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: true,
+        hasWorkPass: true,
+        note: 'server.ts updated',
+      }));
+      return;
+    }
+
+    if (isShuttingDown) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'shutting_down' }));
+      return;
+    }
+
+    // Keep work-pass route near the top so no broader route can shadow it.
+    if (url === '/debug/work-pass' && req.method === 'POST') {
+      readJsonBody(req, res, payload => {
+        const modeRaw = payload?.mode;
+        const countRaw = payload?.count;
+        const mode = modeRaw === undefined ? 'ENGINEER' : modeRaw;
+
+        if (!['COMPANION', 'ENGINEER', 'WRITING'].includes(mode)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'mode must be COMPANION|ENGINEER|WRITING' }));
+          return;
+        }
+
+        if (countRaw !== undefined) {
+          const n = Number(countRaw);
+          if (!Number.isFinite(n) || n <= 0) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: 'count must be a positive number' }));
+            return;
+          }
+        }
+
+        const count = countRaw === undefined ? 3 : Math.max(1, Math.floor(Number(countRaw)));
+        try {
+          const { created, skippedDuplicatesCount } = runWorkPass({ count, mode });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, created, skippedDuplicatesCount }));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: msg }));
+        }
+      });
       return;
     }
 
@@ -442,16 +538,60 @@ async function main() {
       req.on('data', chunk => { body += chunk.toString(); });
       req.on('end', () => {
         try {
-          const { text } = JSON.parse(body);
-          if (text && text.trim()) {
-            communion.addHumanMessage(text.trim());
-            console.log(`[${config.humanName}] ${text.trim()}`);
+          const contentType = String(req.headers['content-type'] || '').toLowerCase();
+          let text = '';
+          const trimmedBody = (body || '').trim();
+
+          // Try JSON first whenever the payload looks like JSON, even if content-type is wrong.
+          if (!text && trimmedBody.startsWith('{')) {
+            try {
+              const payload = JSON.parse(trimmedBody);
+              if (typeof payload?.text === 'string') text = payload.text;
+              else if (typeof payload?.message === 'string') text = payload.message;
+            } catch {
+              // fall through to content-type specific parsing
+            }
           }
+
+          if (!text && contentType.includes('application/json')) {
+            const payload = JSON.parse(body || '{}');
+            if (typeof payload?.text === 'string') text = payload.text;
+            else if (typeof payload?.message === 'string') text = payload.message;
+          } else if (!text && contentType.includes('application/x-www-form-urlencoded')) {
+            const form = new URLSearchParams(body || '');
+            text = String(form.get('text') || form.get('message') || '');
+          } else if (!text) {
+            text = body;
+          }
+
+          const normalized = (text || '').trim();
+          if (normalized) {
+            communion.addHumanMessage(normalized);
+            const requestImmediateTick = (communion as any).requestImmediateTick;
+            if (typeof requestImmediateTick === 'function') {
+              requestImmediateTick.call(communion, 'human');
+            }
+            console.log(`[${config.humanName}] ${normalized}`);
+          }
+
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ status: 'ok' }));
-        } catch {
-          res.writeHead(400);
-          res.end('Bad request');
+        } catch (err) {
+          const fallback = (body || '').trim();
+          if (fallback) {
+            communion.addHumanMessage(fallback);
+            const requestImmediateTick = (communion as any).requestImmediateTick;
+            if (typeof requestImmediateTick === 'function') {
+              requestImmediateTick.call(communion, 'human');
+            }
+            console.log(`[${config.humanName}] ${fallback}`);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'ok', parseWarning: err instanceof Error ? err.message : 'invalid_request' }));
+            return;
+          }
+          // No recoverable text: no-op 200 so the UI does not surface a false send failure.
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'ignored', reason: 'invalid_request' }));
         }
       });
       return;
@@ -467,6 +607,646 @@ async function main() {
         agents: state.agentIds,
         scrollCount: communion.getMemory().getMetrics().totalScrolls,
         archiveCount: communion.getArchive().getStats().totalScrolls,
+      }));
+      return;
+    }
+
+    // LLM receipt debug API (browser-visible, no server-side file writes)
+    if (url?.startsWith('/debug/llm-receipt') && req.method === 'GET') {
+      const params = new URLSearchParams(url.split('?')[1] || '');
+      const agentId = params.get('agentId') || undefined;
+      const getLLMReceipt = (communion as any).getLLMReceipt;
+      const receipt = typeof getLLMReceipt === 'function'
+        ? getLLMReceipt.call(communion, agentId)
+        : null;
+      if (receipt && receipt.requestId !== lastReceiptClusterLogId) {
+        lastReceiptClusterLogId = receipt.requestId;
+        console.log('[LLMDBG] receipt.clusterChars keys:', Object.keys(receipt.clusterChars || {}));
+        console.log('[LLMDBG] receipt.clusterChars:', receipt.clusterChars || {});
+      }
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        Pragma: 'no-cache',
+        Expires: '0',
+      });
+      res.end(JSON.stringify({
+        receipt,
+      }));
+      return;
+    }
+
+    // Per-cluster ablation flags API
+    if (url === '/debug/llm-ablation' && req.method === 'GET') {
+      const getLLMAblations = (communion as any).getLLMAblations;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ablations: typeof getLLMAblations === 'function'
+          ? getLLMAblations.call(communion)
+          : {},
+      }));
+      return;
+    }
+
+    if (url === '/debug/llm-ablation' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const parsed = JSON.parse(body || '{}') as {
+            ablations?: Record<string, boolean>;
+            resetAblations?: boolean;
+          };
+          const setLLMAblationFlags = (communion as any).setLLMAblationFlags;
+          const ablations = typeof setLLMAblationFlags === 'function'
+            ? setLLMAblationFlags.call(communion, parsed.ablations || {}, !!parsed.resetAblations)
+            : {};
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ablations }));
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        }
+      });
+      return;
+    }
+
+    if (url === '/debug/work-propose' && req.method === 'POST') {
+      readJsonBody(req, res, payload => {
+        const type = payload?.type;
+        const proposedBy = payload?.proposedBy;
+        const mode = payload?.mode;
+        const relatedTo = payload?.relatedTo;
+        const details = payload?.details;
+        if (typeof type !== 'string' || !WORK_QUEUE_TYPES_SET.has(type)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'Invalid type' }));
+          return;
+        }
+        if (!['agent:human', 'agent:alois', 'system'].includes(proposedBy)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'Invalid proposedBy' }));
+          return;
+        }
+        if (mode !== undefined && !['COMPANION', 'ENGINEER', 'WRITING'].includes(mode)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'Invalid mode' }));
+          return;
+        }
+        if (relatedTo !== undefined && (!Array.isArray(relatedTo) || !relatedTo.every((v: unknown) => typeof v === 'string'))) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'relatedTo must be string[]' }));
+          return;
+        }
+        if (details !== undefined && (typeof details !== 'object' || details === null || Array.isArray(details))) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'details must be an object' }));
+          return;
+        }
+        try {
+          const needsAction = type === 'WorkItem' || type === 'Deprecation';
+          if (needsAction && (details === undefined || details === null || Array.isArray(details) || typeof details !== 'object')) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: 'details.actionType and details.payload are required for this type' }));
+            return;
+          }
+
+          let normalizedAction: ReturnType<typeof normalizeWorkAction> | null = null;
+          if (details && typeof details === 'object' && !Array.isArray(details)) {
+            const hasActionFields = Object.prototype.hasOwnProperty.call(details, 'actionType') || Object.prototype.hasOwnProperty.call(details, 'action');
+            if (needsAction || hasActionFields) normalizedAction = normalizeWorkAction(details);
+          }
+
+          if (normalizedAction) {
+            const duplicate = findOpenWorkByDeterministicKey(normalizedAction.deterministicKey, ['proposed', 'accepted']);
+            if (duplicate) {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                ok: true,
+                deduped: true,
+                existingId: duplicate['@id'],
+                deterministicKey: normalizedAction.deterministicKey,
+              }));
+              return;
+            }
+          }
+
+          const detailsCanonical = normalizedAction
+            ? {
+              ...(details as Record<string, unknown>),
+              actionType: normalizedAction.action.actionType,
+              payload: normalizedAction.action.payload,
+              deterministicKey: normalizedAction.deterministicKey,
+            }
+            : details;
+
+          const result = proposeWork({
+            type,
+            proposedBy,
+            mode,
+            title: typeof payload?.title === 'string' ? payload.title : undefined,
+            summary: typeof payload?.summary === 'string' ? payload.summary : undefined,
+            details: detailsCanonical,
+            relatedTo,
+          });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            ok: true,
+            result,
+            ...(normalizedAction ? { deterministicKey: normalizedAction.deterministicKey } : {}),
+          }));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: msg }));
+        }
+      });
+      return;
+    }
+
+    if (url === '/debug/work-accept' && req.method === 'POST') {
+      readJsonBody(req, res, payload => {
+        const id = payload?.id;
+        const acceptedBy = payload?.acceptedBy;
+        if (typeof id !== 'string' || !id.trim()) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'id is required' }));
+          return;
+        }
+        if (acceptedBy !== 'agent:alois') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'acceptedBy must be agent:alois' }));
+          return;
+        }
+        try {
+          const result = acceptWork(id, acceptedBy);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, result }));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: msg }));
+        }
+      });
+      return;
+    }
+
+    if (url === '/debug/work-reject' && req.method === 'POST') {
+      readJsonBody(req, res, payload => {
+        const id = payload?.id;
+        const rejectedBy = payload?.rejectedBy;
+        const reason = typeof payload?.reason === 'string' ? payload.reason : '';
+        const principle = typeof payload?.principle === 'string' ? payload.principle : '';
+        if (typeof id !== 'string' || !id.trim()) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'id is required' }));
+          return;
+        }
+        if (rejectedBy !== 'agent:alois') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'rejectedBy must be agent:alois' }));
+          return;
+        }
+        try {
+          const result = rejectWork(id, rejectedBy, reason, principle);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, result }));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: msg }));
+        }
+      });
+      return;
+    }
+
+    if (url === '/debug/work-defer' && req.method === 'POST') {
+      readJsonBody(req, res, payload => {
+        const id = payload?.id;
+        const deferredBy = payload?.deferredBy;
+        const reason = typeof payload?.reason === 'string' ? payload.reason : '';
+        const principle = typeof payload?.principle === 'string' ? payload.principle : '';
+        if (typeof id !== 'string' || !id.trim()) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'id is required' }));
+          return;
+        }
+        if (deferredBy !== 'agent:alois') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'deferredBy must be agent:alois' }));
+          return;
+        }
+        try {
+          const result = deferWork(id, deferredBy, reason, principle);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, result }));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: msg }));
+        }
+      });
+      return;
+    }
+
+    if (url === '/debug/work-resolve' && req.method === 'POST') {
+      readJsonBody(req, res, payload => {
+        const id = typeof payload?.id === 'string' ? payload.id.trim() : '';
+        const resolution = typeof payload?.resolution === 'string' ? payload.resolution.trim() : '';
+        const resolvedBy = typeof payload?.resolvedBy === 'string' ? payload.resolvedBy : 'agent:alois';
+        const note = typeof payload?.note === 'string' ? payload.note : '';
+        const targetDocId = typeof payload?.targetDocId === 'string' ? payload.targetDocId.trim() : '';
+
+        if (!id) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'id is required' }));
+          return;
+        }
+        if (!WORK_RESOLUTION_TYPES_SET.has(resolution)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'invalid resolution' }));
+          return;
+        }
+        if (resolvedBy !== 'agent:alois' && resolvedBy !== 'agent:human' && resolvedBy !== 'system') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'resolvedBy must be agent:alois|agent:human|system' }));
+          return;
+        }
+
+        try {
+          const result = resolveWork({
+            id,
+            resolvedBy,
+            resolution: resolution as (typeof WORK_RESOLUTION_TYPES)[number],
+            note: note || undefined,
+            targetDocId: targetDocId || undefined,
+          });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            ok: true,
+            id: result.id,
+            resolutionEventId: result.resolutionEventId,
+            resolution: result.resolution,
+            resolvedBy: result.resolvedBy,
+          }));
+        } catch (err) {
+          if (err instanceof WorkResolveError) {
+            res.writeHead(err.httpStatus, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              ok: false,
+              error: err.code,
+              message: err.message,
+              ...(err.details || {}),
+            }));
+            return;
+          }
+          const msg = err instanceof Error ? err.message : String(err);
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: msg }));
+        }
+      });
+      return;
+    }
+
+    if (url === '/debug/work-execute' && req.method === 'POST') {
+      // Manual verify:
+      // 1) execute linkDocs twice -> no duplicate rel edge
+      // 2) execute tagDeprecation twice -> one 'deprecated' tag
+      // 3) execute done work without token -> alreadyDone:true
+      // 4) WORK mode parser handles extra text + JSON object payload
+      readJsonBody(req, res, payload => {
+        const id = typeof payload?.id === 'string' ? payload.id : '';
+        const consentToken = typeof payload?.consentToken === 'string' ? payload.consentToken : '';
+        const dryRun = !!payload?.dryRun;
+        if (!id.trim()) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'id is required' }));
+          return;
+        }
+        try {
+          const result = executeWork({ id, consentToken, dryRun, executedBy: 'agent:alois' });
+          if (result.alreadyDone) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              ok: true,
+              alreadyDone: true,
+              id: result.id,
+              statusBefore: result.statusBefore,
+              statusAfter: result.statusAfter,
+              dryRun: result.dryRun,
+              applied: result.applied,
+              executionEventId: result.executionEventId,
+            }));
+            return;
+          }
+          if (result.dryRun) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              ok: true,
+              id: result.id,
+              statusBefore: result.statusBefore,
+              statusAfter: result.statusAfter,
+              dryRun: true,
+              wouldApply: result.wouldApply || [],
+            }));
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            ok: true,
+            id: result.id,
+            statusBefore: result.statusBefore,
+            statusAfter: result.statusAfter,
+            dryRun: false,
+            applied: result.applied,
+            executionEventId: result.executionEventId,
+          }));
+        } catch (err) {
+          if (err instanceof WorkExecutionError) {
+            res.writeHead(err.httpStatus, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              ok: false,
+              error: err.code,
+              message: err.message,
+              ...(err.details || {}),
+            }));
+            return;
+          }
+          const msg = err instanceof Error ? err.message : String(err);
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: msg }));
+        }
+      });
+      return;
+    }
+
+    if (url?.startsWith('/debug/work-snippet') && req.method === 'GET') {
+      const params = new URLSearchParams(url.split('?')[1] || '');
+      const limitRaw = Number(params.get('limit') || '5');
+      const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(25, Math.floor(limitRaw)) : 5;
+      const snippet = getWorkSnippet(limit);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(snippet));
+      return;
+    }
+
+    if (url?.startsWith('/debug/work-queue') && req.method === 'GET') {
+      const params = new URLSearchParams(url.split('?')[1] || '');
+      const statusesRaw = params.get('status') || 'accepted,proposed';
+      const statusTokens = statusesRaw.split(',').map(v => v.trim()).filter(Boolean);
+      const invalidStatus = statusTokens.find(v => !(WORK_STATUS_VALUES as readonly string[]).includes(v));
+      if (invalidStatus) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: `Invalid status: ${invalidStatus}` }));
+        return;
+      }
+      const statusValues = statusTokens;
+      const statusSet = new Set(statusValues.length > 0 ? statusValues : ['accepted', 'proposed']);
+      const typesRaw = params.get('type') || '';
+      const typeTokens = typesRaw.split(',').map(v => v.trim()).filter(Boolean);
+      const invalidType = typeTokens.find(v => !WORK_QUEUE_TYPES_SET.has(v));
+      if (invalidType) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: `Invalid type: ${invalidType}` }));
+        return;
+      }
+      const typeValues = typeTokens;
+      const typeSet = typeValues.length > 0 ? new Set(typeValues) : null;
+      const limitParam = params.get('limit');
+      const limitRaw = Number(limitParam);
+      if (limitParam !== null && (!Number.isFinite(limitRaw) || limitRaw <= 0)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'limit must be a positive number' }));
+        return;
+      }
+      const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(500, Math.floor(limitRaw)) : 10;
+
+      const graph = getGraphRef() || communion.getGraph();
+      const nodeMap = (graph as unknown as { nodes?: Map<string, any> }).nodes;
+      const candidates = nodeMap instanceof Map
+        ? Array.from(nodeMap.values())
+        : [];
+
+      const statusPriority: Record<string, number> = {
+        accepted: 0,
+        proposed: 1,
+        deferred: 2,
+        rejected: 3,
+        done: 4,
+      };
+
+      const items = candidates
+        .filter((n: any) => WORK_QUEUE_TYPES_SET.has(n?.['@type']))
+        .filter((n: any) => {
+          const st = n?.data?.status;
+          return typeof st === 'string' && statusSet.has(st);
+        })
+        .filter((n: any) => !typeSet || typeSet.has(n?.['@type']))
+        .sort((a: any, b: any) => {
+          const sa = statusPriority[a?.data?.status] ?? 99;
+          const sb = statusPriority[b?.data?.status] ?? 99;
+          if (sa !== sb) return sa - sb;
+          const pa = Number(a?.data?.priority ?? 0);
+          const pb = Number(b?.data?.priority ?? 0);
+          if (pa !== pb) return pb - pa;
+          const ma = typeof a?.modified === 'string' ? a.modified : '';
+          const mb = typeof b?.modified === 'string' ? b.modified : '';
+          return mb.localeCompare(ma);
+        })
+        .slice(0, limit)
+        .map((n: any) => {
+          const related = Array.isArray(n?.edges?.relatedTo)
+            ? n.edges.relatedTo.map((e: any) => e?.target).filter(Boolean)
+            : (Array.isArray(n?.relatedTo)
+              ? n.relatedTo.map((e: any) => (typeof e === 'string' ? e : e?.['@id'])).filter(Boolean)
+              : []);
+          return {
+            '@id': n?.['@id'],
+            '@type': n?.['@type'],
+            created: n?.created,
+            modified: n?.modified,
+            data: n?.data || {},
+            relatedTo: Array.from(new Set(related)),
+          };
+        });
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, items }));
+      return;
+    }
+
+    if (url?.startsWith('/debug/work-history') && req.method === 'GET') {
+      const params = new URLSearchParams(url.split('?')[1] || '');
+      const id = (params.get('id') || '').trim();
+      if (!id) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'id is required' }));
+        return;
+      }
+
+      const graph = getGraphRef() || communion.getGraph();
+      const getNode = (graph as unknown as { getNode?: (uri: string) => any }).getNode;
+      const workNode = typeof getNode === 'function' ? getNode.call(graph, id) : undefined;
+      if (!workNode) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'work node not found' }));
+        return;
+      }
+
+      const nodeMap = (graph as unknown as { nodes?: Map<string, any> }).nodes;
+      const allNodes = nodeMap instanceof Map ? Array.from(nodeMap.values()) : [];
+      const vetoIdsFromWork = extractLinkedIds(workNode, 'hasVeto');
+      const fastPathVetoes = vetoIdsFromWork
+        .map(vetoId => allNodes.find((n: any) => n?.['@id'] === vetoId))
+        .filter(Boolean);
+      const vetoCandidates = fastPathVetoes.length > 0
+        ? fastPathVetoes
+        : allNodes
+          .filter((n: any) => n?.['@type'] === 'VetoEvent')
+          .filter((n: any) => extractLinkedIds(n, 'reflectsOn').includes(id));
+
+      const vetoes = vetoCandidates
+        .sort((a: any, b: any) => {
+          const ac = typeof a?.created === 'string' ? a.created : '';
+          const bc = typeof b?.created === 'string' ? b.created : '';
+          return bc.localeCompare(ac);
+        })
+        .map((n: any) => ({
+          '@id': n?.['@id'],
+          '@type': n?.['@type'],
+          created: n?.created,
+          modified: n?.modified,
+          data: n?.data || {},
+          reflectsOn: extractLinkedIds(n, 'reflectsOn'),
+          relatedTo: extractLinkedIds(n, 'relatedTo'),
+        }));
+
+      const resolutionIdsFromWork = extractLinkedIds(workNode, 'resolvedBy');
+      const resolutions = resolutionIdsFromWork
+        .map(resolutionId => allNodes.find((n: any) => n?.['@id'] === resolutionId))
+        .filter((n: any) => n?.['@type'] === 'WorkResolutionEvent')
+        .sort((a: any, b: any) => {
+          const ac = typeof a?.created === 'string' ? a.created : '';
+          const bc = typeof b?.created === 'string' ? b.created : '';
+          return bc.localeCompare(ac);
+        })
+        .map((n: any) => ({
+          '@id': n?.['@id'],
+          '@type': n?.['@type'],
+          created: n?.created,
+          modified: n?.modified,
+          data: n?.data || {},
+          reflectsOn: extractLinkedIds(n, 'reflectsOn'),
+          relatedTo: extractLinkedIds(n, 'relatedTo'),
+        }));
+
+      const relatedTo = extractLinkedIds(workNode, 'relatedTo');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: true,
+        work: {
+          '@id': workNode?.['@id'],
+          '@type': workNode?.['@type'],
+          created: workNode?.created,
+          modified: workNode?.modified,
+          deterministicKey: typeof workNode?.data?.deterministicKey === 'string' ? workNode.data.deterministicKey : '',
+          data: workNode?.data || {},
+        },
+        vetoes,
+        resolutions,
+        relatedTo,
+      }));
+      return;
+    }
+
+    if (url === '/debug/work-metrics' && req.method === 'GET') {
+      const graph = getGraphRef() || communion.getGraph();
+      const nodeMap = (graph as unknown as { nodes?: Map<string, any> }).nodes;
+      const nodes = nodeMap instanceof Map ? Array.from(nodeMap.values()) : [];
+
+      const countsByStatus: Record<string, number> = {
+        proposed: 0,
+        accepted: 0,
+        deferred: 0,
+        rejected: 0,
+        done: 0,
+      };
+      const countsByActionType: Record<string, number> = {
+        linkDocs: 0,
+        tagDeprecation: 0,
+        markDone: 0,
+      };
+      const resolutionCountByType = Object.fromEntries(
+        WORK_RESOLUTION_TYPES.map(resolution => [resolution, 0])
+      ) as Record<string, number>;
+
+      let vetoCountTotal = 0;
+      let resolutionCountTotal = 0;
+
+      for (const node of nodes) {
+        const nodeType = node?.['@type'];
+
+        if (WORK_QUEUE_TYPES_SET.has(nodeType)) {
+          const status = typeof node?.data?.status === 'string' ? node.data.status : '';
+          if (Object.prototype.hasOwnProperty.call(countsByStatus, status)) countsByStatus[status]++;
+
+          const rawAction = typeof node?.data?.actionType === 'string' ? node.data.actionType : 'markDone';
+          const actionType = rawAction === 'linkDocs' || rawAction === 'tagDeprecation' || rawAction === 'markDone'
+            ? rawAction
+            : 'markDone';
+          countsByActionType[actionType]++;
+        }
+
+        if (nodeType === 'VetoEvent') {
+          vetoCountTotal++;
+        } else if (nodeType === 'WorkResolutionEvent') {
+          resolutionCountTotal++;
+          const resolution = typeof node?.data?.resolution === 'string' ? node.data.resolution : '';
+          if (Object.prototype.hasOwnProperty.call(resolutionCountByType, resolution)) {
+            resolutionCountByType[resolution]++;
+          }
+        }
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: true,
+        countsByStatus,
+        countsByActionType,
+        dedupeIndex: getWorkDedupeIndexStats(),
+        veto: {
+          vetoCountTotal,
+        },
+        resolutions: {
+          resolutionCountTotal,
+          resolutionCountByType,
+        },
+      }));
+      return;
+    }
+
+    if (url === '/debug/veto-count' && req.method === 'GET') {
+      const graph = getGraphRef() || communion.getGraph();
+      const nodeMap = (graph as unknown as { nodes?: Map<string, any> }).nodes;
+      const vetoNodes = nodeMap instanceof Map
+        ? Array.from(nodeMap.values()).filter((n: any) => n?.['@type'] === 'VetoEvent')
+        : [];
+
+      const sample = vetoNodes.slice(0, 3).map((n: any) => ({
+        '@id': n?.['@id'],
+        created: n?.created,
+        data: {
+          action: n?.data?.action,
+          principle: n?.data?.principle,
+          targetId: n?.data?.targetId,
+        },
+      }));
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: true,
+        vetoCount: vetoNodes.length,
+        sample,
       }));
       return;
     }
@@ -1190,6 +1970,18 @@ async function main() {
         hihatO: [/open.hat/i,   /\bohh\b/i, /^oh[_\-]/i, /open.hi/i,   /open$/i],
         ride:   [/\bride\b/i, /^rd[_\-]/i, /cymbal/i],
         perc:   [/\bperc/i, /^pc[_\-]/i, /\btom\b/i, /conga/i, /bongo/i, /rim.shot/i, /foley/i],
+        atmos:  [/\batmos\b/i, /\bambient\b/i, /\bambience\b/i, /\btexture\b/i, /\bdrone\b/i],
+        nature: [/\bnature\b/i, /\brain\b/i, /\bwind\b/i, /\bforest\b/i, /\bwater\b/i, /\bbirds?\b/i],
+        // Lead palette slots (dashboard expects these exact manifest keys).
+        lead_vocal_01: [/\blead[_\- ]vocal[_\- ]01\b/i],
+        lead_vocal_02: [/\blead[_\- ]vocal[_\- ]02\b/i],
+        lead_vocal_03: [/\blead[_\- ]vocal[_\- ]03\b/i],
+        lead_guitar_01:[/\blead[_\- ]guitar[_\- ]01\b/i],
+        lead_guitar_02:[/\blead[_\- ]guitar[_\- ]02\b/i],
+        lead_guitar_03:[/\blead[_\- ]guitar[_\- ]03\b/i],
+        lead_keys_01:  [/\blead[_\- ]keys[_\- ]01\b/i],
+        lead_keys_02:  [/\blead[_\- ]keys[_\- ]02\b/i],
+        lead_keys_03:  [/\blead[_\- ]keys[_\- ]03\b/i],
       };
 
       // Recursive scan — returns relative paths like "Kicks/kick_01.wav"
@@ -1293,37 +2085,37 @@ async function main() {
   communion.start();
 
   // Graceful shutdown
-  let shuttingDown = false;
+  let shutdownPromise: Promise<void> | null = null;
   const shutdown = async (signal: string) => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    console.log(`\n[SHUTDOWN] ${signal} received — stopping communion...`);
-
-    // Hard bailout: if graceful stop hangs, force exit after 10s.
-    // 3s was too tight — 69MB brain JSON + session + graph save can take 3-8s.
-    const bailout = setTimeout(() => {
-      console.error('[SHUTDOWN] Graceful stop timed out — forcing exit');
-      process.exit(1);
-    }, 10000);
-    bailout.unref(); // don't keep event loop alive just for this
-
-    try {
-      await communion.stop();
-      server.close();
-      const state = communion.getState();
-      console.log(`\n=== Session Stats ===`);
-      console.log(`Ticks: ${state.tickCount}`);
-      console.log(`Room messages: ${state.messages.length}`);
-      for (const agentId of state.agentIds) {
-        console.log(`${state.agentNames[agentId]} journal: ${(state.journals[agentId] || []).length} entries`);
+    if (shutdownPromise) return shutdownPromise;
+    isShuttingDown = true;
+    console.log(`[SHUTDOWN] begin ${signal}`);
+    shutdownPromise = (async () => {
+      const bailout = setTimeout(() => {
+        console.error('[SHUTDOWN] timeout');
+        process.exit(1);
+      }, 30000);
+      bailout.unref();
+      try {
+        const shutdownFn = (communion as any).shutdown;
+        if (typeof shutdownFn === 'function') {
+          await shutdownFn.call(communion, signal);
+        } else {
+          await communion.stop();
+        }
+        await new Promise<void>(resolve => {
+          server.close(() => resolve());
+        });
+        clearTimeout(bailout);
+        console.log('[SHUTDOWN] complete');
+        process.exit(0);
+      } catch (err) {
+        clearTimeout(bailout);
+        console.error('[SHUTDOWN] error:', err);
+        process.exit(1);
       }
-      console.log(`Scrolls in memory: ${communion.getMemory().getMetrics().totalScrolls}`);
-      console.log(`Scrolls archived: ${communion.getArchive().getStats().totalScrolls}`);
-    } catch (err) {
-      console.error('[SHUTDOWN] Error during stop:', err);
-    }
-    clearTimeout(bailout);
-    process.exit(0);
+    })();
+    return shutdownPromise;
   };
 
   process.on('SIGINT',   () => shutdown('SIGINT'));

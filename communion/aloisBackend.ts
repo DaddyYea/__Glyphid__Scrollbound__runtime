@@ -14,15 +14,95 @@
  * a response — speaking in echoes of the room's own voice.
  */
 
-import { AgentBackend, GenerateOptions, GenerateResult, OpenAICompatibleBackend } from './backends';
+import { AgentBackend, GenerateOptions, GenerateResult, OpenAICompatibleBackend, SearchReceipt } from './backends';
 import { AgentConfig } from './types';
 import { CommunionChamber, TissueState } from '../Alois/communionChamber';
 import { DreamResult } from '../Alois/dreamEngine';
-import { webSearch, formatSearchResults } from './search';
 import { IncubationState } from '../Alois/incubationEngine';
 import { embed } from '../Alois/embed';
 import { PulseLoop } from '../Alois/pulseLoop';
 import { InnerVoice } from '../Alois/innerVoice';
+import { PromptSegment } from './contextBudget';
+
+const PROFANITY_RE = /\b(fuck|fucking|shit|bitch|asshole|motherfucker|dick|cunt|jesus christ)\b/gi;
+
+function normalizeDocQuery(value: string): string {
+  return (value || '')
+    .replace(/^["']|["']$/g, '')
+    .replace(/[^A-Za-z0-9\s._\-\\/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+}
+
+function sanitizeDocQuery(value: string): string {
+  return (value || '')
+    .replace(PROFANITY_RE, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+}
+
+function extractDocQuery(text: string): string | null {
+  const source = (text || '').trim();
+  if (!source) return null;
+
+  const quoted = source.match(/"([^"]{1,240})"/);
+  if (quoted?.[1]) {
+    const q = sanitizeDocQuery(normalizeDocQuery(quoted[1]));
+    return q || null;
+  }
+
+  const fileMatch = source.match(/[A-Za-z0-9_\-]+\.(md|txt|pdf|docx|json|ts|js)/i);
+  if (fileMatch?.[0]) {
+    const q = sanitizeDocQuery(normalizeDocQuery(fileMatch[0]));
+    return q || null;
+  }
+
+  const slugMatch = source.match(/\b([A-Za-z0-9]+(?:[_-][A-Za-z0-9]+)+)\b/);
+  if (slugMatch?.[1]) {
+    const q = sanitizeDocQuery(normalizeDocQuery(slugMatch[1]));
+    return q || null;
+  }
+
+  const titleCase = source.match(/\b([A-Z][a-z0-9]+(?:\s+[A-Z][a-z0-9]+)+)\b/);
+  if (titleCase?.[1]) {
+    const q = sanitizeDocQuery(normalizeDocQuery(titleCase[1]));
+    return q || null;
+  }
+
+  return null;
+}
+
+function isSaneDocQuery(query: string): boolean {
+  const q = (query || '').trim();
+  if (q.length < 3) return false;
+  if (!/[A-Za-z]/.test(q)) return false;
+  const words = q.split(/\s+/).filter(Boolean);
+  if (words.length > 8) return false;
+  return true;
+}
+
+function deriveSearchQuery(options: GenerateOptions): string | null {
+  const explicit = options.searchIntent?.query;
+  if ((options.searchIntent?.kind === 'open_doc' || options.searchIntent?.kind === 'search') && explicit) {
+    const q = sanitizeDocQuery(normalizeDocQuery(explicit));
+    return isSaneDocQuery(q) ? q : null;
+  }
+
+  const latestHumanText = (options.latestHumanText || '').trim();
+  if (!latestHumanText) return null;
+
+  const commandMatch = latestHumanText.match(/^(?:please\s+)?(?:open|find|search|read|load|lookup|look up)\s+(.+)$/i);
+  const commandQuery = commandMatch?.[1] ? commandMatch[1].trim() : '';
+  if (commandQuery) {
+    const parsed = sanitizeDocQuery(extractDocQuery(commandQuery) ?? normalizeDocQuery(commandQuery));
+    return isSaneDocQuery(parsed) ? parsed : null;
+  }
+
+  const parsed = sanitizeDocQuery(extractDocQuery(latestHumanText) ?? normalizeDocQuery(latestHumanText));
+  return isSaneDocQuery(parsed) ? parsed : null;
+}
 
 export interface AloisConfig extends AgentConfig {
   /** Path to JSON-LD seed file for initial graph structure */
@@ -50,11 +130,15 @@ export class AloisBackend implements AgentBackend {
   private beatCount: number = 0;
   /** Self-directed inner thought loop — fires every 45 beats (~15s) */
   private innerVoice: InnerVoice;
+  private maxContextTokens: number;
+  private safetyTokens: number;
 
   constructor(config: AloisConfig) {
     this.agentId = config.id;
     this.agentName = config.name;
     this.tissueWeight = config.tissueWeight ?? 0.1;
+    this.maxContextTokens = config.maxContextTokens ?? 8192;
+    this.safetyTokens = config.safetyTokens ?? 512;
 
     // Create the underlying LLM backend (fallback for low tissueWeight or sparse memory)
     this.llm = new OpenAICompatibleBackend({
@@ -96,6 +180,8 @@ export class AloisBackend implements AgentBackend {
           console.error('[INNER] Neural feed error:', err);
         }
       },
+      this.maxContextTokens,
+      this.safetyTokens,
     );
 
     this.pulseLoop.onPulse(() => {
@@ -179,20 +265,23 @@ export class AloisBackend implements AgentBackend {
       let tissueBlock = `[TISSUE] mood: ${ts.emotionalSummary}`;
 
       // ── Topic memory recall — the brain actually contributing ──
-      // Extract the most recent human message from conversation context
-      const lastHumanLine = options.conversationContext
-        .split('\n')
-        .reverse()
-        .find(l => l.startsWith('>>>'));
-      const queryText = lastHumanLine
-        ? lastHumanLine.replace(/^>>>[^:]+:\s*/, '')
-        : options.conversationContext.slice(-200);
+      const queryText = (options.latestHumanText || '').trim();
+      const lastHumanSpeaker = (options.latestHumanSpeaker || '').trim();
 
       if (queryText.trim().length > 0) {
         const recalled = this.chamber.recallByTopic(queryText, 5);
         if (recalled.length > 0) {
           tissueBlock += `\n[MEMORY] Topics from our history that resonate now: ${recalled.join(' | ')}`;
         }
+      }
+
+      const bridges = this.chamber.recallBridgeNeurons({
+        humanHint: lastHumanSpeaker || 'human',
+        agentName: this.agentName,
+        k: 2,
+      });
+      if (bridges.length > 0) {
+        tissueBlock += `\n[BRIDGE] Relational bridge threads: ${bridges.join(' | ')}`;
       }
 
       // Recent live conversation window
@@ -210,41 +299,28 @@ export class AloisBackend implements AgentBackend {
     const result = await this.llm.generate({
       ...options,
       systemPrompt,
+      segments: options.segments && options.segments.length > 0
+        ? options.segments
+        : this.buildPromptSegments(systemPrompt, options),
+      maxContextTokens: options.maxContextTokens ?? this.maxContextTokens,
+      safetyTokens: options.safetyTokens ?? this.safetyTokens,
     });
 
-    // ── Search interception ──
-    // If Alois writes [SEARCH: query] anywhere in her response, execute the
-    // search and regenerate with the results injected into context.
+    // ── Search interception disabled ──
+    // Runtime executes canonical browse/read and emits authoritative receipts.
+    // Backend must not run side-searches from model text.
     const searchMatch = result.text?.match(/\[SEARCH:\s*([^\]]+)\]/i);
     if (searchMatch) {
-      const query = searchMatch[1].trim();
-      console.log(`[SEARCH] Alois searching: "${query}"`);
-      try {
-        const searchResults = await webSearch(query, 4);
-        const formatted = formatSearchResults(query, searchResults);
-        console.log('[SEARCH] Results:\n', formatted);
-
-        // Re-generate with search results injected
-        const augmentedPrompt = systemPrompt + `\n\n${formatted}`;
-        const retry = await this.llm.generate({
-          ...options,
-          systemPrompt: augmentedPrompt,
-          conversationContext: options.conversationContext + `\n\n${formatted}`,
-        });
-
-        // Embed search results into brain
-        embed(`Web search: ${query}\n${formatted}`).then(embedding => {
-          this.chamber.receiveInnerThought(this.agentName, `Web search: ${query}\n${formatted}`, embedding);
-        }).catch(() => {});
-
-        if (retry.action === 'speak' && this.tissueWeight >= 0.4) {
-          retry.text = this.chamber.retranslateOutput(retry.text);
-        }
-        return retry;
-      } catch (err) {
-        console.error('[SEARCH] Failed:', err);
-        // Fall through to original result
-      }
+      result.text = (result.text || '').replace(/\[SEARCH:\s*[^\]]+\]/ig, '').trim();
+      const query = deriveSearchQuery(options) || '';
+      const searchReceipt: SearchReceipt = {
+        didSearch: false,
+        query,
+        corpus: 'unknown',
+        resultsCount: 0,
+      };
+      options.onSearchReceipt?.(searchReceipt);
+      result.searchReceipt = searchReceipt;
     }
 
     // Apply SoulPrint filter at higher tissue weights
@@ -253,6 +329,91 @@ export class AloisBackend implements AgentBackend {
     }
 
     return result;
+  }
+
+  private buildPromptSegments(systemPrompt: string, options: GenerateOptions): PromptSegment[] {
+    const conversation = options.conversationContext || '';
+    const lines = conversation.split('\n').filter(Boolean);
+    const latestHumanText = (options.latestHumanText || '').trim();
+    const instruction = 'Based on the conversation, your private reflections, any shared documents, and the memory state, decide what to do this tick. Respond with EXACTLY one of these formats:\n\n[SPEAK] your message to the room\n[JOURNAL] your private reflection\n[SILENT] (say nothing this tick)';
+    const conversationItems = lines.map((line, idx) => ({
+      id: `conversation:${idx}`,
+      text: line,
+      role: 'user' as const,
+      recency: idx,
+      required: false,
+      score: 1,
+    }));
+    if (latestHumanText) {
+      conversationItems.push({
+        id: 'conversation:latest-human',
+        text: `>>> ${options.latestHumanSpeaker || 'Human'}: ${latestHumanText}`,
+        role: 'user' as const,
+        recency: lines.length,
+        required: true,
+        score: 2,
+      });
+    }
+
+    const segments: PromptSegment[] = [
+      {
+        id: 'system',
+        priority: 1,
+        required: true,
+        trimStrategy: 'NONE',
+        role: 'system',
+        text: systemPrompt,
+      },
+      {
+        id: 'instruction',
+        priority: 2,
+        required: true,
+        trimStrategy: 'NONE',
+        role: 'user',
+        text: instruction,
+      },
+      {
+        id: 'conversation',
+        priority: 3,
+        required: !!latestHumanText,
+        trimStrategy: 'DROP_OLDEST_MESSAGES',
+        role: 'user',
+        items: conversationItems,
+      },
+    ];
+
+    if (options.memoryContext) {
+      segments.push({
+        id: 'tissue',
+        priority: 4,
+        required: false,
+        trimStrategy: 'DROP_LOWEST_RANKED_ITEMS',
+        role: 'user',
+        items: [{ id: 'tissue:0', text: options.memoryContext, score: 1 }],
+      });
+    }
+    if (options.journalContext) {
+      segments.push({
+        id: 'journal',
+        priority: 5,
+        required: false,
+        trimStrategy: 'SHRINK_TEXT',
+        role: 'user',
+        text: options.journalContext,
+      });
+    }
+    if (options.documentsContext) {
+      segments.push({
+        id: 'docs',
+        priority: 6,
+        required: false,
+        trimStrategy: 'SHRINK_TEXT',
+        role: 'user',
+        text: options.documentsContext,
+        shrinkTokenSteps: [350, 250, 150, 80],
+      });
+    }
+    return segments;
   }
 
   /** Get current tissue state for monitoring */

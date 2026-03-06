@@ -10,6 +10,46 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { AgentConfig } from './types';
+import {
+  BudgetReceipt,
+  ContextBudgetExceededError,
+  PromptSegment,
+  estimateMessagesTokens,
+  trimSegmentsToBudget,
+} from './contextBudget';
+
+export type SearchIntent =
+  | { kind: 'open_doc'; query?: string; uiSelection?: { docId?: string; title?: string; corpus?: 'ram' | 'drive' | 'local' | 'web' } }
+  | { kind: 'search'; query?: string; uiSelection?: { docId?: string; title?: string; corpus?: 'ram' | 'drive' | 'local' | 'web' } }
+  | { kind: 'none'; query?: string; uiSelection?: { docId?: string; title?: string; corpus?: 'ram' | 'drive' | 'local' | 'web' } };
+
+export interface SearchReceipt {
+  didSearch: boolean;
+  query: string;
+  corpus: 'ram' | 'drive' | 'archive' | 'web' | 'unknown';
+  resultsCount: number;
+  resultsShown?: number;
+  top?: { title: string; id?: string; uri?: string };
+  loadedContent?: boolean;
+  metadataOnly?: boolean;
+  error?: string;
+  ms?: number;
+  turnId?: string;
+  agentId?: string;
+  humanMessageId?: string;
+}
+
+export interface ActionReceipt {
+  didExecute: boolean;
+  action: 'browse' | 'read' | 'load_excerpt' | 'pin' | 'switch_doc' | 'undo';
+  target: string;
+  ok: boolean;
+  summary: string;
+  doc?: { id?: string; title?: string };
+  ms?: number;
+  turnId?: string;
+  agentId?: string;
+}
 
 export interface GenerateOptions {
   systemPrompt: string;
@@ -17,6 +57,16 @@ export interface GenerateOptions {
   journalContext: string;
   documentsContext?: string;
   memoryContext?: string;
+  segments?: PromptSegment[];
+  maxContextTokens?: number;
+  safetyTokens?: number;
+  onBudgetReceipt?: (receipt: BudgetReceipt) => void;
+  latestHumanText?: string;
+  latestHumanSpeaker?: string;
+  latestHumanMessageId?: string;
+  searchIntent?: SearchIntent;
+  onSearchReceipt?: (receipt: SearchReceipt) => void;
+  onActionReceipt?: (receipt: ActionReceipt) => void;
   /** Provider hint for prompt size limiting */
   provider?: string;
   /**
@@ -31,6 +81,9 @@ export interface GenerateOptions {
 export interface GenerateResult {
   text: string;
   action: 'speak' | 'journal' | 'silent';
+  budgetReceipt?: BudgetReceipt;
+  searchReceipt?: SearchReceipt;
+  actionReceipt?: ActionReceipt;
 }
 
 /**
@@ -153,6 +206,298 @@ function parseResponse(raw: string): GenerateResult {
   return { action: 'speak', text: stripped };
 }
 
+const DEFAULT_MAX_CONTEXT_TOKENS: Record<string, number> = {
+  anthropic: 200000,
+  openai: 128000,
+  grok: 131072,
+  lmstudio: 8192,
+  alois: 8192,
+  default: 32768,
+};
+
+const DEFAULT_SAFETY_TOKENS = 512;
+
+interface PackedPrompt {
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  receipt: BudgetReceipt;
+  finalMaxTokens: number;
+}
+
+const LOCAL_HARD_CAP_CHARS = 10000;
+
+function buildBudgetedPrompt(
+  options: GenerateOptions,
+  providerKey: string,
+  reservedOutputTokens: number,
+): PackedPrompt {
+  const maxContextTokens = options.maxContextTokens
+    ?? DEFAULT_MAX_CONTEXT_TOKENS[providerKey]
+    ?? DEFAULT_MAX_CONTEXT_TOKENS.default;
+  const safetyTokens = options.safetyTokens ?? DEFAULT_SAFETY_TOKENS;
+  const segments = sanitizeSegments(
+    options.segments && options.segments.length > 0
+      ? options.segments
+      : buildDefaultSegments(options),
+  );
+
+  let packed = trimSegmentsToBudget(segments, {
+    maxContextTokens,
+    reservedOutputTokens,
+    safetyTokens,
+    tokenEstimationMode: 'heuristic',
+  });
+  let strictPassApplied = false;
+
+  const inputBudgetTokens = maxContextTokens - reservedOutputTokens - safetyTokens;
+  let estimatedInputTokens = estimateMessagesTokens(packed.messages);
+  if (estimatedInputTokens > inputBudgetTokens) {
+    packed = trimSegmentsToBudget(segments, {
+      maxContextTokens,
+      reservedOutputTokens,
+      safetyTokens,
+      tokenEstimationMode: 'heuristic',
+    }, { strict: true });
+    strictPassApplied = true;
+    estimatedInputTokens = estimateMessagesTokens(packed.messages);
+  }
+
+  const isLocalProvider = providerKey === 'lmstudio';
+  if (isLocalProvider) {
+    const localCapped = enforceLocalHardCap(
+      segments,
+      packed,
+      maxContextTokens,
+      reservedOutputTokens,
+      safetyTokens,
+    );
+    if (localCapped.didApply) {
+      packed = localCapped.packed;
+      strictPassApplied = strictPassApplied || localCapped.strictApplied;
+      estimatedInputTokens = estimateMessagesTokens(packed.messages);
+    }
+  }
+
+  if (estimatedInputTokens > inputBudgetTokens) {
+    throw new ContextBudgetExceededError({
+      providerKey,
+      maxContextTokens,
+      reservedOutputTokens,
+      safetyTokens,
+      inputBudgetTokens,
+      estimatedInputTokensAfterTrim: estimatedInputTokens,
+    });
+  }
+
+  const roomForOutput = Math.max(0, maxContextTokens - estimatedInputTokens - safetyTokens);
+  const finalMaxTokens = Math.max(32, Math.min(reservedOutputTokens, roomForOutput || reservedOutputTokens));
+  if (strictPassApplied && !packed.receipt.boundaryRepackApplied) {
+    packed.receipt = { ...packed.receipt, boundaryRepackApplied: true };
+  }
+  if (packed.receipt.trimmedSegments.length > 0 || packed.receipt.droppedSegments.length > 0) {
+    console.log(`[CONTEXT TRIM] removed=${packed.receipt.droppedSegments.length} trimmed=${packed.receipt.trimmedSegments.length} estAfter=${packed.receipt.estimatedInputTokensAfterTrim}`);
+  }
+  options.onBudgetReceipt?.(packed.receipt);
+  return { messages: packed.messages, receipt: packed.receipt, finalMaxTokens };
+}
+
+function enforceLocalHardCap(
+  sourceSegments: PromptSegment[],
+  initialPacked: { messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; receipt: BudgetReceipt },
+  maxContextTokens: number,
+  reservedOutputTokens: number,
+  safetyTokens: number,
+): { didApply: boolean; strictApplied: boolean; packed: { messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; receipt: BudgetReceipt } } {
+  let packed = initialPacked;
+  let strictApplied = false;
+  let totalChars = totalPromptChars(packed.messages);
+  if (totalChars <= LOCAL_HARD_CAP_CHARS) {
+    return { didApply: false, strictApplied, packed };
+  }
+
+  const segments = cloneSegments(sourceSegments);
+  const repack = (strict: boolean): boolean => {
+    const next = trimSegmentsToBudget(segments, {
+      maxContextTokens,
+      reservedOutputTokens,
+      safetyTokens,
+      tokenEstimationMode: 'heuristic',
+    }, strict ? { strict: true } : {});
+    packed = next;
+    totalChars = totalPromptChars(packed.messages);
+    strictApplied = strictApplied || strict;
+    return totalChars <= LOCAL_HARD_CAP_CHARS;
+  };
+
+  if (dropSegmentByIdPattern(segments, /(^docs$|docs)/i) && repack(true)) {
+    return { didApply: true, strictApplied, packed };
+  }
+  if (dropSegmentByIdPattern(segments, /(memory|ram|tissue)/i) && repack(true)) {
+    return { didApply: true, strictApplied, packed };
+  }
+  if (dropSegmentByIdPattern(segments, /journal/i) && repack(true)) {
+    return { didApply: true, strictApplied, packed };
+  }
+
+  while (totalChars > LOCAL_HARD_CAP_CHARS) {
+    const removed = dropOldestConversationItem(segments);
+    if (!removed) break;
+    repack(true);
+  }
+
+  return { didApply: true, strictApplied, packed };
+}
+
+function dropSegmentByIdPattern(segments: PromptSegment[], pattern: RegExp): boolean {
+  let changed = false;
+  for (const seg of segments) {
+    if (seg.required) continue;
+    if (!pattern.test(seg.id)) continue;
+    if (typeof seg.text === 'string' && seg.text.length > 0) {
+      seg.text = '';
+      changed = true;
+    }
+    if (Array.isArray(seg.messages) && seg.messages.length > 0) {
+      seg.messages = [];
+      changed = true;
+    }
+    if (Array.isArray(seg.items) && seg.items.length > 0) {
+      seg.items = seg.items.filter(item => !!item.required);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function dropOldestConversationItem(segments: PromptSegment[]): boolean {
+  let targetSeg: PromptSegment | null = null;
+  for (const seg of segments) {
+    if (!seg.id.toLowerCase().includes('conversation')) continue;
+    if (Array.isArray(seg.items) && seg.items.length > 0) {
+      targetSeg = seg;
+      break;
+    }
+  }
+  if (!targetSeg || !targetSeg.items) return false;
+
+  const removable = targetSeg.items
+    .filter(item => item.id !== 'conversation:latest-human' && !item.required)
+    .sort((a, b) => (a.recency ?? 0) - (b.recency ?? 0));
+  if (removable.length === 0) return false;
+  const removeId = removable[0].id;
+  targetSeg.items = targetSeg.items.filter(item => item.id !== removeId);
+  return true;
+}
+
+function cloneSegments(segments: PromptSegment[]): PromptSegment[] {
+  return segments.map(seg => ({
+    ...seg,
+    messages: seg.messages ? seg.messages.map(msg => ({ ...msg })) : undefined,
+    items: seg.items ? seg.items.map(item => ({ ...item })) : undefined,
+  }));
+}
+
+function totalPromptChars(messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>): number {
+  return messages.reduce((sum, msg) => sum + (msg.content || '').length, 0);
+}
+
+function sanitizeSegments(segments: PromptSegment[]): PromptSegment[] {
+  return segments.map(seg => ({
+    ...seg,
+    text: seg.text ? seg.text.replace(/[\uD800-\uDFFF]/g, '') : seg.text,
+    messages: seg.messages?.map(msg => ({
+      role: msg.role,
+      content: (msg.content || '').replace(/[\uD800-\uDFFF]/g, ''),
+    })),
+    items: seg.items?.map(item => ({
+      ...item,
+      text: (item.text || '').replace(/[\uD800-\uDFFF]/g, ''),
+    })),
+  }));
+}
+
+function buildDefaultSegments(options: GenerateOptions): PromptSegment[] {
+  const instruction = 'Based on the conversation, your private reflections, any shared documents, and the memory state, decide what to do this tick. Respond with EXACTLY one of these formats:\n\n[SPEAK] your message to the room\n[JOURNAL] your private reflection\n[SILENT] (say nothing this tick)';
+  const convoLines = (options.conversationContext || '')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean);
+  const latestHumanIdx = (() => {
+    for (let i = convoLines.length - 1; i >= 0; i--) {
+      if (convoLines[i].startsWith('>>>')) return i;
+    }
+    return -1;
+  })();
+  const conversationItems = convoLines.map((line, idx) => ({
+    id: idx === latestHumanIdx ? 'conversation:latest-human' : `conversation:${idx}`,
+    text: line,
+    role: 'user' as const,
+    recency: idx,
+    required: idx === latestHumanIdx,
+    score: idx === latestHumanIdx ? 2 : 1,
+  }));
+
+  const segments: PromptSegment[] = [
+    {
+      id: 'system',
+      priority: 1,
+      required: true,
+      trimStrategy: 'NONE',
+      role: 'system',
+      text: options.systemPrompt || '',
+    },
+    {
+      id: 'instruction',
+      priority: 2,
+      required: true,
+      trimStrategy: 'NONE',
+      role: 'user',
+      text: instruction,
+    },
+    {
+      id: 'conversation',
+      priority: 3,
+      required: latestHumanIdx >= 0,
+      trimStrategy: 'DROP_OLDEST_MESSAGES',
+      role: 'user',
+      items: conversationItems,
+    },
+    {
+      id: 'journal',
+      priority: 4,
+      required: false,
+      trimStrategy: 'SHRINK_TEXT',
+      role: 'user',
+      text: options.journalContext || '',
+    },
+  ];
+  if (options.documentsContext) {
+    segments.push({
+      id: 'docs',
+      priority: 5,
+      required: false,
+      trimStrategy: 'SHRINK_TEXT',
+      role: 'user',
+      text: options.documentsContext,
+      shrinkTokenSteps: [350, 250, 150, 80],
+    });
+  }
+  if (options.memoryContext) {
+    segments.push({
+      id: 'memory',
+      priority: 6,
+      required: false,
+      trimStrategy: 'DROP_LOWEST_RANKED_ITEMS',
+      role: 'user',
+      items: [{
+        id: 'memory:0',
+        text: options.memoryContext,
+        score: 0,
+      }],
+    });
+  }
+  return segments;
+}
+
 /**
  * Anthropic provider (Claude)
  */
@@ -172,20 +517,30 @@ export class AnthropicBackend implements AgentBackend {
   }
 
   async generate(options: GenerateOptions): Promise<GenerateResult> {
+    const packed = buildBudgetedPrompt(options, options.provider || 'anthropic', this.maxTokens);
+    const systemContent = packed.messages
+      .filter(m => m.role === 'system')
+      .map(m => m.content)
+      .join('\n\n')
+      .replace(/[\uD800-\uDFFF]/g, '');
+    const nonSystem = packed.messages.filter(m => m.role !== 'system');
+    const anthropicMessages = nonSystem.length > 0
+      ? nonSystem.map(m => ({
+        role: m.role === 'assistant' ? 'assistant' as const : 'user' as const,
+        content: m.content,
+      }))
+      : [{ role: 'user' as const, content: '' }];
+
     const response = await this.client.messages.create({
       model: this.model,
-      max_tokens: this.maxTokens,
-      system: options.systemPrompt.replace(/[\uD800-\uDFFF]/g, ''),
-      messages: [
-        {
-          role: 'user',
-          content: buildUserPrompt(options),
-        },
-      ],
+      max_tokens: packed.finalMaxTokens,
+      system: systemContent,
+      messages: anthropicMessages,
     });
 
     const text = response.content[0].type === 'text' ? response.content[0].text : '';
-    return parseResponse(text);
+    const parsed = parseResponse(text);
+    return { ...parsed, budgetReceipt: packed.receipt };
   }
 }
 
@@ -214,43 +569,12 @@ export class OpenAICompatibleBackend implements AgentBackend {
   async generate(options: GenerateOptions): Promise<GenerateResult> {
     // Detect if this is a local/small model (LM Studio, Ollama, etc.)
     const isLocalModel = this.baseUrl.includes('localhost') || this.baseUrl.includes('127.0.0.1');
-    const providerKey = options.provider || (isLocalModel ? 'lmstudio' : 'default');
-
-    // Truncate system prompt if it exceeds provider limit
-    let systemContent = options.systemPrompt.replace(/[\uD800-\uDFFF]/g, '');
-    const maxSysChars = MAX_SYSTEM_CHARS[providerKey] || MAX_SYSTEM_CHARS.default;
-    if (systemContent.length > maxSysChars) {
-      const truncated = systemContent.length - maxSysChars;
-      systemContent = systemContent.substring(0, maxSysChars) +
-        `\n[... ${truncated} chars truncated ...]`;
-    }
-
-    // Build user prompt with provider-aware truncation
-    const userContent = buildUserPrompt({ ...options, provider: providerKey });
-
-    // Hard total cap for local models — varies by provider key
-    // lmstudio (small models): ~3000 tokens (4096 ctx window)
-    // Local models: hard cap on total prompt size.
-    // 8000 chars leaves ~2k tokens headroom for response at aggressive tokenizer ratios (~2.3 chars/token).
-    let finalUser = userContent;
-    if (isLocalModel) {
-      const hardCap = 8000;
-      const totalChars = systemContent.length + userContent.length;
-      if (totalChars > hardCap) {
-        const availableForUser = Math.max(2000, hardCap - systemContent.length);
-        if (userContent.length > availableForUser) {
-          const keepStart = Math.floor(availableForUser * 0.3);
-          const keepEnd = Math.floor(availableForUser * 0.6);
-          finalUser = userContent.substring(0, keepStart) +
-            `\n[... truncated to fit ${this.model} context window ...]\n` +
-            userContent.substring(userContent.length - keepEnd);
-        }
-      }
-    }
-
-    // Log prompt sizes for debugging context window issues
-    if (isLocalModel) {
-      console.log(`[${this.agentName}] Prompt: system=${systemContent.length} chars, user=${finalUser.length} chars, total=${systemContent.length + finalUser.length} chars (~${Math.round((systemContent.length + finalUser.length) / 4)} tokens)`);
+    // Local endpoints must always use lmstudio budgeting rules regardless of logical provider label.
+    const providerKey = isLocalModel ? 'lmstudio' : (options.provider || 'default');
+    const packed = buildBudgetedPrompt(options, providerKey, this.maxTokens);
+    const finalMessages = [...packed.messages];
+    if (isLocalModel && options.prefill) {
+      finalMessages.push({ role: 'assistant', content: options.prefill });
     }
 
     // Retry up to 3 times on socket errors — LM Studio intermittently drops connections
@@ -272,16 +596,8 @@ export class OpenAICompatibleBackend implements AgentBackend {
           },
           body: JSON.stringify({
             model: this.model,
-            messages: [
-              { role: 'system', content: systemContent },
-              { role: 'user', content: finalUser },
-              // Prefill forces the model to continue from a given prefix,
-              // bypassing format-decision failures in small models.
-              ...(isLocalModel && options.prefill
-                ? [{ role: 'assistant', content: options.prefill }]
-                : []),
-            ],
-            max_tokens: this.maxTokens,
+            messages: finalMessages,
+            max_tokens: packed.finalMaxTokens,
             temperature: this.temperature,
           }),
         });
@@ -297,6 +613,41 @@ export class OpenAICompatibleBackend implements AgentBackend {
 
     if (!response.ok) {
       const err = await response.text();
+      const isCtxOverflow = response.status === 400 && /context size has been exceeded|context.*exceed/i.test(err);
+      if (isLocalModel && isCtxOverflow) {
+        // One emergency retry with an extra-hard char cap for tokenizer mismatch on local models.
+        const emergencyMessages = emergencyTrimMessages(finalMessages, 6000);
+        const retry = await fetch(`${this.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: this.model,
+            messages: emergencyMessages,
+            max_tokens: Math.max(32, Math.min(128, packed.finalMaxTokens)),
+            temperature: this.temperature,
+          }),
+        });
+        if (retry.ok) {
+          const data = (await retry.json()) as any;
+          const text = data.choices?.[0]?.message?.content || '';
+          if (isLocalModel) {
+            console.log(`[${this.agentName}] Raw response (emergency retry): "${text.substring(0, 200)}${text.length > 200 ? '...' : ''}"`);
+          }
+          if (isLocalModel && options.prefill) {
+            const content = stripMetaReasoning(text.trim());
+            if (options.prefill.includes('[JOURNAL]')) return { action: 'journal', text: content, budgetReceipt: packed.receipt };
+            if (options.prefill.includes('[SILENT]')) return { action: 'silent', text: '', budgetReceipt: packed.receipt };
+            return { action: 'speak', text: content, budgetReceipt: packed.receipt };
+          }
+          const parsed = parseResponse(text);
+          return { ...parsed, budgetReceipt: packed.receipt };
+        }
+        const retryErr = await retry.text();
+        throw new Error(`${this.agentName} API error ${retry.status}: ${retryErr}`);
+      }
       throw new Error(`${this.agentName} API error ${response.status}: ${err}`);
     }
 
@@ -309,78 +660,64 @@ export class OpenAICompatibleBackend implements AgentBackend {
     // Prefill path: action is determined by the prefix we sent, not by tag-parsing
     if (isLocalModel && options.prefill) {
       const content = stripMetaReasoning(text.trim());
-      if (options.prefill.includes('[JOURNAL]')) return { action: 'journal', text: content };
-      if (options.prefill.includes('[SILENT]')) return { action: 'silent', text: '' };
-      return { action: 'speak', text: content };
+      if (options.prefill.includes('[JOURNAL]')) return { action: 'journal', text: content, budgetReceipt: packed.receipt };
+      if (options.prefill.includes('[SILENT]')) return { action: 'silent', text: '', budgetReceipt: packed.receipt };
+      return { action: 'speak', text: content, budgetReceipt: packed.receipt };
     }
 
-    return parseResponse(text);
+    const parsed = parseResponse(text);
+    return { ...parsed, budgetReceipt: packed.receipt };
   }
 }
 
-// Approximate char limits per provider (rough: 1 token ≈ 4 chars)
-// Leave headroom for the response
-const MAX_PROMPT_CHARS: Record<string, number> = {
-  anthropic: 600000,    // ~150k tokens (200k max - headroom)
-  openai: 80000,        // ~20k tokens (GPT-4o 128k but TPM limits)
-  grok: 400000,         // ~100k tokens (131k max - headroom)
-  lmstudio: 10000,      // ~2.5k tokens — local models often have 4-8k ctx, leave room for system prompt + response
-  alois: 60000,         // ~15k tokens — remote Alois (DeepSeek/Groq) has large context; local hard-caps at 8k anyway
-  default: 80000,
-};
-
-// System prompt char limits — separate from user prompt budget
-const MAX_SYSTEM_CHARS: Record<string, number> = {
-  anthropic: 200000,
-  openai: 40000,
-  grok: 200000,
-  lmstudio: 4000,       // ~1k tokens — keep system prompt tight for small context windows
-  alois: 40000,         // remote Alois (DeepSeek) gets full Covenant instructions; local hard-caps at 8k chars anyway
-  default: 40000,
-};
-
-function buildUserPrompt(options: GenerateOptions): string {
-  // Priority order: conversation first (most important), then journal, then instruction footer
-  // Documents and memory go LAST so they get truncated first when space is tight
-  const instruction = 'Based on the conversation, your private reflections, any shared documents, and the memory state, decide what to do this tick. Respond with EXACTLY one of these formats:\n\n[SPEAK] your message to the room\n[JOURNAL] your private reflection\n[SILENT] (say nothing this tick)';
-
-  const maxChars = MAX_PROMPT_CHARS[options.provider || 'default'] || MAX_PROMPT_CHARS.default;
-
-  // Start with highest priority content
-  let prompt = [options.conversationContext, options.journalContext].filter(Boolean).join('\n\n');
-  let remaining = maxChars - prompt.length - instruction.length - 20; // 20 for separators
-
-  // Add documents only if there's room
-  if (options.documentsContext && remaining > 200) {
-    const docBudget = Math.min(options.documentsContext.length, Math.floor(remaining * 0.5));
-    prompt += '\n\n' + options.documentsContext.substring(0, docBudget);
-    remaining -= docBudget;
+function emergencyTrimMessages(
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+  charCap: number,
+): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
+  const latestUserIdx = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') return i;
+    }
+    return -1;
+  })();
+  const requiredIdx = new Set<number>();
+  if (latestUserIdx >= 0) requiredIdx.add(latestUserIdx);
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i].role === 'system') requiredIdx.add(i);
   }
 
-  // Add memory only if there's room
-  if (options.memoryContext && remaining > 200) {
-    const memBudget = Math.min(options.memoryContext.length, remaining);
-    prompt += '\n\n' + options.memoryContext.substring(0, memBudget);
+  const copy = messages.map(m => ({ ...m }));
+  const totalChars = () => copy.reduce((sum, m) => sum + (m.content || '').length, 0);
+
+  // Drop oldest non-required user/assistant messages first.
+  let idx = 0;
+  while (totalChars() > charCap && idx < copy.length) {
+    if (!requiredIdx.has(idx) && copy[idx].content) {
+      copy[idx].content = '';
+    }
+    idx++;
   }
 
-  prompt += '\n\n' + instruction;
-
-  // Final safety cap (shouldn't be needed but just in case)
-  if (prompt.length > maxChars) {
-    // Keep start (conversation) and end (instruction footer)
-    const keepStart = Math.floor(maxChars * 0.7);
-    const keepEnd = Math.floor(maxChars * 0.2);
-    const truncated = prompt.length - maxChars;
-    prompt = prompt.substring(0, keepStart) +
-      `\n\n[... ${truncated} characters truncated to fit context window ...]\n\n` +
-      prompt.substring(prompt.length - keepEnd);
+  // If still over, shrink non-required remaining content.
+  for (let i = 0; i < copy.length && totalChars() > charCap; i++) {
+    if (requiredIdx.has(i) || !copy[i].content) continue;
+    const over = totalChars() - charCap;
+    const target = Math.max(80, copy[i].content.length - over);
+    copy[i].content = `${copy[i].content.slice(0, target)}\n[... truncated ...]`;
   }
 
-  // Strip unpaired surrogates and other chars that break JSON serialization
-  prompt = prompt.replace(/[\uD800-\uDFFF]/g, '');
+  // Keep latest user intact; if impossible, trim only systems.
+  for (let i = 0; i < copy.length && totalChars() > charCap; i++) {
+    if (i === latestUserIdx || copy[i].role !== 'system' || !copy[i].content) continue;
+    const over = totalChars() - charCap;
+    const target = Math.max(120, copy[i].content.length - over);
+    copy[i].content = `${copy[i].content.slice(0, target)}\n[... truncated ...]`;
+  }
 
-  return prompt;
+  return copy.filter(m => (m.content || '').trim().length > 0);
 }
+
+
 
 /**
  * Factory: create the right backend from an AgentConfig

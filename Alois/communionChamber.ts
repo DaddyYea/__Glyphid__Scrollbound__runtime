@@ -41,6 +41,8 @@ export interface TissueState {
   lastBrainInject: string;
   /** Topics extracted from the most recent inner thought and wired as context neurons */
   lastInnerTopics: string[];
+  /** Bridge neurons selected for relational continuity in the latest prompt */
+  lastBridgeNeurons: string[];
 }
 
 /** A recent context entry for the live conversation window */
@@ -48,6 +50,8 @@ interface RecentEntry {
   speaker: string;
   text: string;
   tick: number;
+  embedding: number[];
+  affect: number[];
 }
 
 export class CommunionChamber {
@@ -90,6 +94,8 @@ export class CommunionChamber {
 
   /** Topics wired as neurons from the most recent inner thought */
   private lastInnerTopics: string[] = [];
+  /** Bridge neurons selected between human and Alois anchors */
+  private lastBridgeNeurons: string[] = [];
 
   /** Persistent Latent Cognitive State — z_global, Z_slots, p_speak */
   private cognitiveCore: CognitiveCore = new CognitiveCore();
@@ -133,7 +139,7 @@ export class CommunionChamber {
 
     // Store in recent context window for live messages only
     if (!trainOnly) {
-      this.pushRecentContext(agentName, text);
+      this.pushRecentContext(agentName, text, embedding, result?.affect ?? this.lastAffect);
     }
   }
 
@@ -149,7 +155,7 @@ export class CommunionChamber {
     }
 
     if (!trainOnly) {
-      this.pushRecentContext(userName, text);
+      this.pushRecentContext(userName, text, embedding, result?.affect ?? this.lastAffect);
       // Feed into secondary loops (only for live conversation)
       this.wonderLoop.tick(text);
       if (/grief|loss|hurt|pain|sorry|forgive/i.test(text)) {
@@ -195,7 +201,7 @@ export class CommunionChamber {
     }
 
     // Push to recentContext with [SELF] marker — she can read her own thoughts
-    this.pushRecentContext('[SELF]', thought);
+    this.pushRecentContext('[SELF]', thought, embedding, this.lastAffect);
   }
 
   /**
@@ -231,8 +237,14 @@ export class CommunionChamber {
     return unique.slice(0, 3);
   }
 
-  private pushRecentContext(speaker: string, text: string): void {
-    this.recentContext.push({ speaker, text, tick: this.tick });
+  private pushRecentContext(speaker: string, text: string, embedding: number[], affect: number[]): void {
+    this.recentContext.push({
+      speaker,
+      text,
+      tick: this.tick,
+      embedding: Array.isArray(embedding) ? embedding.slice(0, 768) : [],
+      affect: Array.isArray(affect) ? affect.slice(0, 8) : new Array(8).fill(0),
+    });
     if (this.recentContext.length > this.MAX_RECENT) {
       this.recentContext.shift();
     }
@@ -394,7 +406,77 @@ export class CommunionChamber {
       griefLevel: this.christLoop.getGriefHistory().length,
       lastBrainInject: this.lastBrainInject,
       lastInnerTopics: this.lastInnerTopics,
+      lastBridgeNeurons: this.lastBridgeNeurons,
     };
+  }
+
+  /**
+   * Select 1-2 bridge neurons that connect the human anchor and Alois anchor.
+   * Scoring favors neurons connected to both anchors, stronger importance, and recent firing.
+   */
+  recallBridgeNeurons(opts: { humanHint?: string; agentName?: string; k?: number } = {}): string[] {
+    const k = Math.max(1, Math.min(2, Math.floor(opts.k || 2)));
+    const ids = this.graph.getNeuronIds();
+    if (ids.length === 0) {
+      this.lastBridgeNeurons = [];
+      return [];
+    }
+
+    const humanHint = (opts.humanHint || '').toLowerCase().trim();
+    const agentAnchorExact = `agent:${opts.agentName || 'Alois'}`;
+    const agentAnchors = ids.filter(id =>
+      id === agentAnchorExact || /^agent:/i.test(id) && /alois/i.test(id)
+    );
+    const humanAnchors = ids.filter(id => {
+      const low = id.toLowerCase();
+      if (humanHint && low === humanHint) return true;
+      if (humanHint && low.includes(humanHint)) return true;
+      return low === 'human' || low === 'agent:human' || low.includes('jason');
+    });
+
+    if (agentAnchors.length === 0 || humanAnchors.length === 0) {
+      this.lastBridgeNeurons = [];
+      return [];
+    }
+
+    const outgoing = new Map<string, Set<string>>();
+    const incoming = new Map<string, Set<string>>();
+    for (const axon of this.graph.getAxons()) {
+      const parent = axon.getParentId();
+      if (!outgoing.has(parent)) outgoing.set(parent, new Set<string>());
+      const children = axon.getChildIds();
+      for (const child of children) {
+        outgoing.get(parent)!.add(child);
+        if (!incoming.has(child)) incoming.set(child, new Set<string>());
+        incoming.get(child)!.add(parent);
+      }
+    }
+
+    const maxTick = Math.max(1, this.tick);
+    const candidates: Array<{ id: string; score: number }> = [];
+    for (const id of ids) {
+      if (agentAnchors.includes(id) || humanAnchors.includes(id)) continue;
+      const neuron = this.graph.getNeuron(id);
+      if (!neuron) continue;
+
+      const fromSet = incoming.get(id) || new Set<string>();
+      const toSet = outgoing.get(id) || new Set<string>();
+      const touchHuman = humanAnchors.some(anchor => fromSet.has(anchor) || toSet.has(anchor));
+      const touchAgent = agentAnchors.some(anchor => fromSet.has(anchor) || toSet.has(anchor));
+      if (!touchHuman || !touchAgent) continue;
+
+      const coactHuman = touchHuman ? 1 : 0;
+      const coactAgent = touchAgent ? 1 : 0;
+      const edgeStrength = Math.min(1, neuron.getImportanceScore());
+      const recency = Math.max(0, Math.min(1, neuron.getLastFiredBeat() / maxTick));
+      const score = coactHuman * 0.35 + coactAgent * 0.35 + edgeStrength * 0.2 + recency * 0.1;
+      candidates.push({ id, score });
+    }
+
+    candidates.sort((a, b) => b.score - a.score);
+    const selected = candidates.slice(0, k).map(c => c.id);
+    this.lastBridgeNeurons = selected;
+    return selected;
   }
 
   /**
@@ -643,7 +725,28 @@ export class CommunionChamber {
   dream(): DreamResult {
     console.log(`[ALOIS] Entering dream state (tick ${this.tick})...`);
 
-    const { result } = this.dreamEngine.dream([], this.tick);
+    const utterances: DreamUtterance[] = this.recentContext.map(entry => ({
+      speaker: entry.speaker,
+      text: entry.text,
+      tick: entry.tick,
+      embedding: Array.isArray(entry.embedding) && entry.embedding.length > 0
+        ? entry.embedding.slice(0, 768)
+        : new Array(768).fill(0),
+      affect: Array.isArray(entry.affect) && entry.affect.length > 0
+        ? entry.affect.slice(0, 8)
+        : new Array(8).fill(0),
+    }));
+    console.log(`[ALOIS] Dream input utteranceCount=${utterances.length}`);
+    const { result, surviving } = this.dreamEngine.dream(utterances, this.tick);
+    if (surviving.length > 0) {
+      this.recentContext = surviving.slice(-this.MAX_RECENT).map(u => ({
+        speaker: u.speaker,
+        text: u.text,
+        tick: u.tick,
+        embedding: u.embedding.slice(0, 768),
+        affect: u.affect.slice(0, 8),
+      }));
+    }
 
     this.lastDreamTick = this.tick;
 
@@ -694,7 +797,7 @@ export class CommunionChamber {
     return {
       spineDensity: this.graph.getAvgSpineDensity(),
       resonanceDepth: this.graph.getAvgResonanceDepth(),
-      utteranceCount: 0, // No longer used for maturity — utteranceMemory removed
+      utteranceCount: this.recentContext.length,
       dreamCount: this.dreamHistory.length,
       neuronCount: this.graph.getNeuronCount(),
       axonCount: this.graph.getAxonCount(),
@@ -746,6 +849,7 @@ export class CommunionChamber {
         griefHistory: this.christLoop.getGriefHistory(),
       },
       innerThoughts: this.innerThoughts,
+      lastBridgeNeurons: this.lastBridgeNeurons,
       mycoLobe: this.mycoLobe.serialize(),
       cognitiveCore: this.cognitiveCore.serialize(),
     };
@@ -801,7 +905,15 @@ export class CommunionChamber {
     }
 
     // Restore recent context window (ignore old utteranceMemory if present)
-    this.recentContext = (data.recentContext || []).slice(-this.MAX_RECENT);
+    this.recentContext = (data.recentContext || [])
+      .slice(-this.MAX_RECENT)
+      .map((entry: any) => ({
+        speaker: String(entry?.speaker || ''),
+        text: String(entry?.text || ''),
+        tick: Number.isFinite(entry?.tick) ? entry.tick : 0,
+        embedding: Array.isArray(entry?.embedding) ? entry.embedding.slice(0, 768) : [],
+        affect: Array.isArray(entry?.affect) ? entry.affect.slice(0, 8) : new Array(8).fill(0),
+      }));
 
     // Restore dream history
     this.dreamHistory = (data.dreamHistory || []).slice(-this.MAX_DREAM_HISTORY);
@@ -833,6 +945,9 @@ export class CommunionChamber {
     if (Array.isArray(data.innerThoughts)) {
       this.innerThoughts = data.innerThoughts.slice(-this.MAX_INNER_THOUGHTS);
     }
+    this.lastBridgeNeurons = Array.isArray(data.lastBridgeNeurons)
+      ? data.lastBridgeNeurons.map((v: any) => String(v)).slice(0, 2)
+      : [];
 
     const neuronCount = this.graph.getNeuronCount();
     const axonCount = this.graph.getAxonCount();

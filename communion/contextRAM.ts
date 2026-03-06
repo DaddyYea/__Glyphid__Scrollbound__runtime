@@ -123,6 +123,26 @@ export interface ReflectiveSweepResult {
   stalestItem: string | null;
 }
 
+export interface PackedAssembleResult {
+  text: string;
+  keptBlocks: number;
+  droppedBlocks: number;
+}
+
+export interface DocHit {
+  title: string;
+  id: string;
+  uri?: string;
+  score: number;
+  hasContent: boolean;
+}
+
+export interface DocSearchResult {
+  hits: DocHit[];
+  totalCount: number;
+  ms: number;
+}
+
 // ── ContextRAM ──
 
 export class ContextRAM {
@@ -236,6 +256,63 @@ export class ContextRAM {
 
   setGraphCallback(cb: (nodeUri: string) => string): void {
     this.graphCallback = cb;
+  }
+
+  /**
+   * Fuzzy document search over document pool metadata/content.
+   * Deterministic ranking + top-k cap.
+   */
+  searchDocsFuzzy(query: string, k = 10): DocSearchResult {
+    const startedAt = Date.now();
+    const pool = this.pools.get('documents');
+    if (!pool) return { hits: [], totalCount: 0, ms: Date.now() - startedAt };
+
+    const normalizedQuery = normalizeSearchQuery(query);
+    const tokens = sanitizeSearchTokens(normalizedQuery);
+    if (!normalizedQuery || tokens.length === 0) {
+      return { hits: [], totalCount: 0, ms: Date.now() - startedAt };
+    }
+
+    const ranked = Array.from(pool.items.values())
+      .map((item): DocHit => {
+        const score = scoreDocItem(item, normalizedQuery, tokens);
+        return {
+          title: item.label || item.id,
+          id: item.id,
+          uri: item.id.startsWith('doc:') ? item.id : undefined,
+          score,
+          hasContent: !!item.content?.trim(),
+        };
+      })
+      .filter(hit => hit.score > 0)
+      .sort((a, b) => b.score - a.score);
+    const hits = ranked.slice(0, Math.max(1, k));
+
+    return { hits, totalCount: ranked.length, ms: Date.now() - startedAt };
+  }
+
+  /**
+   * Load a document excerpt by pool item id.
+   */
+  loadDocExcerptById(id: string): { ok: boolean; text?: string; metadataOnly?: boolean; title?: string } {
+    const pool = this.pools.get('documents');
+    const item = pool?.items.get(id);
+    if (!pool || !item) return { ok: false };
+
+    if (!this.isLoaded('documents')) {
+      this.processCommand({ action: 'load', target: 'documents' });
+    }
+
+    const feedback = this.processCommand({ action: 'load', target: id });
+    const loaded = /^loaded\b|already loaded/i.test(feedback);
+    const hasContent = !!item.content?.trim();
+    if (loaded && hasContent) {
+      return { ok: true, text: item.content, metadataOnly: false, title: item.label || item.id };
+    }
+    if (loaded) {
+      return { ok: false, metadataOnly: true, title: item.label || item.id };
+    }
+    return { ok: false, metadataOnly: !hasContent, title: item.label || item.id };
   }
 
   // ════════════════════════════════════════
@@ -741,13 +818,17 @@ export class ContextRAM {
     if (!pool || !slot) return 'No documents available';
 
     const searchLower = keyword.toLowerCase();
+    const MAX_RESULTS = 10;
     const matches: { item: RAMItem; score: number }[] = [];
     for (const item of pool.items.values()) {
-      const score = item.content.toLowerCase().includes(searchLower) ? 1 : 0;
+      const score = scoreDoc(item.label || item.id, searchLower)
+        + (item.content.toLowerCase().includes(searchLower) ? 10 : 0);
       if (score > 0) matches.push({ item, score });
     }
     if (matches.length === 0) return `No loaded documents match "${keyword}"`;
-    return `Found ${matches.length} matches in loaded items`;
+    matches.sort((a, b) => b.score - a.score);
+    const topMatches = matches.slice(0, MAX_RESULTS);
+    return `Found ${topMatches.length} top matches in loaded items`;
   }
 
   /**
@@ -793,6 +874,37 @@ export class ContextRAM {
       .sort((a, b) => a.priority - b.priority);
 
     return sorted.map(s => s.content).join('\n\n');
+  }
+
+  /**
+   * Assemble loaded slots with a token budget (approximate, deterministic).
+   */
+  assemblePacked(opts: { tokenBudget: number; estimateTokens: (text: string) => number }): PackedAssembleResult {
+    const sorted = Array.from(this.slots.values())
+      .filter(s => s.loaded && s.content)
+      .sort((a, b) => a.priority - b.priority);
+
+    const kept: string[] = [];
+    let used = 0;
+    let keptBlocks = 0;
+    let droppedBlocks = 0;
+    for (const slot of sorted) {
+      const block = slot.content;
+      const tokens = opts.estimateTokens(block);
+      if (used + tokens <= opts.tokenBudget) {
+        kept.push(block);
+        used += tokens;
+        keptBlocks++;
+      } else {
+        droppedBlocks++;
+      }
+    }
+
+    return {
+      text: kept.join('\n\n'),
+      keptBlocks,
+      droppedBlocks,
+    };
   }
 
   /**
@@ -925,6 +1037,72 @@ export class ContextRAM {
 // ════════════════════════════════════════
 // Utility functions
 // ════════════════════════════════════════
+
+/**
+ * Score a document-like name against a query for deterministic ranking.
+ */
+function scoreDoc(name: string, query: string): number {
+  const n = (name || '').toLowerCase();
+  const q = (query || '').toLowerCase().trim();
+  if (!n || !q) return 0;
+  if (n === q) return 100;
+  if (n.includes(q)) return 50;
+
+  const tokens = q.split(/\s+/).filter(Boolean);
+  let score = 0;
+  for (const token of tokens) {
+    if (token.length < 2) continue;
+    if (n.includes(token)) score += 5;
+  }
+  return score;
+}
+
+function normalizeSearchQuery(query: string): string {
+  return (query || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s._\-\\/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+}
+
+function sanitizeSearchTokens(query: string): string[] {
+  const stopWords = new Set([
+    'the', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'on', 'for', 'with', 'from',
+    'please', 'again', 'all', 'right', 'try', 'load', 'read', 'open', 'find', 'search',
+    'browse', 'check', 'verify', 'look', 'up', 'file', 'files', 'doc', 'docs', 'document',
+    'documents', 'manuscript', 'chapter', 'outline', 'archive',
+  ]);
+  const profanity = new Set(['fuck', 'fucking', 'shit', 'bitch', 'asshole', 'motherfucker', 'dick', 'cunt']);
+  const tokens = query.split(/\s+/).filter(t => t.length > 1);
+  return tokens
+    .filter(t => !stopWords.has(t))
+    .filter(t => !profanity.has(t))
+    .slice(0, 6);
+}
+
+function scoreDocItem(item: RAMItem, query: string, tokens: string[]): number {
+  const title = (item.label || item.id || '').toLowerCase();
+  const id = (item.id || '').toLowerCase();
+  const tags = (item.tags || []).map(t => t.toLowerCase());
+  const content = (item.content || '').toLowerCase().slice(0, 2000);
+
+  let score = scoreDoc(title || id, query);
+  if (score <= 0) {
+    score = scoreDoc(id, query);
+  }
+
+  for (const token of tokens) {
+    if (title.includes(token)) score += 10;
+    if (id.includes(token)) score += 6;
+    if (tags.some(tag => tag.includes(token))) score += 8;
+    if (content.includes(token)) score += 2;
+  }
+
+  if (score <= 0) return 0;
+  if (item.loaded) score += 1;
+  return score;
+}
 
 /**
  * Extract meaningful keywords from text for relevance matching.

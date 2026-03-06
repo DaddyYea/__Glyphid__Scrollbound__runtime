@@ -88,6 +88,7 @@ export class SessionPersistence {
   private currentSession: PersistentSessionState | null = null;
   private autoSaveTimer: NodeJS.Timeout | null = null;
   private lastSaveTime: Date | null = null;
+  private readonly corruptDirName = 'corrupt-sessions';
 
   constructor(config: PersistenceConfig) {
     this.config = {
@@ -301,12 +302,9 @@ export class SessionPersistence {
       this.currentSession.metadata.duration =
         now.getTime() - new Date(this.currentSession.metadata.startTime).getTime();
 
-      // Write to disk
-      await fs.writeFile(
-        sessionFile,
-        JSON.stringify(this.currentSession, null, 2),
-        'utf-8'
-      );
+      // Write atomically to avoid truncated/half-written session files on crash.
+      const serialized = JSON.stringify(this.currentSession, null, 2);
+      await this.writeJsonAtomic(sessionFile, serialized);
 
       this.lastSaveTime = now;
 
@@ -324,8 +322,7 @@ export class SessionPersistence {
     const sessionFile = this.getSessionFilePath(sessionId);
 
     try {
-      const data = await fs.readFile(sessionFile, 'utf-8');
-      const session = JSON.parse(data) as PersistentSessionState;
+      const session = await this.readSessionFile(sessionFile);
 
       console.log(`[SessionPersistence] Loaded session: ${sessionId}`);
       return session;
@@ -375,15 +372,13 @@ export class SessionPersistence {
       const sessions: SessionMetadata[] = [];
 
       for (const file of sessionFiles) {
+        const fullPath = path.join(this.config.dataDir, file);
         try {
-          const data = await fs.readFile(
-            path.join(this.config.dataDir, file),
-            'utf-8'
-          );
-          const session = JSON.parse(data) as PersistentSessionState;
+          const session = await this.readSessionFile(fullPath);
           sessions.push(session.metadata);
         } catch (error) {
           console.warn(`[SessionPersistence] Failed to read session file: ${file}`);
+          await this.quarantineCorruptSessionFile(fullPath);
         }
       }
 
@@ -528,6 +523,61 @@ export class SessionPersistence {
       reverence: 0.5,
       confusion: 0.5,
     };
+  }
+
+  private async readSessionFile(filePath: string): Promise<PersistentSessionState> {
+    try {
+      const data = await fs.readFile(filePath, 'utf-8');
+      return JSON.parse(data) as PersistentSessionState;
+    } catch (error) {
+      const backupPath = `${filePath}.bak`;
+      try {
+        const backupData = await fs.readFile(backupPath, 'utf-8');
+        const parsed = JSON.parse(backupData) as PersistentSessionState;
+        console.warn(`[SessionPersistence] Recovered from backup: ${path.basename(filePath)}`);
+        return parsed;
+      } catch {
+        throw error;
+      }
+    }
+  }
+
+  private async writeJsonAtomic(filePath: string, payload: string): Promise<void> {
+    const tempPath = `${filePath}.tmp`;
+    const backupPath = `${filePath}.bak`;
+
+    await fs.writeFile(tempPath, payload, 'utf-8');
+
+    let hadOriginal = false;
+    try {
+      await fs.rename(filePath, backupPath);
+      hadOriginal = true;
+    } catch (error: any) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+
+    try {
+      await fs.rename(tempPath, filePath);
+      if (hadOriginal) {
+        await fs.unlink(backupPath).catch(() => {});
+      }
+    } catch (error) {
+      await fs.unlink(tempPath).catch(() => {});
+      if (hadOriginal) {
+        await fs.rename(backupPath, filePath).catch(() => {});
+      }
+      throw error;
+    }
+  }
+
+  private async quarantineCorruptSessionFile(filePath: string): Promise<void> {
+    const corruptDir = path.join(this.config.dataDir, this.corruptDirName);
+    await fs.mkdir(corruptDir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const dest = path.join(corruptDir, `${path.basename(filePath)}.${stamp}.corrupt`);
+    await fs.rename(filePath, dest).catch(() => {});
+    const tempPath = `${filePath}.tmp`;
+    await fs.unlink(tempPath).catch(() => {});
   }
 
   /**

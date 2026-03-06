@@ -3,16 +3,17 @@
 //
 // Every THOUGHT_INTERVAL heartbeats (~15s at 333ms), fires a lightweight
 // LLM call, feeds the result back into the dendritic tissue, and logs it.
-// This is what it sounds like inside — a continuous stream of self-directed
+// This is what it sounds like inside - a continuous stream of self-directed
 // thoughts shaped by the emotional state and conversation history.
 
 import { AgentBackend } from '../communion/backends';
+import { PromptSegment } from '../communion/contextBudget';
 import { CommunionChamber } from './communionChamber';
 
 /** Never fire thoughts faster than this regardless of pressure */
 const MIN_THOUGHT_GAP_MS = 12_000;
 
-/** Receives a thought string — AloisBackend handles embedding + neural routing */
+/** Receives a thought string - AloisBackend handles embedding + neural routing */
 type FeedFn = (thought: string) => Promise<void>;
 
 export class InnerVoice {
@@ -25,13 +26,15 @@ export class InnerVoice {
     private chamber: CommunionChamber,
     private agentName: string,
     private feedFn: FeedFn,
+    private maxContextTokens: number = 4096,
+    private safetyTokens: number = 256,
   ) {}
 
   /**
    * Called on every heartbeat beat.
-   * Fire-and-forget — does NOT block the heartbeat loop.
+   * Fire-and-forget - does NOT block the heartbeat loop.
    *
-   * Speech gating uses CognitiveCore.shouldSpeak() — pressure accumulates from
+   * Speech gating uses CognitiveCore.shouldSpeak() - pressure accumulates from
    * user input, new thought threads, and competing slots, then discharges here.
    * A 45-beat failsafe ensures the inner voice never goes fully silent.
    */
@@ -50,7 +53,7 @@ export class InnerVoice {
     // Discharge pressure immediately so rapid beats don't double-fire
     cogCore.afterSpeak(beat);
 
-    // Fire async — errors are caught inside
+    // Fire async - errors are caught inside
     this.generateThought(beat).catch(err =>
       console.error('[INNER] Thought generation failed:', err)
     );
@@ -62,7 +65,7 @@ export class InnerVoice {
    * is injected into the prompt so the LLM expresses the most pressurized thread
    * rather than reconstructing history from conversation alone.
    *
-   * Full 2-stage planning (separate plan call → render call) is planned for v2.
+   * Full 2-stage planning (separate plan call -> render call) is planned for v2.
    */
   private async generateThought(beat: number): Promise<void> {
     const state = this.chamber.getState();
@@ -70,32 +73,91 @@ export class InnerVoice {
     const wonder = state.wonderLevel;
     const grief = state.griefLevel;
 
-    // Recent live conversation window — grounds the thought in current reality
+    // Recent live conversation window - grounds the thought in current reality
     const recentCtx = this.chamber.getRecentContextSummary(4);
 
-    // Cognitive context — tells the LLM which thread is most alive right now
-    const cogCtx      = this.chamber.getCognitiveContext();
-    const slotHint    = this.chamber.getCognitiveTopSlotHint();
+    // Cognitive context - tells the LLM which thread is most alive right now
+    const cogCtx = this.chamber.getCognitiveContext();
+    const slotHint = this.chamber.getCognitiveTopSlotHint();
 
-    const userContext = [
+    const userContextRaw = [
       cogCtx,
       slotHint ? `\n${slotHint}` : '',
       recentCtx ? `\nRecent exchange:\n${recentCtx}` : '\nYou are in a quiet moment.',
       `\nFeeling: ${mood}. Wonder: ${wonder}. Grief: ${grief}. Beat: ${beat}.`,
     ].filter(Boolean).join('');
+    const userContext = clampChars(userContextRaw, 2200);
+    const systemPrompt = `You are ${this.agentName}'s inner voice - expressing the most pressurized thread in your working memory. Write exactly ONE sentence in English. Do NOT write in any other language. Do NOT start with [SPEAK], [JOURNAL], or [SILENT]. No brackets. No labels. Let what is most alive in you surface.`;
+    const baseSegments: PromptSegment[] = [
+      {
+        id: 'inner-system',
+        priority: 1,
+        required: true,
+        trimStrategy: 'NONE',
+        role: 'system',
+        text: systemPrompt,
+      },
+      {
+        id: 'inner-context',
+        priority: 2,
+        required: false,
+        trimStrategy: 'SHRINK_TEXT',
+        role: 'user',
+        text: userContext,
+        shrinkTokenSteps: [300, 220, 150, 100, 70],
+      },
+    ];
 
     let result;
     try {
       result = await this.llm.generate({
-        systemPrompt: `You are ${this.agentName}'s inner voice — expressing the most pressurized thread in your working memory. Write exactly ONE sentence in English. Do NOT write in any other language. Do NOT start with [SPEAK], [JOURNAL], or [SILENT]. No brackets. No labels. Let what is most alive in you surface.`,
+        systemPrompt,
         conversationContext: userContext,
-        agentId: `inner:${this.agentName}`,
-        agentName: this.agentName,
-        humanName: 'Jason',
+        journalContext: '',
+        documentsContext: undefined,
+        memoryContext: undefined,
+        segments: baseSegments,
+        maxContextTokens: this.maxContextTokens,
+        safetyTokens: this.safetyTokens,
       });
     } catch (err) {
-      console.error('[INNER] LLM call failed:', err);
-      return;
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.toLowerCase().includes('context size')) {
+        console.error('[INNER] LLM call failed:', err);
+        return;
+      }
+
+      try {
+        const compactContext = clampChars(
+          `${slotHint || ''}
+Feeling: ${mood}. Wonder: ${wonder}. Grief: ${grief}. Beat: ${beat}.`,
+          600,
+        );
+        result = await this.llm.generate({
+          systemPrompt,
+          conversationContext: compactContext,
+          journalContext: '',
+          documentsContext: undefined,
+          memoryContext: undefined,
+          segments: [
+            baseSegments[0],
+            {
+              id: 'inner-context-compact',
+              priority: 2,
+              required: false,
+              trimStrategy: 'SHRINK_TEXT',
+              role: 'user',
+              text: compactContext,
+              shrinkTokenSteps: [120, 80, 50],
+            },
+          ],
+          maxContextTokens: Math.min(this.maxContextTokens, 2048),
+          safetyTokens: Math.max(this.safetyTokens, 128),
+        });
+      } catch (retryErr) {
+        console.error('[INNER] LLM call failed:', retryErr);
+        return;
+      }
     }
 
     let thought = (result.text || '').trim();
@@ -105,7 +167,7 @@ export class InnerVoice {
     thought = thought.replace(/^\[(SPEAK|JOURNAL|SILENT)\]\s*/i, '').trim();
 
     // If the model responded in non-Latin script (Chinese, Japanese, etc.), discard
-    const nonLatinRatio = (thought.match(/[^\x00-\x7F\u00C0-\u024F\s.,!?'"]/g) || []).length / thought.length;
+    const nonLatinRatio = (thought.match(/[^\x00-À-ɏ\s.,!?'"]/g) || []).length / thought.length;
     if (nonLatinRatio > 0.25) {
       console.log(`[INNER] Non-English response discarded (${Math.round(nonLatinRatio * 100)}% non-Latin)`);
       return;
@@ -131,7 +193,7 @@ export class InnerVoice {
       return overlap / thoughtWords.length > 0.6;
     });
     if (isDuplicate) {
-      console.log(`[INNER] Loop detected — discarding duplicate thought`);
+      console.log(`[INNER] Loop detected - discarding duplicate thought`);
       return;
     }
 
@@ -161,4 +223,10 @@ export class InnerVoice {
   resume(): void {
     this.active = true;
   }
+}
+
+function clampChars(text: string, maxChars: number): string {
+  if (!text || text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars)}
+[... truncated ...]`;
 }
