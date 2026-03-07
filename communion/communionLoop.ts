@@ -827,7 +827,7 @@ export class CommunionLoop {
     // Restore room messages from persisted scrolls
     for (const scroll of sessionState.scrolls.slice(-30)) {
       if (scroll.location === 'communion-room' && scroll.content.startsWith('[')) {
-        const match = scroll.content.match(/^\[(.+?)\] (.+)$/);
+        const match = scroll.content.match(/^\[(.+?)\] ([\s\S]+)$/);
         if (match) {
           const speakerName = match[1];
           const text = match[2];
