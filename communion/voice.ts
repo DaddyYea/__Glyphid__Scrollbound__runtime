@@ -83,9 +83,9 @@ export interface SynthesisResult {
 
 // ── Edge TTS Backend ──
 
-const TTS_CHUNK_CHAR_LIMIT = 900;
+export const TTS_CHUNK_CHAR_LIMIT = 400;
 
-function splitTextForTts(text: string, maxChars = TTS_CHUNK_CHAR_LIMIT): string[] {
+export function splitTextForTts(text: string, maxChars = TTS_CHUNK_CHAR_LIMIT): string[] {
   const normalized = String(text || '').replace(/\r/g, '').trim();
   if (!normalized) return [];
   if (normalized.length <= maxChars) return [normalized];
@@ -142,6 +142,25 @@ function splitTextForTts(text: string, maxChars = TTS_CHUNK_CHAR_LIMIT): string[
   if (currentParagraphBlock) flushPiece(currentParagraphBlock);
 
   return chunks.filter(Boolean);
+}
+
+/**
+ * Synthesize a single pre-split chunk to MP3 bytes.
+ * Caller is responsible for splitting at appropriate boundaries first.
+ * Throws on network/TTS failure — caller handles per-chunk error.
+ */
+export async function synthesizeChunk(
+  chunk: string,
+  voiceConfig: AgentVoiceConfig,
+): Promise<Buffer> {
+  const tmpFile = join(tmpdir(), `scrollbound-tts-${crypto.randomBytes(6).toString('hex')}.mp3`);
+  try {
+    const tts = new EdgeTTS({ voice: voiceConfig.voiceId });
+    await tts.ttsPromise(chunk, tmpFile);
+    return readFileSync(tmpFile);
+  } finally {
+    try { unlinkSync(tmpFile); } catch {}
+  }
 }
 
 export async function synthesize(

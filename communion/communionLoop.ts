@@ -41,7 +41,7 @@ import {
 } from './contextBudget';
 import { registerScrollGraphStore } from './graph/scrollGraphStore';
 import { pulseBrainwaves, classifyBand, tagForBand, decayAndPromote } from './brainwaves';
-import { synthesize, getDefaultVoiceConfig, AgentVoiceConfig } from './voice';
+import { synthesizeChunk, splitTextForTts, TTS_CHUNK_CHAR_LIMIT, getDefaultVoiceConfig, AgentVoiceConfig } from './voice';
 import { ArchiveIngestion } from './archiveIngestion';
 import mammoth from 'mammoth';
 import type { ScrollEcho, MoodVector } from '../src/types';
@@ -7887,17 +7887,22 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       ttsRequestBuilt: false,
       ttsChunkCount: 0,
       ttsChunkLengths: [],
+      ttsCharLimit: TTS_CHUNK_CHAR_LIMIT,
+      ttsChunkStrategy: 'paragraph-sentence-word',
       ttsRequestSent: false,
       ttsResponseReceived: false,
+      ttsChunkRequestSentByIndex: [] as boolean[],
+      ttsChunkResponseReceivedByIndex: [] as boolean[],
+      ttsChunkTimeoutByIndex: [] as boolean[],
+      ttsChunkFailureIndex: null as number | null,
+      ttsChunkFailureReason: null as string | null,
       playbackQueued: false,
       playbackStarted: false,
       playbackFinished: false,
       playbackFailed: false,
       rawVisibleNewlineCount: (String(text || '').match(/\n/g) || []).length,
-      textNormalizedForTts: false,
-      markdownDetectedForTts: false,
-      specialCharCountForTts: 0,
-      ttsCharLimit: null,
+      markdownDetectedForTts: /(^|\n)\s{0,3}(?:[-*+] |\d+\. |>|#{1,6}\s)|[*_`~]/m.test(text || ''),
+      specialCharCountForTts: (text.match(/[^a-z0-9\s]/gi) || []).length,
       ttsTruncated: false,
     };
 
@@ -7924,24 +7929,64 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         this.recordRelationalTrace(agentId, 'tts', ttsTrace);
         return;
       }
+      // Pre-split text before synthesis so we get per-chunk trace + isolation
+      const chunks = splitTextForTts(text, TTS_CHUNK_CHAR_LIMIT);
+      const chunkLengths = chunks.map(c => c.length);
+      ttsTrace.ttsChunkCount = chunks.length;
+      ttsTrace.ttsChunkLengths = chunkLengths;
+      ttsTrace.textChunkedForTts = chunks.length > 1;
+      ttsTrace.ttsRequestBuilt = true;
+      console.log(`[${agentConfig.name}] VOICE: synthesizing ${chunks.length} chunk(s) via ${voiceConfig.voiceId} (limit=${TTS_CHUNK_CHAR_LIMIT})`);
+
       this.speaking = true;
       this.emit({ type: 'speech-start', agentId, durationMs: 0 });
-      console.log(`[${agentConfig.name}] VOICE: synthesizing (${voiceConfig.voiceId})...`);
-      ttsTrace.ttsRequestBuilt = true;
-      ttsTrace.ttsRequestSent = true;
-      this.recordRelationalTrace(agentId, 'tts', ttsTrace);
 
-      const result = await synthesize(text, voiceConfig);
-      ttsTrace.ttsChunkCount = result.chunkCount || 1;
-      ttsTrace.textChunkedForTts = (result.chunkCount || 1) > 1;
-      ttsTrace.ttsChunkCharLimit = result.chunkCharLimit || null;
-      ttsTrace.ttsChunkLengths = result.chunkLengths || [];
-      ttsTrace.textNormalizedForTts = !!result.textNormalizedForTts;
-      ttsTrace.normalizedVisibleNewlineCount = result.normalizedNewlineCount ?? null;
-      ttsTrace.markdownDetectedForTts = !!result.markdownDetected;
-      ttsTrace.specialCharCountForTts = result.specialCharCount ?? 0;
-      ttsTrace.ttsCharLimit = result.chunkCharLimit || null;
-      ttsTrace.ttsTruncated = !!result.truncatedForTts;
+      const sentByIndex: boolean[] = [];
+      const receivedByIndex: boolean[] = [];
+      const timeoutByIndex: boolean[] = [];
+      const audioParts: Buffer[] = [];
+      let chunkFailed = false;
+
+      for (let i = 0; i < chunks.length; i++) {
+        sentByIndex[i] = true;
+        receivedByIndex[i] = false;
+        timeoutByIndex[i] = false;
+        ttsTrace.ttsRequestSent = true;
+        ttsTrace.ttsChunkRequestSentByIndex = sentByIndex.slice();
+        this.recordRelationalTrace(agentId, 'tts', ttsTrace);
+        console.log(`[${agentConfig.name}] VOICE: chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)`);
+        try {
+          const buf = await synthesizeChunk(chunks[i], voiceConfig);
+          receivedByIndex[i] = true;
+          audioParts.push(buf);
+        } catch (chunkErr) {
+          ttsTrace.ttsChunkFailureIndex = i;
+          ttsTrace.ttsChunkFailureReason = chunkErr instanceof Error ? chunkErr.message : String(chunkErr);
+          console.error(`[${agentConfig.name}] VOICE: chunk ${i + 1} failed — aborting TTS:`, chunkErr);
+          chunkFailed = true;
+          break;
+        }
+        ttsTrace.ttsChunkResponseReceivedByIndex = receivedByIndex.slice();
+        ttsTrace.ttsChunkTimeoutByIndex = timeoutByIndex.slice();
+      }
+
+      ttsTrace.ttsChunkRequestSentByIndex = sentByIndex.slice();
+      ttsTrace.ttsChunkResponseReceivedByIndex = receivedByIndex.slice();
+      ttsTrace.ttsChunkTimeoutByIndex = timeoutByIndex.slice();
+
+      if (chunkFailed) {
+        // Don't emit partial audio — emit empty speech-end to release the lock
+        this.emit({ type: 'speech-end', agentId, durationMs: 0 });
+        this.speaking = false;
+        ttsTrace.blockedAt = 'tts_chunk';
+        ttsTrace.blockReason = ttsTrace.ttsChunkFailureReason as string;
+        this.recordRelationalTrace(agentId, 'tts', ttsTrace);
+        return;
+      }
+
+      const mergedAudio = Buffer.concat(audioParts);
+      // Estimate duration: ~750 chars/min of speech
+      const estimatedDurationMs = Math.max(1000, (text.length / 750) * 60000);
       ttsTrace.ttsResponseReceived = true;
       this.recordRelationalTrace(agentId, 'tts', ttsTrace);
 
@@ -7960,9 +8005,9 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         this.pendingSpeechPlayback = {
           agentId,
           agentConfig,
-          audio: result.audio,
-          audioFormat: result.format,
-          durationMs: result.durationMs || 0,
+          audio: mergedAudio,
+          audioFormat: 'mp3',
+          durationMs: estimatedDurationMs,
           text,
           createdAt: Date.now(),
           humanMessageIdAtCapture: capturedHumanMessageId,
@@ -7983,28 +8028,22 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         this.humanSpeaking = false;
       }
 
-      console.log(`[${agentConfig.name}] VOICE: ${Math.round((result.durationMs || 0) / 1000)}s audio — sending to client`);
+      console.log(`[${agentConfig.name}] VOICE: ${Math.round(estimatedDurationMs / 1000)}s audio (${mergedAudio.length} bytes, ${chunks.length} chunk(s)) — sending to client`);
 
       this.emit({
         type: 'speech-end',
         agentId,
-        audioBase64: result.audio.toString('base64'),
-        audioFormat: result.format,
-        durationMs: result.durationMs,
+        audioBase64: mergedAudio.toString('base64'),
+        audioFormat: 'mp3',
+        durationMs: estimatedDurationMs,
       });
       ttsTrace.playbackQueued = true;
-      ttsTrace.durationMs = result.durationMs || 0;
+      ttsTrace.durationMs = estimatedDurationMs;
       this.recordRelationalTrace(agentId, 'tts', ttsTrace);
 
-      // Fire-and-forget: don't block the tick loop waiting for client playback.
-      // The client has its own audio queue. The `speaking` flag stays true until
-      // the client sends /speech-done OR the safety timeout expires — but the
-      // tick loop checks `this.speaking` at entry and retries at 500ms, which is
-      // fast enough. No need to await here.
-      //
       // Safety timeout: if client never reports done, clear the flag after
       // estimated audio duration + small buffer so the loop isn't stuck forever.
-      const safetyMs = (result.durationMs || 3000) + 5000;
+      const safetyMs = estimatedDurationMs + 5000;
       if (this.speechTimeout) clearTimeout(this.speechTimeout);
       this.speechResolve = () => {
         if (this.speechTimeout) clearTimeout(this.speechTimeout);
