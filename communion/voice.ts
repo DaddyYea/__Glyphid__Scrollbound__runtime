@@ -61,9 +61,88 @@ export interface SynthesisResult {
   format: 'mp3';
   /** Duration estimate in ms */
   durationMs?: number;
+  /** Number of TTS chunks used to build this audio */
+  chunkCount?: number;
+  /** Max chunk size used for synthesis */
+  chunkCharLimit?: number;
+  /** Per-chunk character lengths */
+  chunkLengths?: number[];
+  /** Whether the transport text was normalized before TTS */
+  textNormalizedForTts?: boolean;
+  /** Raw newline count before normalization */
+  rawNewlineCount?: number;
+  /** Newline count after normalization */
+  normalizedNewlineCount?: number;
+  /** Whether markdown-ish markers were present in the transport text */
+  markdownDetected?: boolean;
+  /** Count of punctuation/symbol chars in the transport text */
+  specialCharCount?: number;
+  /** Whether any max-length threshold caused truncation */
+  truncatedForTts?: boolean;
 }
 
 // ── Edge TTS Backend ──
+
+const TTS_CHUNK_CHAR_LIMIT = 900;
+
+function splitTextForTts(text: string, maxChars = TTS_CHUNK_CHAR_LIMIT): string[] {
+  const normalized = String(text || '').replace(/\r/g, '').trim();
+  if (!normalized) return [];
+  if (normalized.length <= maxChars) return [normalized];
+
+  const chunks: string[] = [];
+  const paragraphs = normalized.split(/\n{2,}/).map(part => part.trim()).filter(Boolean);
+
+  const flushPiece = (piece: string): void => {
+    const source = piece.trim();
+    if (!source) return;
+    if (source.length <= maxChars) {
+      chunks.push(source);
+      return;
+    }
+    const sentences = source.match(/[^.!?\n]+[.!?]?|\S+/g) || [source];
+    let current = '';
+    for (const sentence of sentences) {
+      const next = current ? `${current} ${sentence.trim()}` : sentence.trim();
+      if (next.length <= maxChars) {
+        current = next;
+        continue;
+      }
+      if (current) chunks.push(current.trim());
+      if (sentence.length <= maxChars) {
+        current = sentence.trim();
+        continue;
+      }
+      const words = sentence.trim().split(/\s+/);
+      let wordChunk = '';
+      for (const word of words) {
+        const nextWordChunk = wordChunk ? `${wordChunk} ${word}` : word;
+        if (nextWordChunk.length <= maxChars) {
+          wordChunk = nextWordChunk;
+        } else {
+          if (wordChunk) chunks.push(wordChunk.trim());
+          wordChunk = word;
+        }
+      }
+      current = wordChunk.trim();
+    }
+    if (current) chunks.push(current.trim());
+  };
+
+  let currentParagraphBlock = '';
+  for (const paragraph of paragraphs) {
+    const next = currentParagraphBlock ? `${currentParagraphBlock}\n\n${paragraph}` : paragraph;
+    if (next.length <= maxChars) {
+      currentParagraphBlock = next;
+      continue;
+    }
+    if (currentParagraphBlock) flushPiece(currentParagraphBlock);
+    currentParagraphBlock = paragraph;
+  }
+  if (currentParagraphBlock) flushPiece(currentParagraphBlock);
+
+  return chunks.filter(Boolean);
+}
 
 export async function synthesize(
   text: string,
@@ -73,25 +152,52 @@ export async function synthesize(
     throw new Error('Voice not enabled for this agent');
   }
 
-  console.log(`[TTS] Edge: voice=${voiceConfig.voiceId}, text=${text.length} chars`);
-
-  // node-edge-tts writes to a file, so use a temp file
-  const tmpFile = join(tmpdir(), `scrollbound-tts-${crypto.randomBytes(6).toString('hex')}.mp3`);
+  const rawText = String(text || '');
+  const normalizedText = rawText.replace(/\r/g, '').trim();
+  const chunks = splitTextForTts(rawText, TTS_CHUNK_CHAR_LIMIT);
+  const chunkLengths = chunks.map(chunk => chunk.length);
+  const rawNewlineCount = (rawText.match(/\n/g) || []).length;
+  const normalizedNewlineCount = (normalizedText.match(/\n/g) || []).length;
+  const markdownDetected = /(^|\n)\s{0,3}(?:[-*+] |\d+\. |>|#{1,6}\s)|[*_`~]/m.test(rawText);
+  const specialCharCount = (rawText.match(/[^a-z0-9\s]/gi) || []).length;
+  console.log(`[TTS] Edge: voice=${voiceConfig.voiceId}, text=${text.length} chars, chunks=${chunks.length}, chunkLimit=${TTS_CHUNK_CHAR_LIMIT}`);
 
   try {
-    const tts = new EdgeTTS({ voice: voiceConfig.voiceId });
-    await tts.ttsPromise(text, tmpFile);
+    const audioParts: Buffer[] = [];
+    let durationMs = 0;
+    for (let i = 0; i < chunks.length; i += 1) {
+      const chunk = chunks[i];
+      const tmpFile = join(tmpdir(), `scrollbound-tts-${crypto.randomBytes(6).toString('hex')}.mp3`);
+      try {
+        const tts = new EdgeTTS({ voice: voiceConfig.voiceId });
+        console.log(`[TTS] Edge: sending chunk ${i + 1}/${chunks.length} (${chunk.length} chars)`);
+        await tts.ttsPromise(chunk, tmpFile);
+        const audio = readFileSync(tmpFile);
+        audioParts.push(audio);
+        durationMs += Math.max(1000, (chunk.length / 750) * 60000);
+      } finally {
+        try { unlinkSync(tmpFile); } catch {}
+      }
+    }
 
-    const audio = readFileSync(tmpFile);
-    console.log(`[TTS] Edge: received ${audio.length} bytes MP3`);
-
-    // Rough estimate: ~150 words/min, ~5 chars/word = ~750 chars/min
-    const durationMs = Math.max(1000, (text.length / 750) * 60000);
-
-    return { audio, format: 'mp3', durationMs };
+    const mergedAudio = Buffer.concat(audioParts);
+    console.log(`[TTS] Edge: received ${mergedAudio.length} bytes MP3 across ${chunks.length} chunk(s)`);
+    return {
+      audio: mergedAudio,
+      format: 'mp3',
+      durationMs,
+      chunkCount: chunks.length,
+      chunkCharLimit: TTS_CHUNK_CHAR_LIMIT,
+      chunkLengths,
+      textNormalizedForTts: rawText !== normalizedText,
+      rawNewlineCount,
+      normalizedNewlineCount,
+      markdownDetected,
+      specialCharCount,
+      truncatedForTts: false,
+    };
   } finally {
-    // Clean up temp file
-    try { unlinkSync(tmpFile); } catch {}
+    // per-chunk temp cleanup happens inside the synthesis loop
   }
 }
 

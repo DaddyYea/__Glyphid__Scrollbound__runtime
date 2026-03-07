@@ -335,7 +335,7 @@ export class AloisBackend implements AgentBackend {
     const conversation = options.conversationContext || '';
     const lines = conversation.split('\n').filter(Boolean);
     const latestHumanText = (options.latestHumanText || '').trim();
-    const instruction = 'Based on the conversation, your private reflections, any shared documents, and the memory state, decide what to do this tick. Respond with EXACTLY one of these formats:\n\n[SPEAK] your message to the room\n[JOURNAL] your private reflection\n[SILENT] (say nothing this tick)';
+    const instruction = 'Based on the conversation, your private reflections, any shared documents, and the memory state, decide what to do this tick. Respond with EXACTLY one of these formats:\n\n[SPEAK] your message to the room\n[JOURNAL] your private reflection\n[SILENT] (say nothing this tick)\n\nIf you choose [SPEAK], put the user-visible reply inside [VISIBLE]...[/VISIBLE]. The runtime preserves line breaks, paragraph breaks, spacing, and emphasis inside [VISIBLE] exactly as written. Do not flatten the visible reply into one paragraph. Keep hidden analysis, tool chatter, and system/meta content out of [VISIBLE].';
     const conversationItems = lines.map((line, idx) => ({
       id: `conversation:${idx}`,
       text: line,

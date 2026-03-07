@@ -50,6 +50,7 @@ export interface CommunionMessage {
   speaker: string; // agent ID or 'human'
   speakerName: string; // display name
   text: string;
+  visibleText?: string;
   timestamp: string;
   type: 'room' | 'journal';
 }

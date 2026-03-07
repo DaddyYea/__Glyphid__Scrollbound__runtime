@@ -394,6 +394,7 @@
       color: #d0d8e0;
       padding-left: 12px;
       border-left: 2px solid #1a2030;
+      white-space: break-spaces;
     }
 
     .message-time {
@@ -628,6 +629,24 @@
       text-transform: uppercase;
       letter-spacing: 1px;
       margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .llm-trace-copy-btn {
+      padding: 3px 8px;
+      font-size: 0.7em;
+      font-family: 'Courier New', monospace;
+      border-radius: 4px;
+      border: 1px solid rgba(126, 184, 218, 0.25);
+      background: rgba(126, 184, 218, 0.08);
+      color: #8ea2b6;
+      cursor: pointer;
+    }
+    .llm-trace-copy-btn:hover {
+      background: rgba(126, 184, 218, 0.14);
+      color: #c8d6e5;
     }
     .llm-receipt-summary, .llm-receipt-error {
       font-family: 'Courier New', monospace;
@@ -1336,7 +1355,10 @@
   </div>
 
   <div class="llm-receipt-panel" id="llmReceiptPanel">
-    <div class="llm-receipt-title">LLM Receipt</div>
+    <div class="llm-receipt-title">
+      <span>LLM Receipt</span>
+      <button class="llm-trace-copy-btn" id="llmTraceCopyBtn" type="button">Copy Trace</button>
+    </div>
     <div class="llm-receipt-summary" id="llmReceiptSummary">Waiting for first request...</div>
     <div class="llm-receipt-error" id="llmReceiptError" style="display:none;"></div>
     <pre class="llm-receipt-pre" id="llmReceiptPre"></pre>
@@ -1505,6 +1527,7 @@
     const llmReceiptSummary = document.getElementById('llmReceiptSummary');
     const llmReceiptError = document.getElementById('llmReceiptError');
     const llmReceiptPre = document.getElementById('llmReceiptPre');
+    const llmTraceCopyBtn = document.getElementById('llmTraceCopyBtn');
     let humanPresence = 'here';
     let llmReceiptOpen = false;
     let lastLLMRequestId = '';
@@ -1676,6 +1699,21 @@
     llmDebugBtn.addEventListener('click', () => {
       llmReceiptOpen = !llmReceiptOpen;
       llmReceiptPanel.classList.toggle('open', llmReceiptOpen);
+    });
+
+    llmTraceCopyBtn.addEventListener('click', async () => {
+      const payload = llmReceiptPre.textContent || '';
+      if (!payload.trim()) return;
+      const original = llmTraceCopyBtn.textContent;
+      try {
+        await navigator.clipboard.writeText(payload);
+        llmTraceCopyBtn.textContent = 'Copied';
+      } catch {
+        llmTraceCopyBtn.textContent = 'Copy Failed';
+      }
+      setTimeout(() => {
+        llmTraceCopyBtn.textContent = original;
+      }, 1200);
     });
 
     setInterval(pollLLMReceipt, 1500);
@@ -2794,7 +2832,7 @@
       }
     });
 
-    function addRoomMessage(speaker, speakerName, text, timestamp, isBackchannel) {
+    function addRoomMessage(speaker, speakerName, text, timestamp, isBackchannel, visibleText) {
       if (!roomHasMessages) {
         roomMessages.innerHTML = '';
         roomHasMessages = true;
@@ -2804,11 +2842,24 @@
 
       const div = document.createElement('div');
       div.className = 'room-message' + (isBackchannel ? ' backchannel' : '');
-      div.innerHTML = `
-        <div class="speaker-name" style="color: ${color}">${escapeHtml(speakerName)}</div>
-        <div class="message-text" style="border-left-color: ${hexToRgba(color, 0.3)}">${escapeHtml(text)}</div>
-        <div class="message-time">${formatTime(timestamp)}</div>
-      `;
+
+      const speakerDiv = document.createElement('div');
+      speakerDiv.className = 'speaker-name';
+      speakerDiv.style.color = color;
+      speakerDiv.textContent = speakerName;
+
+      const textDiv = document.createElement('div');
+      textDiv.className = 'message-text';
+      textDiv.style.borderLeftColor = hexToRgba(color, 0.3);
+      textDiv.textContent = visibleText ?? text ?? '';
+
+      const timeDiv = document.createElement('div');
+      timeDiv.className = 'message-time';
+      timeDiv.textContent = formatTime(timestamp);
+
+      div.appendChild(speakerDiv);
+      div.appendChild(textDiv);
+      div.appendChild(timeDiv);
 
       roomMessages.appendChild(div);
       roomMessages.scrollTop = roomMessages.scrollHeight;
@@ -2850,7 +2901,7 @@
         if (data.speaker === 'human' && consumePendingHumanMessage(data.text || '')) {
           return;
         }
-        addRoomMessage(data.speaker, data.speakerName, data.text, data.timestamp);
+        addRoomMessage(data.speaker, data.speakerName, data.text, data.timestamp, false, data.visibleText ?? data.visible_text ?? data.text);
       } else if (data.type === 'journal-entry') {
         addJournalEntry(data.speaker, data.text, data.timestamp);
       } else if (data.type === 'tick') {
@@ -2862,12 +2913,16 @@
         const name = config ? (config.agentNames[data.agentId] || data.agentId) : data.agentId;
         speakingIndicator.classList.add('active');
         speakingName.textContent = name + ' synthesizing...';
+        ttsHoldActive = true;
+        pauseRecognitionForTts();
       } else if (data.type === 'speech-end') {
-        if (data.audioBase64 && data.audioBase64.length > 0) {
-          playAudio(data.audioBase64, data.agentId);
+        if (data.audioUrl || (data.audioBase64 && data.audioBase64.length > 0)) {
+          playAudio(data.audioUrl || data.audioBase64, data.agentId, !!data.audioUrl, data.audioBase64 || null);
         } else {
           // No audio (synthesis failed) — signal done immediately
           speakingIndicator.classList.remove('active');
+          ttsHoldActive = false;
+          resumeRecognitionAfterTts();
           fetch('/speech-done', { method: 'POST' }).catch(() => {});
         }
       } else if (data.type === 'voice-config') {
@@ -2923,6 +2978,9 @@
     async function sendMessage() {
       const text = chatInput.value.trim();
       if (!text) return;
+      if (typeof lastRecognitionRenderedText !== 'undefined' && text === lastRecognitionRenderedText.trim()) {
+        lastRecognitionRenderedText = '';
+      }
       try { scLangInParse(text); } catch (e) { console.warn('[LANG-IN] parse error:', e); }
       const nowIso = new Date().toISOString();
       const humanName = (config && config.humanName) ? config.humanName : 'You';
@@ -3088,10 +3146,21 @@
 
     let audioQueue = [];
     let audioPlaying = false;
+    let ttsHoldActive = false;
     let currentAudio = null; // Reference to currently playing Audio element for barge-in
+    let pauseRecognitionForTts = () => {};
+    let resumeRecognitionAfterTts = () => {};
+    function reportSpeechStatus(agentId, status, error = null) {
+      fetch('/speech-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId, status, error }),
+      }).catch(() => {});
+    }
 
-    function playAudio(base64, agentId) {
-      audioQueue.push({ base64, agentId });
+    function playAudio(audioSource, agentId, isUrl = false, fallbackBase64 = null) {
+      audioQueue.push({ audioSource, agentId, isUrl, fallbackBase64 });
+      reportSpeechStatus(agentId, 'queued');
       if (!audioPlaying) processAudioQueue();
     }
 
@@ -3102,7 +3171,7 @@
       if (currentAudio) {
         currentAudio.pause();
         currentAudio.currentTime = 0;
-        if (currentAudio._blobUrl) {
+        if (currentAudio._blobUrl && currentAudio._blobUrl.startsWith('blob:')) {
           URL.revokeObjectURL(currentAudio._blobUrl);
         }
         currentAudio._bargedIn = true;
@@ -3117,14 +3186,11 @@
         return;
       }
       audioPlaying = true;
-      const { base64, agentId } = audioQueue.shift();
+      const { audioSource, agentId, isUrl, fallbackBase64 } = audioQueue.shift();
 
-      // Pause mic recognition while agents speak (prevents feedback loop
-      // where speaker output gets picked up by mic and re-transcribed).
-      // Barge-in is still available via Escape key — see keydown handler.
-      if (recognition && micListening) {
-        try { recognition.stop(); } catch(e) {}
-      }
+      // Pause mic recognition before playback starts. During longer synthesis
+      // the server may otherwise see stale human-speaking state and drop audio.
+      pauseRecognitionForTts();
 
       // Show speaking indicator
       const name = config ? (config.agentNames[agentId] || agentId) : agentId;
@@ -3133,24 +3199,85 @@
 
       let bargedIn = false;
       try {
-        const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-
         await new Promise((resolve) => {
-          const blob = new Blob([bytes], { type: 'audio/mpeg' });
-          const url = URL.createObjectURL(blob);
-          const audio = new Audio(url);
-          audio._blobUrl = url;
-          audio._bargedIn = false;
-          currentAudio = audio;
-          audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
-          audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
-          audio.onpause = () => {
-            if (audio._bargedIn) {
-              bargedIn = true;
-              resolve();
+          (async () => {
+            let url = '';
+            let revokeOnDone = false;
+            try {
+              if (isUrl) {
+                let response = await fetch(audioSource, { cache: 'no-store' });
+                if (!response.ok) {
+                  console.warn('[VOICE] Audio URL fetch failed, retrying once:', response.status);
+                  response = await fetch(audioSource, { cache: 'no-store' });
+                }
+                if (!response.ok) throw new Error(`audio fetch ${response.status}`);
+                const blob = await response.blob();
+                url = URL.createObjectURL(blob);
+                revokeOnDone = true;
+              } else {
+                const bytes = Uint8Array.from(atob(audioSource), c => c.charCodeAt(0));
+                const blob = new Blob([bytes], { type: 'audio/mpeg' });
+                url = URL.createObjectURL(blob);
+                revokeOnDone = true;
+              }
+            } catch (err) {
+              if (isUrl && fallbackBase64) {
+                try {
+                  const bytes = Uint8Array.from(atob(fallbackBase64), c => c.charCodeAt(0));
+                  const blob = new Blob([bytes], { type: 'audio/mpeg' });
+                  url = URL.createObjectURL(blob);
+                  revokeOnDone = true;
+                  console.warn('[VOICE] Audio URL load failed; falling back to inline audio');
+                } catch (fallbackErr) {
+                  console.error('[VOICE] Audio fallback load failed:', fallbackErr);
+                  resolve();
+                  return;
+                }
+              } else {
+                console.error('[VOICE] Audio load failed:', err);
+                resolve();
+                return;
+              }
             }
-          };
-          audio.play().catch(() => resolve());
+
+            const audio = new Audio(url);
+            audio.preload = 'auto';
+            audio._blobUrl = revokeOnDone ? url : '';
+            audio._bargedIn = false;
+            currentAudio = audio;
+            audio.onended = () => {
+              if (revokeOnDone) URL.revokeObjectURL(url);
+              reportSpeechStatus(agentId, 'finished');
+              resolve();
+            };
+            audio.onerror = () => {
+              if (revokeOnDone) URL.revokeObjectURL(url);
+              console.error('[VOICE] Audio playback failed for', agentId);
+              reportSpeechStatus(agentId, 'failed', 'audio_error');
+              resolve();
+            };
+            audio.onpause = () => {
+              if (audio._bargedIn) {
+                bargedIn = true;
+                resolve();
+              }
+            };
+            const playPromise = audio.play();
+            if (playPromise && typeof playPromise.then === 'function') {
+              playPromise
+                .then(() => {
+                  reportSpeechStatus(agentId, 'started');
+                })
+                .catch((err) => {
+                  if (revokeOnDone) URL.revokeObjectURL(url);
+                  console.error('[VOICE] Audio play() failed:', err);
+                  reportSpeechStatus(agentId, 'failed', String(err && err.message ? err.message : err));
+                  resolve();
+                });
+            } else {
+              reportSpeechStatus(agentId, 'started');
+            }
+          })();
         });
       } catch (err) {
         console.error('Audio playback error:', err);
@@ -3164,6 +3291,7 @@
 
       if (bargedIn) {
         audioPlaying = false;
+        ttsHoldActive = false;
         console.log('[VOICE] Barge-in complete — yielding to human');
         // Restart mic so human can speak
         if (recognition && micListening) {
@@ -3173,13 +3301,11 @@
       }
 
       // Resume mic after playback if no more queued audio
-      if (audioQueue.length === 0 && recognition && micListening) {
-        // Small delay so the speaker's last sound doesn't get picked up
-        setTimeout(() => {
-          if (micListening) {
-            try { recognition.start(); } catch(e) {}
-          }
-        }, 500);
+      if (audioQueue.length === 0) {
+        audioPlaying = false;
+        ttsHoldActive = false;
+        resumeRecognitionAfterTts();
+        return;
       }
 
       // Process next in queue
@@ -3195,6 +3321,7 @@
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition = null;
     let micListening = false;
+    let lastRecognitionRenderedText = '';
 
     if (SpeechRecognition) {
       recognition = new SpeechRecognition();
@@ -3219,7 +3346,8 @@
         }
 
         // Show live transcription — accumulated finals + current interim
-        chatInput.value = (accumulatedText + interimText).trim();
+        lastRecognitionRenderedText = (accumulatedText + interimText).trim();
+        chatInput.value = lastRecognitionRenderedText;
 
         // Signal server: human is actively speaking — hold ticks
         if (!speechActive) {
@@ -3234,6 +3362,7 @@
           // Order matters: server must know human is done before message triggers tick.
           speechActive = false;
           accumulatedText = ''; // Reset for next utterance
+          lastRecognitionRenderedText = '';
           await Promise.race([
             signalMicState(false, 300),
             new Promise(resolve => setTimeout(resolve, 300)),
@@ -3249,7 +3378,7 @@
         // Chrome stops recognition after ~60s or on silence.
         // If mic is still "on", just restart — do NOT send here.
         // The 3s silence timer handles sending so we don't interrupt mid-sentence.
-        if (micListening && !audioPlaying) {
+        if (micListening && !audioPlaying && !ttsHoldActive) {
           try { recognition.start(); } catch(e) {}
         }
       };
@@ -3275,12 +3404,35 @@
         }).catch(() => {}).finally(() => clearTimeout(timer));
       }
 
+      pauseRecognitionForTts = () => {
+        if (!recognition || !micListening) return;
+        clearTimeout(silenceTimer);
+        silenceTimer = null;
+        speechActive = false;
+        accumulatedText = '';
+        if (chatInput.value.trim() && chatInput.value.trim() === lastRecognitionRenderedText.trim()) {
+          chatInput.value = '';
+        }
+        lastRecognitionRenderedText = '';
+        try { recognition.stop(); } catch(e) {}
+        signalMicState(false);
+      };
+
+      resumeRecognitionAfterTts = () => {
+        if (!recognition || !micListening || audioPlaying || ttsHoldActive) return;
+        setTimeout(() => {
+          if (!micListening || audioPlaying || ttsHoldActive) return;
+          try { recognition.start(); } catch(e) {}
+        }, 500);
+      };
+
       micBtn.addEventListener('click', () => {
         if (micListening) {
           // Turn off mic
           micListening = false;
           speechActive = false;
           accumulatedText = '';
+          lastRecognitionRenderedText = '';
           micBtn.classList.remove('listening');
           clearTimeout(silenceTimer);
           recognition.stop();

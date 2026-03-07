@@ -198,10 +198,6 @@ Feeling: ${mood}. Wonder: ${wonder}. Grief: ${grief}. Beat: ${beat}.`,
     }
 
     this.thoughtCount++;
-    console.log(`[INNER] (${this.thoughtCount}) ${thought.substring(0, 120)}`);
-
-    // Record in chamber so the dashboard can show it
-    this.chamber.recordInnerThought(thought);
 
     // Feed back into the neural tissue via receiveInnerThought():
     // embeds, wires ctx: neurons for extracted topics, labels as [SELF] in recentContext

@@ -80,6 +80,7 @@ export interface GenerateOptions {
 
 export interface GenerateResult {
   text: string;
+  visible_text?: string;
   action: 'speak' | 'journal' | 'silent';
   budgetReceipt?: BudgetReceipt;
   searchReceipt?: SearchReceipt;
@@ -131,6 +132,36 @@ function stripMetaReasoning(text: string): string {
   return cleaned;
 }
 
+function extractVisibleSurface(text: string): { stripped: string; visible_text?: string } {
+  const source = String(text || '').replace(/\r/g, '');
+  const match = source.match(/\[VISIBLE\]([\s\S]*?)\[\/VISIBLE\]/i);
+  if (!match) {
+    return { stripped: source };
+  }
+  return {
+    stripped: `${source.slice(0, match.index)} ${source.slice((match.index || 0) + match[0].length)}`.trim(),
+    visible_text: match[1] ?? '',
+  };
+}
+
+function buildSpeakResult(rawContent: string): GenerateResult {
+  const extracted = extractVisibleSurface(rawContent);
+  const plain = stripMetaReasoning(
+    extracted.stripped
+      .replace(/\[(?:\/)?VISIBLE\]/gi, '')
+      .trim(),
+  );
+  const visible = extracted.visible_text;
+  const result: GenerateResult = {
+    action: 'speak',
+    text: plain || stripMetaReasoning((visible ?? rawContent.replace(/\[(?:\/)?VISIBLE\]/gi, '')).trim()),
+  };
+  if (visible !== undefined) {
+    result.visible_text = visible.replace(/\r/g, '');
+  }
+  return result;
+}
+
 function parseResponse(raw: string): GenerateResult {
   const trimmed = raw.trim();
 
@@ -139,11 +170,11 @@ function parseResponse(raw: string): GenerateResult {
 
   // Check start first (well-formatted responses)
   if (stripped.startsWith('[SPEAK]')) {
-    return { action: 'speak', text: stripMetaReasoning(stripped.replace('[SPEAK]', '').trim()) };
+    return buildSpeakResult(stripped.replace('[SPEAK]', '').trim());
   }
   if (stripped.startsWith('[SPEECH]')) {
     // [SPEECH] is a common alias used by some local models (e.g. gemma)
-    return { action: 'speak', text: stripMetaReasoning(stripped.replace('[SPEECH]', '').trim()) };
+    return buildSpeakResult(stripped.replace('[SPEECH]', '').trim());
   }
   if (stripped.startsWith('[JOURNAL]')) {
     return { action: 'journal', text: stripMetaReasoning(stripped.replace('[JOURNAL]', '').trim()) };
@@ -172,7 +203,7 @@ function parseResponse(raw: string): GenerateResult {
     speakText = speakText.replace(/\s*\[(JOURNAL|SILENT)\][\s\S]*/i, '').trim();
     // Strip surrounding quotes the model sometimes adds
     speakText = speakText.replace(/^[""](.+)[""]$/, '$1').trim();
-    return { action: 'speak', text: stripMetaReasoning(speakText) };
+    return buildSpeakResult(speakText);
   }
 
   // No [SPEAK] — use last [JOURNAL]
@@ -203,7 +234,7 @@ function parseResponse(raw: string): GenerateResult {
   }
 
   // Default: treat as speak (meta-reasoning already stripped above)
-  return { action: 'speak', text: stripped };
+  return buildSpeakResult(stripped);
 }
 
 const DEFAULT_MAX_CONTEXT_TOKENS: Record<string, number> = {
@@ -416,7 +447,7 @@ function sanitizeSegments(segments: PromptSegment[]): PromptSegment[] {
 }
 
 function buildDefaultSegments(options: GenerateOptions): PromptSegment[] {
-  const instruction = 'Based on the conversation, your private reflections, any shared documents, and the memory state, decide what to do this tick. Respond with EXACTLY one of these formats:\n\n[SPEAK] your message to the room\n[JOURNAL] your private reflection\n[SILENT] (say nothing this tick)';
+  const instruction = 'Based on the conversation, your private reflections, any shared documents, and the memory state, decide what to do this tick. Respond with EXACTLY one of these formats:\n\n[SPEAK] your message to the room\n[JOURNAL] your private reflection\n[SILENT] (say nothing this tick)\n\nIf you choose [SPEAK], put the user-visible reply inside [VISIBLE]...[/VISIBLE]. The runtime preserves line breaks, paragraph breaks, spacing, and emphasis inside [VISIBLE] exactly as written. Do not flatten the visible reply into one paragraph. Keep any hidden analysis, tool chatter, or system/meta content out of [VISIBLE].';
   const convoLines = (options.conversationContext || '')
     .split('\n')
     .map(line => line.trim())
@@ -637,10 +668,10 @@ export class OpenAICompatibleBackend implements AgentBackend {
             console.log(`[${this.agentName}] Raw response (emergency retry): "${text.substring(0, 200)}${text.length > 200 ? '...' : ''}"`);
           }
           if (isLocalModel && options.prefill) {
-            const content = stripMetaReasoning(text.trim());
+            const content = text.trim();
             if (options.prefill.includes('[JOURNAL]')) return { action: 'journal', text: content, budgetReceipt: packed.receipt };
             if (options.prefill.includes('[SILENT]')) return { action: 'silent', text: '', budgetReceipt: packed.receipt };
-            return { action: 'speak', text: content, budgetReceipt: packed.receipt };
+            return { ...buildSpeakResult(content), budgetReceipt: packed.receipt };
           }
           const parsed = parseResponse(text);
           return { ...parsed, budgetReceipt: packed.receipt };
@@ -659,10 +690,10 @@ export class OpenAICompatibleBackend implements AgentBackend {
 
     // Prefill path: action is determined by the prefix we sent, not by tag-parsing
     if (isLocalModel && options.prefill) {
-      const content = stripMetaReasoning(text.trim());
+      const content = text.trim();
       if (options.prefill.includes('[JOURNAL]')) return { action: 'journal', text: content, budgetReceipt: packed.receipt };
       if (options.prefill.includes('[SILENT]')) return { action: 'silent', text: '', budgetReceipt: packed.receipt };
-      return { action: 'speak', text: content, budgetReceipt: packed.receipt };
+      return { ...buildSpeakResult(content), budgetReceipt: packed.receipt };
     }
 
     const parsed = parseResponse(text);

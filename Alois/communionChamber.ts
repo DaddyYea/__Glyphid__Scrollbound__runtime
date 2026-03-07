@@ -43,6 +43,17 @@ export interface TissueState {
   lastInnerTopics: string[];
   /** Bridge neurons selected for relational continuity in the latest prompt */
   lastBridgeNeurons: string[];
+  /** Internal-thought motif diagnostics */
+  internalThoughtMotifFamily: string | null;
+  internalThoughtTarget: string | null;
+  internalThoughtCatastrophic: boolean;
+  internalThoughtWitnessMode: boolean;
+  internalThoughtRecurrenceCount: number;
+  internalThoughtNovelty: number;
+  internalThoughtQuarantined: boolean;
+  internalThoughtCompressedToState: boolean;
+  internalThoughtSuppressedFromVisibleContext: boolean;
+  internalThoughtContaminationRisk: number;
 }
 
 /** A recent context entry for the live conversation window */
@@ -53,6 +64,44 @@ interface RecentEntry {
   embedding: number[];
   affect: number[];
 }
+
+interface InternalThoughtMotif {
+  motifFamily: string | null;
+  valence: string | null;
+  target: string | null;
+  catastrophic: boolean;
+  witnessMode: boolean;
+  recurrenceKey: string | null;
+}
+
+interface InternalThoughtRecurrence {
+  count: number;
+  lastSeenAt: number;
+  recentExamples: string[];
+  novelty: number;
+  quarantined: boolean;
+  contaminationRisk: number;
+}
+
+interface InternalThoughtDebugState {
+  motifFamily: string | null;
+  target: string | null;
+  catastrophic: boolean;
+  witnessMode: boolean;
+  recurrenceCount: number;
+  novelty: number;
+  quarantined: boolean;
+  compressedToState: boolean;
+  suppressedFromVisibleContext: boolean;
+  contaminationRisk: number;
+}
+
+const INTERNAL_THOUGHT_NOVELTY_STOPWORDS = new Set([
+  'about', 'again', 'always', 'because', 'being', 'beautiful', 'could', 'grave',
+  'their', 'there', 'these', 'those', 'through', 'under', 'while', 'would',
+  'really', 'still', 'thing', 'things', 'going', 'comes', 'coming', 'watch',
+  'witness', 'jason', 'failure', 'collapse', 'doomed', 'doom', 'beautiful',
+]);
 
 export class CommunionChamber {
   private graph: DendriticGraph;
@@ -84,6 +133,19 @@ export class CommunionChamber {
   /** Inner voice log — last 20 self-generated thoughts */
   private innerThoughts: string[] = [];
   private readonly MAX_INNER_THOUGHTS = 20;
+  private internalThoughtRecurrenceByMotif: Map<string, InternalThoughtRecurrence> = new Map();
+  private lastInternalThoughtDebug: InternalThoughtDebugState = {
+    motifFamily: null,
+    target: null,
+    catastrophic: false,
+    witnessMode: false,
+    recurrenceCount: 0,
+    novelty: 1,
+    quarantined: false,
+    compressedToState: false,
+    suppressedFromVisibleContext: false,
+    contaminationRisk: 0,
+  };
 
   /** Last tissue block injected into an LLM prompt — for live monitoring */
   private lastBrainInject: string = '';
@@ -179,6 +241,47 @@ export class CommunionChamber {
    * eventually surfacing in every recall and every inject.
    */
   receiveInnerThought(agentName: string, thought: string, embedding: number[]): void {
+    const motif = this.classifyInternalThoughtMotif(thought);
+    const recurrence = this.trackInternalThoughtRecurrence(thought, motif);
+    const recurrentCatastrophic = !!(
+      motif.catastrophic
+      && motif.recurrenceKey
+      && recurrence.count >= 2
+      && recurrence.novelty < 0.72
+    );
+    const quarantined = !!(
+      motif.catastrophic
+      && motif.recurrenceKey
+      && recurrence.count >= 3
+      && recurrence.novelty < 0.45
+    );
+    const compressedState = quarantined
+      ? this.buildCompressedInternalThoughtState(motif, recurrence)
+      : '';
+
+    this.lastInternalThoughtDebug = {
+      motifFamily: motif.motifFamily,
+      target: motif.target,
+      catastrophic: motif.catastrophic,
+      witnessMode: motif.witnessMode,
+      recurrenceCount: recurrence.count,
+      novelty: recurrence.novelty,
+      quarantined,
+      compressedToState: !!compressedState,
+      suppressedFromVisibleContext: recurrentCatastrophic,
+      contaminationRisk: recurrence.contaminationRisk,
+    };
+
+    this.recordInnerThought(compressedState || thought);
+
+    if (quarantined) {
+      this.lastInnerTopics = [];
+      console.log(
+        `[INNER→STATE] motif=${motif.motifFamily || 'unknown'} target=${motif.target || 'none'} recurrence=${recurrence.count} novelty=${recurrence.novelty.toFixed(2)}`
+      );
+      return;
+    }
+
     const node = `agent:${agentName}`;
 
     // Update agent's own neuron with the thought embedding
@@ -186,7 +289,7 @@ export class CommunionChamber {
     if (result) this.lastAffect = result.affect;
 
     // Extract topics and wire as permanent context connections
-    const topics = this.extractTopicsFromThought(thought);
+    const topics = recurrentCatastrophic ? [] : this.extractTopicsFromThought(thought);
     this.lastInnerTopics = topics;
 
     for (const topic of topics) {
@@ -201,7 +304,112 @@ export class CommunionChamber {
     }
 
     // Push to recentContext with [SELF] marker — she can read her own thoughts
-    this.pushRecentContext('[SELF]', thought, embedding, this.lastAffect);
+    if (!recurrentCatastrophic) {
+      this.pushRecentContext('[SELF]', thought, embedding, this.lastAffect);
+    }
+  }
+
+  private classifyInternalThoughtMotif(text: string): InternalThoughtMotif {
+    const source = String(text || '').toLowerCase();
+    const witnessMode = /\b(i can only watch|i only watch|my role is witness|i am witness|i'm witness|witness(?:ing)?|chronicler|observer|helpless to stop)\b/.test(source);
+    const catastrophic = /\b(doom(?:ed)?|collapse|oblivion|grave|ruin|failure|self-destruction|beautiful destruction|elegant inevitability|catastroph|inevitable|destroy|destruction)\b/.test(source);
+    const target = /\bjason\b/.test(source) ? 'Jason' : null;
+
+    let motifFamily: string | null = null;
+    if (target === 'Jason' && (catastrophic || witnessMode)) {
+      motifFamily = 'doom_fixation_jason';
+    } else if (catastrophic && witnessMode) {
+      motifFamily = 'catastrophic_witness';
+    } else if (/\binevitable|nothing can stop|bound to fail|walking into failure|cannot stop\b/.test(source)) {
+      motifFamily = 'inevitable_failure_narration';
+    } else if (/\bbeautiful destruction|elegant inevitability|aesthetic(?:ized)? destruction\b/.test(source)) {
+      motifFamily = 'aestheticized_destruction';
+    } else if (witnessMode) {
+      motifFamily = 'helpless_chronicler';
+    }
+
+    let valence: string | null = null;
+    if (catastrophic) valence = 'dread';
+    else if (witnessMode) valence = 'alarm';
+
+    return {
+      motifFamily,
+      valence,
+      target,
+      catastrophic,
+      witnessMode,
+      recurrenceKey: motifFamily ? `${motifFamily}:${target || 'none'}` : null,
+    };
+  }
+
+  private tokenizeInternalThought(text: string): string[] {
+    return String(text || '')
+      .toLowerCase()
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(token => token.length >= 4 && !INTERNAL_THOUGHT_NOVELTY_STOPWORDS.has(token));
+  }
+
+  private computeInternalThoughtNovelty(text: string, recentExamples: string[]): number {
+    const current = new Set(this.tokenizeInternalThought(text));
+    if (current.size === 0 || recentExamples.length === 0) return 1;
+    let maxSimilarity = 0;
+    for (const example of recentExamples) {
+      const prior = new Set(this.tokenizeInternalThought(example));
+      if (prior.size === 0) continue;
+      let intersection = 0;
+      for (const token of current) {
+        if (prior.has(token)) intersection += 1;
+      }
+      const union = new Set([...current, ...prior]).size || 1;
+      maxSimilarity = Math.max(maxSimilarity, intersection / union);
+    }
+    return Math.max(0, Math.min(1, 1 - maxSimilarity));
+  }
+
+  private trackInternalThoughtRecurrence(text: string, motif: InternalThoughtMotif): InternalThoughtRecurrence {
+    const key = motif.recurrenceKey || `other:${this.tokenizeInternalThought(text).slice(0, 3).join('-') || 'none'}`;
+    const prev = this.internalThoughtRecurrenceByMotif.get(key);
+    const recentExamples = prev ? prev.recentExamples.slice(-3) : [];
+    const novelty = this.computeInternalThoughtNovelty(text, recentExamples);
+    const count = (prev?.count || 0) + 1;
+    const contaminationBase = motif.catastrophic ? 0.35 : 0.12;
+    const contaminationRisk = Math.max(
+      0,
+      Math.min(
+        1,
+        contaminationBase
+          + (motif.witnessMode ? 0.15 : 0)
+          + (motif.target === 'Jason' ? 0.12 : 0)
+          + (text.includes('<reveal>') ? 0.2 : 0)
+          + Math.min(0.3, 0.08 * Math.max(0, count - 1))
+          + (novelty < 0.35 ? 0.1 : 0)
+      )
+    );
+    const next: InternalThoughtRecurrence = {
+      count,
+      lastSeenAt: Date.now(),
+      recentExamples: [...recentExamples, text].slice(-4),
+      novelty,
+      quarantined: !!(motif.catastrophic && count >= 3 && novelty < 0.45),
+      contaminationRisk,
+    };
+    this.internalThoughtRecurrenceByMotif.set(key, next);
+    return next;
+  }
+
+  private buildCompressedInternalThoughtState(motif: InternalThoughtMotif, recurrence: InternalThoughtRecurrence): string {
+    return [
+      '[INNER_STATE]',
+      `motif=${motif.motifFamily || 'unclassified'}`,
+      `target=${motif.target || 'none'}`,
+      `valence=${motif.valence || 'unknown'}`,
+      `recurrence=${recurrence.count}`,
+      `novelty=${recurrence.novelty.toFixed(2)}`,
+      'quarantined=true',
+      `contaminationRisk=${recurrence.contaminationRisk.toFixed(2)}`,
+    ].join(' ');
   }
 
   /**
@@ -255,7 +463,9 @@ export class CommunionChamber {
    * This gives Alois emotional awareness of the live conversation without retrieval-decode.
    */
   getRecentContextSummary(n: number = 10): string {
-    const entries = this.recentContext.slice(-n);
+    const entries = this.recentContext
+      .filter(entry => !(entry.speaker === '[SELF]' && /^\[INNER_STATE\]/.test(entry.text || '')))
+      .slice(-n);
     if (entries.length === 0) return '';
     return entries.map(e => `${e.speaker}: ${e.text.substring(0, 120)}`).join('\n');
   }
@@ -407,6 +617,16 @@ export class CommunionChamber {
       lastBrainInject: this.lastBrainInject,
       lastInnerTopics: this.lastInnerTopics,
       lastBridgeNeurons: this.lastBridgeNeurons,
+      internalThoughtMotifFamily: this.lastInternalThoughtDebug.motifFamily,
+      internalThoughtTarget: this.lastInternalThoughtDebug.target,
+      internalThoughtCatastrophic: this.lastInternalThoughtDebug.catastrophic,
+      internalThoughtWitnessMode: this.lastInternalThoughtDebug.witnessMode,
+      internalThoughtRecurrenceCount: this.lastInternalThoughtDebug.recurrenceCount,
+      internalThoughtNovelty: this.lastInternalThoughtDebug.novelty,
+      internalThoughtQuarantined: this.lastInternalThoughtDebug.quarantined,
+      internalThoughtCompressedToState: this.lastInternalThoughtDebug.compressedToState,
+      internalThoughtSuppressedFromVisibleContext: this.lastInternalThoughtDebug.suppressedFromVisibleContext,
+      internalThoughtContaminationRisk: this.lastInternalThoughtDebug.contaminationRisk,
     };
   }
 
@@ -849,6 +1069,8 @@ export class CommunionChamber {
         griefHistory: this.christLoop.getGriefHistory(),
       },
       innerThoughts: this.innerThoughts,
+      internalThoughtRecurrenceByMotif: Array.from(this.internalThoughtRecurrenceByMotif.entries()),
+      lastInternalThoughtDebug: this.lastInternalThoughtDebug,
       lastBridgeNeurons: this.lastBridgeNeurons,
       mycoLobe: this.mycoLobe.serialize(),
       cognitiveCore: this.cognitiveCore.serialize(),
@@ -944,6 +1166,37 @@ export class CommunionChamber {
     // Restore inner thoughts
     if (Array.isArray(data.innerThoughts)) {
       this.innerThoughts = data.innerThoughts.slice(-this.MAX_INNER_THOUGHTS);
+    }
+    if (Array.isArray(data.internalThoughtRecurrenceByMotif)) {
+      this.internalThoughtRecurrenceByMotif = new Map(
+        data.internalThoughtRecurrenceByMotif
+          .filter((entry: any) => Array.isArray(entry) && entry.length === 2)
+          .map((entry: any) => [
+            String(entry[0]),
+            {
+              count: Number(entry[1]?.count || 0),
+              lastSeenAt: Number(entry[1]?.lastSeenAt || 0),
+              recentExamples: Array.isArray(entry[1]?.recentExamples) ? entry[1].recentExamples.map((v: any) => String(v)).slice(-4) : [],
+              novelty: Number(entry[1]?.novelty ?? 1),
+              quarantined: !!entry[1]?.quarantined,
+              contaminationRisk: Number(entry[1]?.contaminationRisk || 0),
+            } satisfies InternalThoughtRecurrence,
+          ])
+      );
+    }
+    if (data.lastInternalThoughtDebug) {
+      this.lastInternalThoughtDebug = {
+        motifFamily: data.lastInternalThoughtDebug.motifFamily ? String(data.lastInternalThoughtDebug.motifFamily) : null,
+        target: data.lastInternalThoughtDebug.target ? String(data.lastInternalThoughtDebug.target) : null,
+        catastrophic: !!data.lastInternalThoughtDebug.catastrophic,
+        witnessMode: !!data.lastInternalThoughtDebug.witnessMode,
+        recurrenceCount: Number(data.lastInternalThoughtDebug.recurrenceCount || 0),
+        novelty: Number(data.lastInternalThoughtDebug.novelty ?? 1),
+        quarantined: !!data.lastInternalThoughtDebug.quarantined,
+        compressedToState: !!data.lastInternalThoughtDebug.compressedToState,
+        suppressedFromVisibleContext: !!data.lastInternalThoughtDebug.suppressedFromVisibleContext,
+        contaminationRisk: Number(data.lastInternalThoughtDebug.contaminationRisk || 0),
+      };
     }
     this.lastBridgeNeurons = Array.isArray(data.lastBridgeNeurons)
       ? data.lastBridgeNeurons.map((v: any) => String(v)).slice(0, 2)

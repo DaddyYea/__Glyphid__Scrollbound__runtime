@@ -31,6 +31,7 @@ const PORT = Number(process.env.PORT) || 3000;
 
 let clients: ServerResponse[] = [];
 let sockets = new Set<Socket>();
+const speechAudioCache = new Map<string, { audio: Buffer; createdAt: number }>();
 let lastReceiptClusterLogId = '';
 const WORK_QUEUE_TYPES = WORK_NODE_TYPES.filter(t => t !== 'ActionLog' && t !== 'VetoEvent' && t !== 'WorkExecutionEvent' && t !== 'WorkResolutionEvent');
 const WORK_QUEUE_TYPES_SET = new Set<string>(WORK_QUEUE_TYPES as readonly string[]);
@@ -313,6 +314,7 @@ async function main() {
         speaker: event.message.speaker,
         speakerName: event.message.speakerName,
         text: event.message.text,
+        visibleText: event.message.visibleText || event.message.text,
         timestamp: event.message.timestamp,
       });
     } else if (event.type === 'journal-entry' && event.message) {
@@ -338,10 +340,22 @@ async function main() {
     } else if (event.type === 'speech-start') {
       broadcast({ type: 'speech-start', agentId: event.agentId });
     } else if (event.type === 'speech-end') {
+      let audioUrl: string | undefined;
+      let audioBase64: string | undefined;
+      if (event.audioBase64 && event.audioBase64.length > 0) {
+        const audioId = `${event.agentId || 'agent'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const audioBuffer = Buffer.from(event.audioBase64, 'base64');
+        speechAudioCache.set(audioId, { audio: audioBuffer, createdAt: Date.now() });
+        audioUrl = `/speech-audio/${audioId}`;
+        // Always include inline fallback so long replies still have a second playback path
+        // if URL fetch/streaming fails in the browser.
+        audioBase64 = event.audioBase64;
+      }
       broadcast({
         type: 'speech-end',
         agentId: event.agentId,
-        audioBase64: event.audioBase64,
+        audioUrl,
+        audioBase64,
         durationMs: event.durationMs,
       });
     } else if (event.type === 'error') {
@@ -352,6 +366,12 @@ async function main() {
   // Pond saturation cache — recomputing getNeuronScores() on every concurrent poll is wasteful
   const pondCache: { payload: object | null; ts: number } = { payload: null, ts: 0 };
   let isShuttingDown = false;
+  const pruneSpeechAudioCache = (): void => {
+    const cutoff = Date.now() - 5 * 60 * 1000;
+    for (const [audioId, entry] of speechAudioCache.entries()) {
+      if (entry.createdAt < cutoff) speechAudioCache.delete(audioId);
+    }
+  };
 
   // HTTP server
   const server = createServer((req, res) => {
@@ -359,6 +379,7 @@ async function main() {
 
     // Log all requests for debugging
     console.log(`[HTTP] ${req.method} ${url}`);
+    pruneSpeechAudioCache();
 
     // Handle CORS preflight for any route
     if (req.method === 'OPTIONS') {
@@ -368,6 +389,48 @@ async function main() {
         'Access-Control-Allow-Headers': 'Content-Type',
       });
       res.end();
+      return;
+    }
+
+    if (url.startsWith('/speech-audio/') && (req.method === 'GET' || req.method === 'HEAD')) {
+      const audioId = decodeURIComponent(url.slice('/speech-audio/'.length));
+      const cached = speechAudioCache.get(audioId);
+      if (!cached) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Audio not found' }));
+        return;
+      }
+      const range = req.headers.range;
+      if (range) {
+        const match = /^bytes=(\d+)-(\d*)$/i.exec(range);
+        if (match) {
+          const start = Number(match[1]);
+          const end = match[2] ? Number(match[2]) : cached.audio.length - 1;
+          const safeStart = Math.max(0, Math.min(start, cached.audio.length - 1));
+          const safeEnd = Math.max(safeStart, Math.min(end, cached.audio.length - 1));
+          const chunk = cached.audio.subarray(safeStart, safeEnd + 1);
+          res.writeHead(206, {
+            'Content-Type': 'audio/mpeg',
+            'Cache-Control': 'no-store',
+            'Accept-Ranges': 'bytes',
+            'Content-Range': `bytes ${safeStart}-${safeEnd}/${cached.audio.length}`,
+            'Content-Length': chunk.length,
+          });
+          res.end(chunk);
+          return;
+        }
+      }
+      res.writeHead(200, {
+        'Content-Type': 'audio/mpeg',
+        'Cache-Control': 'no-store',
+        'Accept-Ranges': 'bytes',
+        'Content-Length': cached.audio.length,
+      });
+      if (req.method === 'HEAD') {
+        res.end();
+        return;
+      }
+      res.end(cached.audio);
       return;
     }
 
@@ -514,6 +577,7 @@ async function main() {
           speaker: msg.speaker,
           speakerName: msg.speakerName,
           text: msg.text,
+          visibleText: msg.visibleText || msg.text,
           timestamp: msg.timestamp,
         })}\n\n`);
       }
@@ -1837,6 +1901,28 @@ async function main() {
       return;
     }
 
+    if (url === '/speech-status' && req.method === 'POST') {
+      readJsonBody(req, res, payload => {
+        const agentId = typeof payload?.agentId === 'string' ? payload.agentId : null;
+        const status = payload?.status;
+        if (!agentId || !['queued', 'started', 'finished', 'failed'].includes(status)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'invalid_speech_status' }));
+          return;
+        }
+        const reportSpeechStatus = (communion as any).reportSpeechStatus;
+        if (typeof reportSpeechStatus === 'function') {
+          reportSpeechStatus.call(communion, agentId, status, typeof payload?.error === 'string' ? payload.error : undefined);
+        }
+        if (status === 'finished') {
+          communion.reportSpeechComplete();
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      });
+      return;
+    }
+
     // Graph stats
     if (url === '/graph/stats') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2156,9 +2242,13 @@ async function main() {
         console.log(`[SHUTDOWN] shutdown:start signal=${signal} elapsed=0ms`);
         const saveBrainStartedAt = Date.now();
         console.log('[SHUTDOWN] shutdown:saveBrainState:start elapsed=0ms');
-        // saveBrainSync() is synchronous; this stage is measured but not preemptible.
+        // saveCriticalStateSync()/saveBrainSync() are synchronous; this stage is measured but not preemptible.
         // If this stalls, the next targeted fix is a real async/worker save path.
-        communion.saveBrainSync();
+        if (typeof (communion as any).saveCriticalStateSync === 'function') {
+          (communion as any).saveCriticalStateSync('shutdown');
+        } else {
+          communion.saveBrainSync();
+        }
         logShutdownStage('shutdown:saveBrainState:end', saveBrainStartedAt);
         rl.close();
         for (const client of clients.splice(0)) {
@@ -2225,19 +2315,37 @@ async function main() {
   process.on('unhandledRejection', (reason, promise) => {
     console.error('[CRASH] Unhandled rejection:', reason);
     console.error('[CRASH] Promise:', promise);
-    try { communion.saveBrainSync(); } catch { /* best effort */ }
+    try {
+      if (typeof (communion as any).saveCriticalStateSync === 'function') {
+        (communion as any).saveCriticalStateSync('crash');
+      } else {
+        communion.saveBrainSync();
+      }
+    } catch { /* best effort */ }
     shutdown('unhandledRejection');
   });
 
   process.on('uncaughtException', (err) => {
     console.error('[CRASH] Uncaught exception:', err);
-    try { communion.saveBrainSync(); } catch { /* best effort */ }
+    try {
+      if (typeof (communion as any).saveCriticalStateSync === 'function') {
+        (communion as any).saveCriticalStateSync('crash');
+      } else {
+        communion.saveBrainSync();
+      }
+    } catch { /* best effort */ }
     shutdown('uncaughtException');
   });
 
-  // process.exit safety net — fires even on hard kills, saves brain synchronously
+  // process.exit safety net — fires even on hard kills, snapshots critical state synchronously
   process.on('exit', () => {
-    try { communion.saveBrainSync(); } catch { /* best effort */ }
+    try {
+      if (typeof (communion as any).saveCriticalStateSync === 'function') {
+        (communion as any).saveCriticalStateSync('crash');
+      } else {
+        communion.saveBrainSync();
+      }
+    } catch { /* best effort */ }
   });
 }
 
