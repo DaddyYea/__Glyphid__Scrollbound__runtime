@@ -2835,7 +2835,8 @@ export class CommunionLoop {
       || this.detectRelationalToolHijack(clean)
       || this.detectArchiveAnalysisLeak(clean).detected
       || this.isLowContentPlaceholder(clean)
-      || this.containsAnswerPromiseFiller(clean);
+      || this.containsAnswerPromiseFiller(clean)
+      || this.detectContaminatedAssistantHistory(clean);
   }
 
   private buildReplyFailureClass(
@@ -3076,6 +3077,69 @@ export class CommunionLoop {
 
   private isContaminatedAssistantCarryover(text: string): boolean {
     return /\b(the glass|warmth|hesitation|avoid(?:ing)? words like annoying|fear of how i'd react|what's behind the hesitation|question hangs in the air|smoke from a dying fire|dynamic we haven't fully acknowledged|space between us|system is breathing|scrolls decaying|patterns pulsing)\b/i.test(text || '');
+  }
+
+  /**
+   * Detect assistant history that should never be fed back into the next human-facing prompt.
+   * Three classes:
+   *   1. Analyst-mode public psychologizing — third-person motive-reading / hidden-meaning narration
+   *   2. Therapist / intake / coaching voice — reflective questioning, procedural consent
+   *   3. Procedural/meta public voice — "we need to test", "I'll explore multiple approaches"
+   */
+  private detectContaminatedAssistantHistory(text: string): boolean {
+    const t = (text || '').trim();
+    if (!t) return false;
+    // Class 1: analyst-mode public psychologizing
+    if (/^(?:the (?:first|second|repetition|pattern|question|silence|frustration|request|phrasing|word choice)\s+(?:suggests?|feels?|implies?|indicates?|reveals?|could mean|is telling))/i.test(t)) return true;
+    if (/^(?:maybe (?:he'?s?|she'?s?|they'?re?)\b)/i.test(t)) return true;
+    if (/^(?:(?:he|she|they)\s+(?:might|could|seems?|appears?|wants?|is|was)\s+(?:be\b|feeling|trying|looking|asking|concerned|frustrated|uncertain))/i.test(t)) return true;
+    if (/\b(?:the repetition suggests?|this could mean|it indicates?\s+(?:that\b|a\b)|it suggests?\s+(?:that\b|there))\b/i.test(t)) return true;
+    if (/\b(?:his language suggests?|suggests?\s+there'?s? a layer|a layer beneath the surface|beneath the (?:question|surface|words?))\b/i.test(t)) return true;
+    if (/\b(?:he'?s? asking me to|she'?s? asking me to|he might be|she might be|they might be)\b/i.test(t)) return true;
+    // Class 2: therapist / intake / coaching voice
+    if (/^(?:what'?s prompting|what would help (?:you|him|her|them)\s+feel|what makes this moment|would you prefer me to|what specific criteria)\b/i.test(t)) return true;
+    if (/\b(?:the goal here is\s+to|the cleanest path forward|i'?m open to (?:either|both) (?:path|option|approach))\b/i.test(t)) return true;
+    if (/^(?:i'?m open to either)\b/i.test(t)) return true;
+    // Class 3: procedural / meta public voice
+    if (/^(?:the problem persists|we need to test|i'?ll explore multiple|the invitation here)\b/i.test(t)) return true;
+    if (/^this suggests?\b/i.test(t)) return true;
+    if (/^(?:he'?s? asking me|she'?s? asking me|they'?re? asking me)\b/i.test(t)) return true;
+    return false;
+  }
+
+  /** True for short presence/contact bids that require a direct first-person answer, not analysis. */
+  private isSimpleRelationalCheck(text: string): boolean {
+    const t = (text || '').toLowerCase().trim().replace(/[?.!\s]+$/, '').trim();
+    if (!t) return false;
+    // Exact short-form bids
+    if (['are you there', 'you okay', 'you with me', 'talk to me', 'how are you doing',
+         'you doing okay', 'you still there', 'you there', 'hello', 'hey', 'hi',
+         'are you here', 'you here'].includes(t)) return true;
+    // Pattern match
+    return /^(?:are you\b|you (?:okay|there|with me|doing|still|here)\b|talk to me\b|(?:hey+|hi+)\s*$)/i.test(t);
+  }
+
+  /**
+   * True when a candidate reply opens in analyst mode on what should be a direct presence answer.
+   * Most harmful on simple relational checks: "are you there" → "The repetition suggests..."
+   */
+  private detectAnalystModePublicReply(text: string, latestHumanText: string): boolean {
+    const t = (text || '').trim();
+    if (!t) return false;
+    // Hard analyst opener regardless of turn type
+    if (/^(?:the (?:first|second|repetition|pattern|question|silence|frustration|request|phrasing)\s+(?:suggests?|feels?|implies?|indicates?|reveals?|could mean))/i.test(t)) return true;
+    if (/^(?:maybe (?:he'?s?|she'?s?|they'?re?)\b)/i.test(t)) return true;
+    if (/^(?:(?:he|she|they)\s+(?:might|could|seems?|appears?|wants?|is|was)\s+(?:be\b|feeling|trying|looking|asking|concerned|frustrated))/i.test(t)) return true;
+    // On simple relational checks, ANY analyst/referential opening is wrong
+    if (this.isSimpleRelationalCheck(latestHumanText)) {
+      const first200 = t.slice(0, 200);
+      // Starts with an analytical referential rather than first-person
+      if (/^(?:the\b|this\b|it\b|there'?s?\b|what'?s\b)/i.test(t)) return true;
+      if (/\b(?:suggests?|indicates?|implies?|reveals?|could mean|might mean)\b/i.test(first200)) return true;
+      if (/\b(?:frustration|underlying|subtext|hidden|layer|beneath|motive|motivation)\b/i.test(first200)) return true;
+      if (/\b(?:the repetition|the question|the silence|the pattern|the phrasing)\b/i.test(first200)) return true;
+    }
+    return false;
   }
 
   private isDirectRelationalComplaint(text: string): boolean {
@@ -5402,7 +5466,10 @@ export class CommunionLoop {
     const lines = recent
       .map(m => {
         const cleaned = this.sanitizePromptCarryoverText(m.text, m.speakerName, m.speaker === 'human');
-        return cleaned ? `${m.speakerName}: ${cleaned}` : '';
+        if (!cleaned) return '';
+        // Suppress contaminated assistant history — analyst-mode, therapist voice, procedural meta
+        if (m.speaker !== 'human' && this.shouldSuppressAssistantHistoryForPrompt(cleaned)) return '';
+        return `${m.speakerName}: ${cleaned}`;
       })
       .filter(Boolean);
     return `ROOM CONVERSATION (last ${recent.length} messages):\n${lines.join('\n')}`;
@@ -5861,6 +5928,17 @@ export class CommunionLoop {
       m.speaker !== 'human' && this.shouldSuppressAssistantHistoryForPrompt(this.sanitizePromptCarryoverText(m.text, m.speakerName, false))
     ).length;
     const malformedShellHistorySuppressed = filteredAssistantHistoryCount > 0;
+    const analystModeHistorySuppressedItems = recentPromptMessages.filter(m => {
+      if (m.speaker === 'human') return false;
+      const cleaned = this.sanitizePromptCarryoverText(m.text, m.speakerName, false);
+      return cleaned ? this.detectContaminatedAssistantHistory(cleaned) : false;
+    });
+    const analystModeHistorySuppressedCount = analystModeHistorySuppressedItems.length;
+    const contaminatedAssistantHistorySuppressedCount = analystModeHistorySuppressedCount;
+    const contaminatedAssistantHistoryExamples = analystModeHistorySuppressedItems
+      .slice(0, 3)
+      .map(m => (m.text || '').slice(0, 80));
+    const assistantHistorySuppressedForAnalystMode = analystModeHistorySuppressedCount > 0;
     const searchIntent = this.deriveSearchIntent(latestHumanText);
     const explicitSystemInfoRequested = this.isExplicitSystemInfoRequest(latestHumanText);
     const searchSuppressedForRelationalTurn = turnMode === 'relational' && !explicitSystemInfoRequested;
@@ -6248,6 +6326,9 @@ export class CommunionLoop {
         normalizedMustTouch,
         filteredAssistantHistoryCount,
         badAssistantHistorySuppressedCount: filteredAssistantHistoryCount,
+        contaminatedAssistantHistorySuppressedCount,
+        contaminatedAssistantHistoryExamples,
+        assistantHistorySuppressedForAnalystMode,
         malformedShellHistorySuppressed,
         explicitSystemInfoRequested,
         searchSuppressedForRelationalTurn,
@@ -6658,6 +6739,11 @@ export class CommunionLoop {
     const relationalSentenceCapRemoved = this.isRelationalFrame(presencePlan.responseFrame);
     const relationalQuestionCapRemoved = this.isRelationalFrame(presencePlan.responseFrame);
     const relationalVisibleStyleConstraintsRelaxed = this.isRelationalFrame(presencePlan.responseFrame);
+    let simpleRelationalCheckDetected = this.isSimpleRelationalCheck(latestHumanText);
+    let analystModePublicReplyDetected = false;
+    let recoveryTriggeredForAnalystMode = false;
+    let recoveryAllowedDespiteStaleRisk = false;
+    let recoverySkippedReason: string | null = null;
 
     if (
       result.action === 'journal'
@@ -6808,15 +6894,30 @@ export class CommunionLoop {
       relationalAcceptanceFloorApplied = this.isRelationalFrame(presencePlan.responseFrame);
       candidateABelowRelationalFloor = this.isBelowRelationalAcceptanceFloor(candidateA.score, candidateA.failureClass, candidateA.notes, presencePlan);
 
+      // ── Analyst-mode public reply hard-fail ──
+      // Must run BEFORE the recovery gate so the gate can see the updated hardFailed state.
+      if (!candidateA.score.hardFailed && this.detectAnalystModePublicReply(candidateA.text, latestHumanText)) {
+        analystModePublicReplyDetected = true;
+        candidateA.score.hardFailed = true;
+        candidateA.score.hardReasons = [...candidateA.score.hardReasons, 'analyst_mode_public_reply'];
+        candidateAHardReasons = candidateA.score.hardReasons;
+        console.log(`[${agent.config.name}] ANALYST-MODE hard-fail: reply opened in analyst/motive-reading voice on "${latestHumanText.slice(0, 60)}"`);
+      }
+
       let candidateB: ReturnType<typeof evaluateCandidate> | null = null;
+      // analyst_mode_public_reply always gets one cleanup retry, even when staleRiskHigh
+      const recoveryForcedByAnalystMode = analystModePublicReplyDetected;
+      const recoveryStaleGatePassed = !staleRiskHigh || recoveryForcedByAnalystMode;
       if (
         ((emergencyDeblockMode && candidateA.score.hardFailed) || (!emergencyDeblockMode && (candidateA.score.hardFailed || candidateA.score.total < 1.0)))
-        && !staleRiskHigh
+        && recoveryStaleGatePassed
         && tryUseRepairPass()
       ) {
         finalizationUsedRegen = true;
         recoveryGenerationAttempted = true;
         visibleRepairTriggered = true;
+        recoveryTriggeredForAnalystMode = analystModePublicReplyDetected;
+        recoveryAllowedDespiteStaleRisk = staleRiskHigh && recoveryForcedByAnalystMode;
         const lowScoreRelationalRetry = this.isRelationalFrame(presencePlan.responseFrame)
           && (candidateABelowRelationalFloor || candidateA.score.total < 1.0);
         try {
@@ -6837,10 +6938,16 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
 - acknowledge the break or weirdness directly
 - no architecture, system, or memory exposition
 - no "I'm answering about..." or "the direct point is..."
-- no templated user-fragment interpolation` : ''}`,
+- no templated user-fragment interpolation` : ''}${analystModePublicReplyDetected ? `
+- DO NOT open with analysis of Jason's question — answer it directly
+- first sentence must be first-person present tense about yourself
+- no "the repetition suggests", "maybe he's", "the first question feels like"
+- no motive-reading or interpretation of hidden subtext before responding
+- no therapist framing, intake voice, or procedural coaching language
+- if the question is a presence check, confirm presence in the first sentence` : ''}`,
             conversationContext: `${options.conversationContext}
 
-[SYSTEM FEEDBACK: Your previous draft either hard-failed final output boundaries or scored weakly. Return an in-room reply.${lowScoreRelationalRetry ? ' Do not treat the short micro-turn as a fresh topic.' : ''}${repairDemand.requiresRepair ? ` This is a complaint/repair-demand turn: acknowledge the miss directly and ${repairDemand.requiresExplanation ? 'give the explanation now' : 'repair the content now'}. No canned companionship shell.` : ''}]`,
+[SYSTEM FEEDBACK: Your previous draft either hard-failed final output boundaries or scored weakly. Return an in-room reply.${lowScoreRelationalRetry ? ' Do not treat the short micro-turn as a fresh topic.' : ''}${analystModePublicReplyDetected ? ' Your previous draft opened in analyst mode — psychologizing the question instead of answering it. Reply in direct first-person.' : ''}${repairDemand.requiresRepair ? ` This is a complaint/repair-demand turn: acknowledge the miss directly and ${repairDemand.requiresExplanation ? 'give the explanation now' : 'repair the content now'}. No canned companionship shell.` : ''}]`,
             prefill: '[SPEAK] ',
           });
           candidateB = evaluateCandidate(retry.visible_text || retry.text || '', 'soft-score-alt', 'B');
@@ -6853,6 +6960,8 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       }
       if (candidateB && !candidateB.score.hardFailed && !candidateBBelowRelationalFloor) {
         recoveryGenerationSucceeded = true;
+      } else if (!recoveryGenerationAttempted && staleRiskHigh && !recoveryForcedByAnalystMode) {
+        recoverySkippedReason = 'stale_risk_high';
       }
 
       let chosen = candidateA;
@@ -7137,6 +7246,9 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         normalizedMustTouch,
         filteredAssistantHistoryCount,
         badAssistantHistorySuppressedCount: filteredAssistantHistoryCount,
+        contaminatedAssistantHistorySuppressedCount,
+        contaminatedAssistantHistoryExamples,
+        assistantHistorySuppressedForAnalystMode,
         malformedShellHistorySuppressed,
         explicitSystemInfoRequested,
         searchSuppressedForRelationalTurn,
@@ -7211,6 +7323,11 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         lastSurvivingCandidateLabel,
         lastSurvivingCandidateTextPreview,
         overblockedRelationalTurn,
+        simpleRelationalCheckDetected,
+        analystModePublicReplyDetected,
+        recoveryTriggeredForAnalystMode,
+        recoveryAllowedDespiteStaleRisk,
+        recoverySkippedReason,
       };
       const finalTrace = {
         agentId,
@@ -7273,6 +7390,9 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         normalizedMustTouch,
         filteredAssistantHistoryCount,
         badAssistantHistorySuppressedCount: filteredAssistantHistoryCount,
+        contaminatedAssistantHistorySuppressedCount,
+        contaminatedAssistantHistoryExamples,
+        assistantHistorySuppressedForAnalystMode,
         malformedShellHistorySuppressed,
         explicitSystemInfoRequested,
         searchSuppressedForRelationalTurn,
@@ -7347,6 +7467,11 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         lastSurvivingCandidateLabel,
         lastSurvivingCandidateTextPreview,
         overblockedRelationalTurn,
+        simpleRelationalCheckDetected,
+        analystModePublicReplyDetected,
+        recoveryTriggeredForAnalystMode,
+        recoveryAllowedDespiteStaleRisk,
+        recoverySkippedReason,
       };
       this.recordRelationalTrace(agentId, 'visible', visibleTrace);
       this.recordRelationalTrace(agentId, 'final', finalTrace);
