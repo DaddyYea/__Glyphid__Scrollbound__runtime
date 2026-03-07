@@ -5947,6 +5947,9 @@ export class CommunionLoop {
       .slice(0, 3)
       .map(m => (m.text || '').slice(0, 80));
     const assistantHistorySuppressedForAnalystMode = analystModeHistorySuppressedCount > 0;
+    // Capture and clear the one-shot reset flag here — before any planTrace/recordRelationalTrace call
+    const liveCarryoverResetThisTurn = this.liveCarryoverResetApplied === true;
+    if (liveCarryoverResetThisTurn) this.liveCarryoverResetApplied = false;
     const searchIntent = this.deriveSearchIntent(latestHumanText);
     const explicitSystemInfoRequested = this.isExplicitSystemInfoRequest(latestHumanText);
     const searchSuppressedForRelationalTurn = turnMode === 'relational' && !explicitSystemInfoRequested;
@@ -6755,10 +6758,6 @@ export class CommunionLoop {
     let recoveryTriggeredForAnalystMode = false;
     let recoveryAllowedDespiteStaleRisk = false;
     let recoverySkippedReason: string | null = null;
-    // Capture and clear the one-shot reset flag so it appears on exactly one plan-trace write
-    const liveCarryoverResetThisTurn = this.liveCarryoverResetApplied;
-    if (liveCarryoverResetThisTurn) this.liveCarryoverResetApplied = false;
-
     if (
       result.action === 'journal'
       && responseText
