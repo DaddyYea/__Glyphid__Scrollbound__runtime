@@ -263,6 +263,8 @@ interface RelationalTraceDebug {
   stale?: Record<string, unknown>;
   visible?: Record<string, unknown>;
   final?: Record<string, unknown>;
+  /** Terminal delivery state — only set for human-facing (speak) turns */
+  delivery?: Record<string, unknown>;
 }
 
 interface PresenceState {
@@ -4830,6 +4832,7 @@ export class CommunionLoop {
       stale: current?.stale,
       visible: current?.visible,
       final: current?.final,
+      delivery: current?.delivery,
       [stage]: payload,
     });
   }
@@ -7396,6 +7399,7 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       }
 
       this.emit({ type: 'room-message', message: msg, agentId });
+      const uiTextRendered = true; // message is in state.messages and broadcast to clients
       this.saveCriticalStateSync('message');
       console.log(`[${agent.config.name}] SPEAK: ${responseText}`);
 
@@ -7407,6 +7411,47 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       await this.synthesizeAndEmit(agentId, agent.config, responseText, {
         visibleTextLength: typeof result.visible_text === 'string' ? result.visible_text.length : null,
       });
+
+      // ── Delivery trace — terminal state for this human-facing turn ──
+      {
+        const ttsSnap = this.getRelationalTrace(agentId)?.tts || {};
+        const ttsEnabled = !!(this.voiceConfigs.get(agentId)?.enabled);
+        const ttsQueued = !!ttsSnap.playbackQueued;
+        const ttsChunkFailed = ttsSnap.ttsChunkFailureIndex !== null && ttsSnap.ttsChunkFailureIndex !== undefined;
+        // Delivered if UI rendered (synchronous) — audio playbackStarted updates the tts trace later
+        const deliveredToUser = uiTextRendered;
+        const deliveryChannel = uiTextRendered
+          ? (ttsQueued ? 'ui+tts_queued' : 'ui_only')
+          : (ttsQueued ? 'tts_queued_only' : 'none');
+        const deliveryTrace: Record<string, unknown> = {
+          // 6 delivery stages
+          candidateSelected: true,
+          finalTextPrepared: true,
+          uiTextRendered,
+          ttsQueued,
+          playbackStarted: false, // async — upgraded by updatePlaybackStatus when client reports
+          deliveredToUser,
+          // channel summary
+          deliveryChannel,
+          // TTS details
+          ttsEnabled,
+          ttsChunkFailed,
+          ttsChunkFailureIndex: ttsSnap.ttsChunkFailureIndex ?? null,
+          ttsChunkFailureReason: ttsSnap.ttsChunkFailureReason ?? null,
+          // emittedBecauseNonPoison: suppress if not actually delivered
+          emittedBecauseNonPoison: deliveredToUser ? emittedBecauseNonPoison : false,
+          emittedBecauseNonPoisonSuppressedByDeliveryGate: !deliveredToUser && emittedBecauseNonPoison,
+        };
+        if (!deliveredToUser) {
+          deliveryTrace.blockedAt = 'delivery';
+          if (!uiTextRendered && ttsQueued) {
+            deliveryTrace.blockReason = 'queued_never_started';
+          } else {
+            deliveryTrace.blockReason = 'nothing_rendered_or_spoken';
+          }
+        }
+        this.recordRelationalTrace(agentId, 'delivery', deliveryTrace);
+      }
 
       // ── Rhythm: post-speech decay ──
       const rhythm = this.rhythm.get(agentId);
