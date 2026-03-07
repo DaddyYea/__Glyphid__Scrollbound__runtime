@@ -30,3 +30,6 @@ llama.cpp/
 
 # Large exports
 *.ndjson
+
+# Training output — LoRA checkpoints are too large for GitHub
+training/output/
