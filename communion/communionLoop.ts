@@ -399,6 +399,22 @@ interface FinalizedReplyResult {
   postRecoveryPoisonCheckRan: boolean;
   blockedAfterRecovery: boolean;
   blockedBecauseUnstrippablePoison: boolean;
+  // Visible/internal boundary spec trace fields
+  visibleBoundaryChecked: boolean;
+  mixedLayerDetected: boolean;
+  boundaryMarkerDetected: boolean;
+  boundaryMarkerKind: string | null;
+  visiblePrefixSalvageAttempted: boolean;
+  visiblePrefixSalvageSucceeded: boolean;
+  visiblePrefixCutReason: string | null;
+  visiblePrefixOriginalLength: number;
+  visiblePrefixKeptLength: number;
+  hiddenTailRemoved: boolean;
+  blockedBecauseMixedLayer: boolean;
+  blockedBecauseInternalMarker: boolean;
+  blockedBecauseAnalystLeakage: boolean;
+  emittedSalvagedVisiblePrefix: boolean;
+  internalContentSuppressedFromVisibleLane: boolean;
 }
 
 interface SoftInfluenceSnapshot {
@@ -496,6 +512,21 @@ interface CandidateDeathRecord {
   postRecoveryPoisonCheckRan: boolean;
   blockedAfterRecovery: boolean;
   blockedBecauseUnstrippablePoison: boolean;
+  visibleBoundaryChecked: boolean;
+  mixedLayerDetected: boolean;
+  boundaryMarkerDetected: boolean;
+  boundaryMarkerKind: string | null;
+  visiblePrefixSalvageAttempted: boolean;
+  visiblePrefixSalvageSucceeded: boolean;
+  visiblePrefixCutReason: string | null;
+  visiblePrefixOriginalLength: number;
+  visiblePrefixKeptLength: number;
+  hiddenTailRemoved: boolean;
+  blockedBecauseMixedLayer: boolean;
+  blockedBecauseInternalMarker: boolean;
+  blockedBecauseAnalystLeakage: boolean;
+  emittedSalvagedVisiblePrefix: boolean;
+  internalContentSuppressedFromVisibleLane: boolean;
   finalReason: string;
 }
 
@@ -2724,6 +2755,21 @@ export class CommunionLoop {
       postRecoveryPoisonCheckRan: !!candidate?.finalized.postRecoveryPoisonCheckRan,
       blockedAfterRecovery: !!candidate?.finalized.blockedAfterRecovery,
       blockedBecauseUnstrippablePoison: !!candidate?.finalized.blockedBecauseUnstrippablePoison,
+      visibleBoundaryChecked: !!candidate?.finalized.visibleBoundaryChecked,
+      mixedLayerDetected: !!candidate?.finalized.mixedLayerDetected,
+      boundaryMarkerDetected: !!candidate?.finalized.boundaryMarkerDetected,
+      boundaryMarkerKind: candidate?.finalized.boundaryMarkerKind ?? null,
+      visiblePrefixSalvageAttempted: !!candidate?.finalized.visiblePrefixSalvageAttempted,
+      visiblePrefixSalvageSucceeded: !!candidate?.finalized.visiblePrefixSalvageSucceeded,
+      visiblePrefixCutReason: candidate?.finalized.visiblePrefixCutReason ?? null,
+      visiblePrefixOriginalLength: candidate?.finalized.visiblePrefixOriginalLength ?? 0,
+      visiblePrefixKeptLength: candidate?.finalized.visiblePrefixKeptLength ?? 0,
+      hiddenTailRemoved: !!candidate?.finalized.hiddenTailRemoved,
+      blockedBecauseMixedLayer: !!candidate?.finalized.blockedBecauseMixedLayer,
+      blockedBecauseInternalMarker: !!candidate?.finalized.blockedBecauseInternalMarker,
+      blockedBecauseAnalystLeakage: !!candidate?.finalized.blockedBecauseAnalystLeakage,
+      emittedSalvagedVisiblePrefix: !!candidate?.finalized.emittedSalvagedVisiblePrefix,
+      internalContentSuppressedFromVisibleLane: !!candidate?.finalized.internalContentSuppressedFromVisibleLane,
       finalReason,
     };
   }
@@ -2852,6 +2898,10 @@ export class CommunionLoop {
           stripSucceeded: false,
           stripRemovedClasses: [] as string[],
         };
+    // Boundary trace — always check even in non-recovery mode for visibility
+    const rawBoundary = this.detectMixedLayerBoundary(params.replyText || '');
+    const boundaryMarkerDetected = rawBoundary !== null && rawBoundary.pos > 0;
+
     const salvaged = recoveryMode
       ? this.salvageVisibleReply(stripped.text, params.agentLabel, params.userName)
       : {
@@ -2859,8 +2909,31 @@ export class CommunionLoop {
           salvageAttempted: false,
           salvageSucceeded: false,
           salvageCutReason: null as string | null,
+          boundaryMarkerDetected,
+          boundaryMarkerKind: rawBoundary?.kind ?? null,
+          hiddenTailRemoved: false,
+          visiblePrefixOriginalLength: (params.replyText || '').length,
+          visiblePrefixKeptLength: stripped.text.length,
         };
+
     const cleaned = this.sanitizeSpeakOutput(salvaged.text || stripped.text || '', params.agentLabel, params.userName);
+
+    // Shared boundary trace fields for all return paths
+    const boundaryTrace = {
+      visibleBoundaryChecked: true,
+      mixedLayerDetected: boundaryMarkerDetected || salvaged.boundaryMarkerDetected,
+      boundaryMarkerDetected: salvaged.boundaryMarkerDetected || boundaryMarkerDetected,
+      boundaryMarkerKind: salvaged.boundaryMarkerKind ?? rawBoundary?.kind ?? null,
+      visiblePrefixSalvageAttempted: salvaged.salvageAttempted,
+      visiblePrefixSalvageSucceeded: salvaged.salvageSucceeded,
+      visiblePrefixCutReason: salvaged.salvageCutReason,
+      visiblePrefixOriginalLength: salvaged.visiblePrefixOriginalLength,
+      visiblePrefixKeptLength: salvaged.visiblePrefixKeptLength,
+      hiddenTailRemoved: salvaged.hiddenTailRemoved,
+      emittedSalvagedVisiblePrefix: salvaged.salvageSucceeded,
+      internalContentSuppressedFromVisibleLane: salvaged.hiddenTailRemoved || stripped.stripSucceeded,
+    };
+
     if (!cleaned) {
       return {
         approvedText: '',
@@ -2880,6 +2953,10 @@ export class CommunionLoop {
         postRecoveryPoisonCheckRan: false,
         blockedAfterRecovery: true,
         blockedBecauseUnstrippablePoison: false,
+        blockedBecauseMixedLayer: false,
+        blockedBecauseInternalMarker: false,
+        blockedBecauseAnalystLeakage: false,
+        ...boundaryTrace,
       };
     }
     const failureClass = this.buildReplyFailureClass(
@@ -2917,8 +2994,15 @@ export class CommunionLoop {
         postRecoveryPoisonCheckRan: true,
         blockedAfterRecovery: false,
         blockedBecauseUnstrippablePoison: false,
+        blockedBecauseMixedLayer: false,
+        blockedBecauseInternalMarker: false,
+        blockedBecauseAnalystLeakage: false,
+        ...boundaryTrace,
       };
     }
+    const blockedBecauseInternalMarker = hardCheck.reasons.includes('channel_tokens') || hardCheck.reasons.includes('runtime_tags');
+    const blockedBecauseAnalystLeakage = hardCheck.reasons.includes('archive_analysis_leak') || hardCheck.reasons.includes('relational_tool_hijack');
+    const blockedBecauseMixedLayer = !blockedBecauseInternalMarker && !blockedBecauseAnalystLeakage && boundaryTrace.mixedLayerDetected;
     return {
       approvedText: cleaned,
       failureClass,
@@ -2937,6 +3021,10 @@ export class CommunionLoop {
       postRecoveryPoisonCheckRan: true,
       blockedAfterRecovery: true,
       blockedBecauseUnstrippablePoison: true,
+      blockedBecauseMixedLayer,
+      blockedBecauseInternalMarker,
+      blockedBecauseAnalystLeakage,
+      ...boundaryTrace,
     };
   }
 
@@ -3993,7 +4081,9 @@ export class CommunionLoop {
   }
 
   private containsChannelTokens(text: string): boolean {
-    return /\[(?:\/)?(?:speak|speech|journal|silent)\]/i.test(text || '');
+    // Includes all internal/routing markers that must never appear in visible output
+    return /\[(?:\/)?(?:speak|speech|journal|silent|think|self|inner_state|visible)\]/i.test(text || '')
+      || /<reveal>/i.test(text || '');
   }
 
   private containsRuntimeTags(text: string): boolean {
@@ -4010,11 +4100,72 @@ export class CommunionLoop {
     const source = (text || '').trim();
     if (!source) return false;
     const escapedUser = userName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Third-person analysis of the user by name + verb
     if (new RegExp(`\\b${escapedUser}\\b\\s+(?:returns|seems|appears|feels|wants|keeps|is|was)\\b`, 'i').test(source)) return true;
+    // "his/her/their persistence suggests..."
     if (/\b(?:his|her|their)\s+(?:persistence|behavior|attachment|investment|frustration|anger|reaction|return|tone)\s+(?:suggests|indicates|implies|reveals)\b/i.test(source)) return true;
+    // Analyst framing phrases
     if (/\b(?:this feels like a genuine moment of connection|i wonder if (?:his|her|their)|suggests that|indicates that|implies that|emotional investment|authentic moment|pattern:|query:)\b/i.test(source)) return true;
+    // "Jason/he/she [60 chars] suggests/indicates..."
     if (/\b(?:Jason|he|she)\b[\s\S]{0,60}\b(?:suggests|indicates|implies|reveals|returns multiple times|persistence)\b/i.test(source)) return true;
+    // Spec denylist — analyst/observer/forensic voice
+    if (/\b(?:his language suggests|this could be|jason'?s responses? suggest|i'?m leaning toward|the repetition is notable|current state analysis|the key tension|the underlying challenge|the system shows|pattern detection shows|i searched for|found 0 results|memory system|detected patterns?)\b/i.test(source)) return true;
+    // Planning / self-instruction voice (spec: never in visible lane unless conversational act)
+    if (/^(?:i should|my next response should|i need to|i'll continue exploring|i'm going to|the key is|the goal is|i'?m avoiding)\b/im.test(source)) return true;
     return false;
+  }
+
+  /**
+   * Detects planning / self-instruction prose that must not appear in visible output.
+   * Separate from observerAnalysis so it can be targeted by trace fields.
+   */
+  private detectPlanningVoice(text: string): boolean {
+    const source = (text || '').trim();
+    if (!source) return false;
+    return /^(?:i should|my next response should|i need to|i'?ll continue exploring|i'?m going to avoid|i'?m avoiding|the key is|the goal is|i'?m trying to)\b/im.test(source)
+      || /\bmy next (?:message|reply|response) should\b/i.test(source)
+      || /\b(?:i should (?:avoid|focus|note|consider|remember|be careful|keep|maintain))\b/i.test(source);
+  }
+
+  /**
+   * Finds the earliest clear contamination boundary within a text string.
+   * Returns {pos, marker, kind} — `pos` is the character index in `text` where the
+   * visible prefix should be cut. Returns null if no boundary found.
+   */
+  private detectMixedLayerBoundary(text: string): { pos: number; marker: string; kind: string } | null {
+    const source = String(text || '');
+    if (!source) return null;
+
+    // Ordered from most distinctive to least — first match wins
+    const BOUNDARY_PATTERNS: Array<[RegExp, string]> = [
+      [/\[(?:\/)?(?:think|self|inner_state|journal|speak|speech|silent|visible)\]/i, 'channel_token'],
+      [/<reveal>/i, 'reveal_tag'],
+      [/\[(?:\/)?[A-Z][A-Z0-9_: -]{2,}\]/g, 'runtime_tag'],
+      [/\bhis language suggests\b/i, 'analyst_voice'],
+      [/\bjason'?s (?:responses?|messages?|behavior|tone) suggest/i, 'analyst_voice'],
+      [/\bcurrent state analysis\b/i, 'analyst_voice'],
+      [/\bthe key tension\b/i, 'analyst_voice'],
+      [/\bthe underlying challenge\b/i, 'analyst_voice'],
+      [/\bi'?m leaning toward\b/i, 'analyst_voice'],
+      [/\bthe repetition is notable\b/i, 'analyst_voice'],
+      [/\bthis could be (?:a|an|the)\b/i, 'analyst_voice'],
+      [/^i should\b/im, 'planning_voice'],
+      [/^my next (?:message|reply|response) should\b/im, 'planning_voice'],
+      [/^i'?m avoiding\b/im, 'planning_voice'],
+      [/^the (?:key|goal) is\b/im, 'planning_voice'],
+      [/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/g, 'iso_timestamp'],
+    ];
+
+    let earliest: { pos: number; marker: string; kind: string } | null = null;
+    for (const [pattern, kind] of BOUNDARY_PATTERNS) {
+      const match = pattern.exec(source);
+      if (match && match.index > 0) {
+        if (earliest === null || match.index < earliest.pos) {
+          earliest = { pos: match.index, marker: match[0], kind };
+        }
+      }
+    }
+    return earliest;
   }
 
   private extractInternalAnalysis(replyText: string, userName: string): string {
@@ -4139,35 +4290,63 @@ export class CommunionLoop {
     salvageAttempted: boolean;
     salvageSucceeded: boolean;
     salvageCutReason: string | null;
+    boundaryMarkerDetected: boolean;
+    boundaryMarkerKind: string | null;
+    hiddenTailRemoved: boolean;
+    visiblePrefixOriginalLength: number;
+    visiblePrefixKeptLength: number;
   } {
     const source = String(replyText || '').replace(/\r/g, '').trim();
-    if (!source) {
-      return { text: '', salvageAttempted: false, salvageSucceeded: false, salvageCutReason: null };
+    const noResult = {
+      text: source, salvageAttempted: false, salvageSucceeded: false, salvageCutReason: null,
+      boundaryMarkerDetected: false, boundaryMarkerKind: null, hiddenTailRemoved: false,
+      visiblePrefixOriginalLength: source.length, visiblePrefixKeptLength: source.length,
+    };
+    if (!source) return { ...noResult, text: '' };
+
+    // Strategy 1: inline boundary cut (spec: "cut at earliest clear boundary")
+    // Try before paragraph splitting — handles mid-paragraph contamination.
+    const boundary = this.detectMixedLayerBoundary(source);
+    if (boundary && boundary.pos > 0) {
+      const prefix = source.slice(0, boundary.pos).replace(/[\s,;:—–]+$/, '').trim();
+      const stripped = this.sanitizeVisibleSurfacePreservingLayout(prefix, agentName, userName).trim();
+      if (stripped.length >= 12) {
+        // Suffix check: confirm there IS actually something to remove after the boundary
+        const suffix = source.slice(boundary.pos).trim();
+        const tailHasMeat = suffix.length > 20;
+        return {
+          text: stripped,
+          salvageAttempted: true,
+          salvageSucceeded: true,
+          salvageCutReason: `boundary_marker:${boundary.kind}`,
+          boundaryMarkerDetected: true,
+          boundaryMarkerKind: boundary.kind,
+          hiddenTailRemoved: tailHasMeat,
+          visiblePrefixOriginalLength: source.length,
+          visiblePrefixKeptLength: stripped.length,
+        };
+      }
     }
+
+    // Strategy 2: paragraph-level contaminated-tail cut
     const paragraphs = source.split(/\n{2,}/).map(part => part.trim()).filter(Boolean);
-    if (paragraphs.length <= 1) {
-      return { text: source, salvageAttempted: false, salvageSucceeded: false, salvageCutReason: null };
-    }
+    if (paragraphs.length <= 1) return noResult;
 
     const kept: string[] = [];
     let cutReason: string | null = null;
     for (const paragraph of paragraphs) {
       const stripped = this.sanitizeVisibleSurfacePreservingLayout(paragraph, agentName, userName).trim();
-      if (!stripped) {
-        cutReason ??= 'empty_wrapper';
-        continue;
-      }
+      if (!stripped) { cutReason ??= 'empty_wrapper'; continue; }
       const poisonParagraph =
         this.containsRuntimeTags(stripped)
         || this.containsChannelTokens(stripped)
         || this.containsMetaLeak(stripped)
         || this.detectMalformedRelationalShell(stripped)
-        || this.detectRelationalToolHijack(stripped);
+        || this.detectRelationalToolHijack(stripped)
+        || this.detectPlanningVoice(stripped)
+        || this.containsObserverAnalysis(stripped, userName);
       if (poisonParagraph) {
-        if (kept.length > 0) {
-          cutReason = cutReason || 'contaminated_tail';
-          break;
-        }
+        if (kept.length > 0) { cutReason = cutReason || 'contaminated_tail'; break; }
         cutReason = cutReason || 'leading_wrapper';
         continue;
       }
@@ -4175,11 +4354,17 @@ export class CommunionLoop {
     }
 
     const salvaged = kept.join('\n\n').trim();
+    const succeeded = !!salvaged && salvaged !== source;
     return {
       text: salvaged || source,
       salvageAttempted: true,
-      salvageSucceeded: !!salvaged && salvaged !== source,
+      salvageSucceeded: succeeded,
       salvageCutReason: cutReason,
+      boundaryMarkerDetected: false,
+      boundaryMarkerKind: null,
+      hiddenTailRemoved: succeeded,
+      visiblePrefixOriginalLength: source.length,
+      visiblePrefixKeptLength: (salvaged || source).length,
     };
   }
 
