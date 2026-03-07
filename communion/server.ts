@@ -1339,6 +1339,17 @@ async function main() {
       return;
     }
 
+    // Soft-reset live prompt carryover (does NOT touch long-term memory or archive)
+    if (url?.startsWith('/reset-carryover') && req.method === 'POST') {
+      const params = new URLSearchParams(url.split('?')[1] || '');
+      const blackoutTurns = Math.min(10, Math.max(0, Number(params.get('blackout') ?? 4)));
+      const cleared = communion.resetLiveCarryover(blackoutTurns);
+      broadcast({ type: 'control', liveCarryoverReset: true, cleared });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok', cleared }));
+      return;
+    }
+
     // Tick speed control
     if (url?.startsWith('/speed') && req.method === 'POST') {
       const speedParams = new URLSearchParams(url.split('?')[1] || '');

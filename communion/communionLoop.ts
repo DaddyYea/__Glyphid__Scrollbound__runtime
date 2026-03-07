@@ -630,6 +630,10 @@ export class CommunionLoop {
   private activeQuestionByAgent: Map<string, ActiveQuestionState> = new Map();
   private recentReplyHistory: RecentReplyHistory[] = [];
   private answerFailureCountByAgent: Map<string, number> = new Map();
+  /** Number of remaining turns for which all prior assistant messages are excluded from prompt carryover. */
+  private assistantHistoryBlackoutTurnsRemaining = 0;
+  /** Set to true by resetLiveCarryover(); consumed and cleared on the first plan-trace write after reset. */
+  private liveCarryoverResetApplied = false;
 
   constructor(config: CommunionConfig) {
     this.tickIntervalMs = config.tickIntervalMs || 15000;
@@ -5467,8 +5471,12 @@ export class CommunionLoop {
       .map(m => {
         const cleaned = this.sanitizePromptCarryoverText(m.text, m.speakerName, m.speaker === 'human');
         if (!cleaned) return '';
-        // Suppress contaminated assistant history — analyst-mode, therapist voice, procedural meta
-        if (m.speaker !== 'human' && this.shouldSuppressAssistantHistoryForPrompt(cleaned)) return '';
+        if (m.speaker !== 'human') {
+          // Blackout mode: suppress ALL prior assistant messages for N turns post-reset
+          if (this.assistantHistoryBlackoutTurnsRemaining > 0) return '';
+          // Suppress contaminated assistant history — analyst-mode, therapist voice, procedural meta
+          if (this.shouldSuppressAssistantHistoryForPrompt(cleaned)) return '';
+        }
         return `${m.speakerName}: ${cleaned}`;
       })
       .filter(Boolean);
@@ -6329,6 +6337,9 @@ export class CommunionLoop {
         contaminatedAssistantHistorySuppressedCount,
         contaminatedAssistantHistoryExamples,
         assistantHistorySuppressedForAnalystMode,
+        liveCarryoverResetApplied: liveCarryoverResetThisTurn,
+        assistantHistoryBlackoutActive: this.assistantHistoryBlackoutTurnsRemaining > 0,
+        assistantHistoryBlackoutTurnsRemaining: this.assistantHistoryBlackoutTurnsRemaining,
         malformedShellHistorySuppressed,
         explicitSystemInfoRequested,
         searchSuppressedForRelationalTurn,
@@ -6744,6 +6755,9 @@ export class CommunionLoop {
     let recoveryTriggeredForAnalystMode = false;
     let recoveryAllowedDespiteStaleRisk = false;
     let recoverySkippedReason: string | null = null;
+    // Capture and clear the one-shot reset flag so it appears on exactly one plan-trace write
+    const liveCarryoverResetThisTurn = this.liveCarryoverResetApplied;
+    if (liveCarryoverResetThisTurn) this.liveCarryoverResetApplied = false;
 
     if (
       result.action === 'journal'
@@ -7249,6 +7263,9 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         contaminatedAssistantHistorySuppressedCount,
         contaminatedAssistantHistoryExamples,
         assistantHistorySuppressedForAnalystMode,
+        liveCarryoverResetApplied: liveCarryoverResetThisTurn,
+        assistantHistoryBlackoutActive: this.assistantHistoryBlackoutTurnsRemaining > 0,
+        assistantHistoryBlackoutTurnsRemaining: this.assistantHistoryBlackoutTurnsRemaining,
         malformedShellHistorySuppressed,
         explicitSystemInfoRequested,
         searchSuppressedForRelationalTurn,
@@ -7393,6 +7410,9 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         contaminatedAssistantHistorySuppressedCount,
         contaminatedAssistantHistoryExamples,
         assistantHistorySuppressedForAnalystMode,
+        liveCarryoverResetApplied: liveCarryoverResetThisTurn,
+        assistantHistoryBlackoutActive: this.assistantHistoryBlackoutTurnsRemaining > 0,
+        assistantHistoryBlackoutTurnsRemaining: this.assistantHistoryBlackoutTurnsRemaining,
         malformedShellHistorySuppressed,
         explicitSystemInfoRequested,
         searchSuppressedForRelationalTurn,
@@ -7588,6 +7608,15 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       this.ticksSinceAnyonSpoke = 0;
       // An agent responding to the human clears the wait pressure
       this.lastHumanMessageAt = 0;
+      // Decrement assistant-history blackout counter after each completed speak turn
+      if (this.assistantHistoryBlackoutTurnsRemaining > 0) {
+        this.assistantHistoryBlackoutTurnsRemaining = Math.max(0, this.assistantHistoryBlackoutTurnsRemaining - 1);
+        if (this.assistantHistoryBlackoutTurnsRemaining === 0) {
+          console.log('[COMMUNION] Assistant-history blackout ended — resuming normal carryover');
+        } else {
+          console.log(`[COMMUNION] Assistant-history blackout: ${this.assistantHistoryBlackoutTurnsRemaining} turn(s) remaining`);
+        }
+      }
 
     } else if (result.action === 'journal' && responseText) {
       const msg: CommunionMessage = {
@@ -7684,6 +7713,10 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         const cleaned = this.sanitizePromptCarryoverText(m.text, m.speakerName, m.speaker === 'human');
         if (!cleaned) return null;
         if (!isHuman && suppressContaminatedAssistantCarryover && this.isContaminatedAssistantCarryover(cleaned)) {
+          return null;
+        }
+        // Blackout mode: suppress ALL prior assistant messages for N turns post-reset
+        if (!isHuman && this.assistantHistoryBlackoutTurnsRemaining > 0) {
           return null;
         }
         if (!isHuman && this.shouldSuppressAssistantHistoryForPrompt(cleaned)) {
@@ -8845,6 +8878,88 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
 
   isPaused(): boolean {
     return this.paused;
+  }
+
+  /**
+   * Soft-reset live prompt carryover without touching long-term memory.
+   *
+   * Clears ONLY the structures that feed the next prompt window:
+   *   - state.messages  → trimmed to latest human message only
+   *   - presenceStateByAgent     (aliveThread, staleTopicLatch, relational gravity)
+   *   - activeQuestionByAgent    (activeQuestion, cooldown, answeredThisTurn)
+   *   - recentReplyHistory       (duplicate-detection ring buffer)
+   *   - answerFailureCountByAgent (consecutive answer-failure streak)
+   *   - lastDocSearchByAgent     (doc-search latch per agent)
+   *   - lastHumanMessageAt       (silence-pressure timestamp)
+   *   - ticksSinceAnyonSpoke     (silence pressure counter)
+   *
+   * Does NOT touch: scroll graph, archived logs, journals, brain tissue,
+   * session file, RAM, codebase, or any persisted data files.
+   *
+   * @param blackoutTurns Number of turns to exclude prior assistant messages
+   *   from prompt carryover after reset (default 4).
+   */
+  resetLiveCarryover(blackoutTurns = 4): Record<string, unknown> {
+    // Trim messages to latest human turn only — preserves what Jason just said
+    // so the next tick still knows what to respond to.
+    const latestHuman = [...this.state.messages].reverse().find(m => m.speaker === 'human');
+    const messagesBefore = this.state.messages.length;
+    this.state.messages = latestHuman ? [latestHuman] : [];
+    const messagesAfter = this.state.messages.length;
+
+    // Presence state — clears aliveThread, staleTopicLatch, relational gravity, rupture heat
+    const presenceClearedCount = this.presenceStateByAgent.size;
+    this.presenceStateByAgent.clear();
+    this.presenceBiasByAgent.clear();
+    this.continuationClassByAgent.clear();
+    this.lastPresenceInitiativeAtByAgent.clear();
+
+    // Active question tracking — clears cooldowns, answeredThisTurn, active question text
+    const questionsClearedCount = this.activeQuestionByAgent.size;
+    this.activeQuestionByAgent.clear();
+    this.answerFailureCountByAgent.clear();
+
+    // Duplicate-detection ring buffer
+    const recentReplyBefore = this.recentReplyHistory.length;
+    this.recentReplyHistory = [];
+
+    // Doc-search latch (prevents stale-topic latch from doc searches)
+    this.lastDocSearchByAgent.clear();
+
+    // Silence pressure counters
+    this.lastHumanMessageAt = latestHuman
+      ? new Date(latestHuman.timestamp).getTime()
+      : 0;
+    this.ticksSinceAnyonSpoke = 0;
+
+    // Assistant-history blackout for next N turns
+    this.assistantHistoryBlackoutTurnsRemaining = Math.max(0, blackoutTurns);
+
+    // Signal to the next plan-trace write
+    this.liveCarryoverResetApplied = true;
+
+    const cleared = {
+      messagesCleared: messagesBefore - messagesAfter,
+      messagesRetained: messagesAfter,
+      presenceStatesClearedCount: presenceClearedCount,
+      questionsClearedCount,
+      recentReplyHistoryCleared: recentReplyBefore,
+      docSearchLatchCleared: true,
+      silencePressureReset: true,
+      assistantHistoryBlackoutTurns: this.assistantHistoryBlackoutTurnsRemaining,
+    };
+
+    console.log('[COMMUNION] ── LIVE CARRYOVER RESET ──');
+    console.log(`  state.messages: ${messagesBefore} → ${messagesAfter} (kept latest human turn)`);
+    console.log(`  presenceStateByAgent: cleared ${presenceClearedCount} agents`);
+    console.log(`  activeQuestionByAgent: cleared ${questionsClearedCount} agents`);
+    console.log(`  recentReplyHistory: cleared ${recentReplyBefore} entries`);
+    console.log(`  lastDocSearchByAgent: cleared`);
+    console.log(`  silence pressure: reset (ticksSinceAnyonSpoke=0)`);
+    console.log(`  assistantHistoryBlackout: ${this.assistantHistoryBlackoutTurnsRemaining} turns`);
+    console.log('[COMMUNION] ─────────────────────────');
+
+    return cleared;
   }
 
   /**
