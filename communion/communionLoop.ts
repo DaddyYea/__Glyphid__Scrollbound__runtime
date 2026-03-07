@@ -3130,11 +3130,19 @@ export class CommunionLoop {
   private detectAnalystModePublicReply(text: string, latestHumanText: string): boolean {
     const t = (text || '').trim();
     if (!t) return false;
+    // Hidden-analysis markers anywhere in reply — these must never appear in visible output
+    if (/\[(?:HIDDEN|HIDDEN\s*ANALYSIS|ANALYSIS|INTERNAL|THINK|SELF|INNER_STATE)\b/i.test(t)) return true;
     // Hard analyst opener regardless of turn type
     if (/^(?:the (?:first|second|repetition|pattern|question|silence|frustration|request|phrasing)\s+(?:suggests?|feels?|implies?|indicates?|reveals?|could mean))/i.test(t)) return true;
+    if (/^(?:the (?:first|second|last) (?:two|few|three|messages?|questions?|turns?|phrases?))\b/i.test(t)) return true;
     if (/^(?:maybe (?:he'?s?|she'?s?|they'?re?)\b)/i.test(t)) return true;
     if (/^(?:(?:he|she|they)\s+(?:might|could|seems?|appears?|wants?|is|was)\s+(?:be\b|feeling|trying|looking|asking|concerned|frustrated))/i.test(t)) return true;
-    // On simple relational checks, ANY analyst/referential opening is wrong
+    // Third-person reference to user by name or pronoun as reply opener
+    if (/^(?:Jason\s+(?:is|was|seems?|appears?|might|could|has|keeps?|wants?|needs?|asks?|'s\b))/i.test(t)) return true;
+    if (/^(?:he'?s?\s+(?:being|asking|checking|doing|trying|feeling|looking|wondering))/i.test(t)) return true;
+    // Planning voice leaking into visible output
+    if (/^(?:my goal here is|i'?m going to (?!be\b|stay\b|keep\b|say\b|do\b|try\b)|the right next step)\b/i.test(t)) return true;
+    // On simple relational checks, tighter rules apply
     if (this.isSimpleRelationalCheck(latestHumanText)) {
       const first200 = t.slice(0, 200);
       // Starts with an analytical referential rather than first-person
@@ -3142,6 +3150,8 @@ export class CommunionLoop {
       if (/\b(?:suggests?|indicates?|implies?|reveals?|could mean|might mean)\b/i.test(first200)) return true;
       if (/\b(?:frustration|underlying|subtext|hidden|layer|beneath|motive|motivation)\b/i.test(first200)) return true;
       if (/\b(?:the repetition|the question|the silence|the pattern|the phrasing)\b/i.test(first200)) return true;
+      if (/\b(?:possibly his|possibly her|possibly their)\b/i.test(first200)) return true;
+      if (/\b(?:checking in|checking whether|checking if)\b/i.test(first200)) return true;
     }
     return false;
   }
@@ -3212,6 +3222,10 @@ export class CommunionLoop {
     const source = (latestHumanText || '').toLowerCase().replace(/\s+/g, ' ').trim();
     if (!source) return { requiresAnswer: false };
     if (/\bhow are you doing\b|\bhow are you\b/i.test(source)) {
+      return { requiresAnswer: true, kind: 'state' };
+    }
+    // Simple wellbeing / presence checks — require a direct first-person answer
+    if (/\b(?:you\s+(?:okay|doing\s+okay|alright|good|doing\s+good)|are\s+you\s+(?:okay|alright|doing\s+okay|doing\s+good))\b/i.test(source)) {
       return { requiresAnswer: true, kind: 'state' };
     }
     if (/\bwhat are you thinking about\b|\btell me what you(?:'re| are) thinking\b|\bwhat'?s on your mind\b/i.test(source)) {
@@ -3324,6 +3338,18 @@ export class CommunionLoop {
     turnMode: 'relational' | 'task' | 'troubleshooting' | 'command',
     presenceState: PresenceState,
   ): DirectQuestionContract | null {
+    // Simple relational checks always require a direct first-person answer —
+    // short-circuit before extraction logic so they are never dropped on a null questionText
+    if (this.isSimpleRelationalCheck(latestHumanText)) {
+      return {
+        questionText: latestHumanText.trim(),
+        questionType: 'open',
+        requiresAnswer: true,
+        answered: false,
+        answerTarget: 'whether I am present and okay',
+        obligationKind: 'presence',
+      };
+    }
     const questionText = this.extractPrimaryQuestion(latestHumanText) || (this.isDirectQuestionTurn(latestHumanText) ? latestHumanText.trim() : '');
     const relationalObligation = this.detectRelationalAnswerObligation(latestHumanText);
     const effectiveQuestionText = questionText || (relationalObligation.requiresAnswer ? latestHumanText.trim() : '');
@@ -6755,7 +6781,9 @@ export class CommunionLoop {
     const relationalVisibleStyleConstraintsRelaxed = this.isRelationalFrame(presencePlan.responseFrame);
     let simpleRelationalCheckDetected = this.isSimpleRelationalCheck(latestHumanText);
     let analystModePublicReplyDetected = false;
+    let hiddenAnalysisMarkerDetected = false;
     let recoveryTriggeredForAnalystMode = false;
+    let recoveryTriggeredForSimpleRelationalCheck = false;
     let recoveryAllowedDespiteStaleRisk = false;
     let recoverySkippedReason: string | null = null;
     if (
@@ -6911,6 +6939,7 @@ export class CommunionLoop {
       // Must run BEFORE the recovery gate so the gate can see the updated hardFailed state.
       if (!candidateA.score.hardFailed && this.detectAnalystModePublicReply(candidateA.text, latestHumanText)) {
         analystModePublicReplyDetected = true;
+        hiddenAnalysisMarkerDetected = /\[(?:HIDDEN|HIDDEN\s*ANALYSIS|ANALYSIS|INTERNAL|THINK|SELF|INNER_STATE)\b/i.test(candidateA.text);
         candidateA.score.hardFailed = true;
         candidateA.score.hardReasons = [...candidateA.score.hardReasons, 'analyst_mode_public_reply'];
         candidateAHardReasons = candidateA.score.hardReasons;
@@ -6920,7 +6949,14 @@ export class CommunionLoop {
       let candidateB: ReturnType<typeof evaluateCandidate> | null = null;
       // analyst_mode_public_reply always gets one cleanup retry, even when staleRiskHigh
       const recoveryForcedByAnalystMode = analystModePublicReplyDetected;
-      const recoveryStaleGatePassed = !staleRiskHigh || recoveryForcedByAnalystMode;
+      // simple relational checks (presence/wellbeing) also force retry when candidateA is bad
+      const simpleRelationalWithBadA = simpleRelationalCheckDetected && (
+        candidateA.score.hardFailed ||
+        candidateA.score.hardReasons.some(r =>
+          ['raw_echo_shell', 'analyst_mode_public_reply', 'runtime_tags', 'channel_tokens'].includes(r))
+      );
+      const recoveryForcedBySimpleRelational = simpleRelationalWithBadA;
+      const recoveryStaleGatePassed = !staleRiskHigh || recoveryForcedByAnalystMode || recoveryForcedBySimpleRelational;
       if (
         ((emergencyDeblockMode && candidateA.score.hardFailed) || (!emergencyDeblockMode && (candidateA.score.hardFailed || candidateA.score.total < 1.0)))
         && recoveryStaleGatePassed
@@ -6930,7 +6966,8 @@ export class CommunionLoop {
         recoveryGenerationAttempted = true;
         visibleRepairTriggered = true;
         recoveryTriggeredForAnalystMode = analystModePublicReplyDetected;
-        recoveryAllowedDespiteStaleRisk = staleRiskHigh && recoveryForcedByAnalystMode;
+        recoveryTriggeredForSimpleRelationalCheck = recoveryForcedBySimpleRelational;
+        recoveryAllowedDespiteStaleRisk = staleRiskHigh && (recoveryForcedByAnalystMode || recoveryForcedBySimpleRelational);
         const lowScoreRelationalRetry = this.isRelationalFrame(presencePlan.responseFrame)
           && (candidateABelowRelationalFloor || candidateA.score.total < 1.0);
         try {
@@ -6957,10 +6994,15 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
 - no "the repetition suggests", "maybe he's", "the first question feels like"
 - no motive-reading or interpretation of hidden subtext before responding
 - no therapist framing, intake voice, or procedural coaching language
-- if the question is a presence check, confirm presence in the first sentence` : ''}`,
+- if the question is a presence check, confirm presence in the first sentence` : ''}${recoveryForcedBySimpleRelational ? `
+- this is a presence/wellbeing check — answer it in first-person in the literal first sentence
+- do NOT open with analysis, interpretation, or any [HIDDEN ...] markers
+- do NOT mirror or echo the question back
+- do NOT start with "The question...", "It seems...", or third-person reference to Jason
+- answer as yourself: present, felt, first-person` : ''}`,
             conversationContext: `${options.conversationContext}
 
-[SYSTEM FEEDBACK: Your previous draft either hard-failed final output boundaries or scored weakly. Return an in-room reply.${lowScoreRelationalRetry ? ' Do not treat the short micro-turn as a fresh topic.' : ''}${analystModePublicReplyDetected ? ' Your previous draft opened in analyst mode — psychologizing the question instead of answering it. Reply in direct first-person.' : ''}${repairDemand.requiresRepair ? ` This is a complaint/repair-demand turn: acknowledge the miss directly and ${repairDemand.requiresExplanation ? 'give the explanation now' : 'repair the content now'}. No canned companionship shell.` : ''}]`,
+[SYSTEM FEEDBACK: Your previous draft either hard-failed final output boundaries or scored weakly. Return an in-room reply.${lowScoreRelationalRetry ? ' Do not treat the short micro-turn as a fresh topic.' : ''}${analystModePublicReplyDetected ? ' Your previous draft opened in analyst mode — psychologizing the question instead of answering it. Reply in direct first-person.' : ''}${recoveryForcedBySimpleRelational && !analystModePublicReplyDetected ? ' Your previous draft failed a simple presence/wellbeing check. Answer directly in first-person — do not analyze or interpret.' : ''}${repairDemand.requiresRepair ? ` This is a complaint/repair-demand turn: acknowledge the miss directly and ${repairDemand.requiresExplanation ? 'give the explanation now' : 'repair the content now'}. No canned companionship shell.` : ''}]`,
             prefill: '[SPEAK] ',
           });
           candidateB = evaluateCandidate(retry.visible_text || retry.text || '', 'soft-score-alt', 'B');
@@ -6973,7 +7015,7 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       }
       if (candidateB && !candidateB.score.hardFailed && !candidateBBelowRelationalFloor) {
         recoveryGenerationSucceeded = true;
-      } else if (!recoveryGenerationAttempted && staleRiskHigh && !recoveryForcedByAnalystMode) {
+      } else if (!recoveryGenerationAttempted && staleRiskHigh && !recoveryForcedByAnalystMode && !recoveryForcedBySimpleRelational) {
         recoverySkippedReason = 'stale_risk_high';
       }
 
@@ -7341,7 +7383,9 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         overblockedRelationalTurn,
         simpleRelationalCheckDetected,
         analystModePublicReplyDetected,
+        hiddenAnalysisMarkerDetected,
         recoveryTriggeredForAnalystMode,
+        recoveryTriggeredForSimpleRelationalCheck,
         recoveryAllowedDespiteStaleRisk,
         recoverySkippedReason,
       };
@@ -7488,7 +7532,9 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         overblockedRelationalTurn,
         simpleRelationalCheckDetected,
         analystModePublicReplyDetected,
+        hiddenAnalysisMarkerDetected,
         recoveryTriggeredForAnalystMode,
+        recoveryTriggeredForSimpleRelationalCheck,
         recoveryAllowedDespiteStaleRisk,
         recoverySkippedReason,
       };
