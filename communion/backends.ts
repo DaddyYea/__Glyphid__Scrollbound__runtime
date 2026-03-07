@@ -727,6 +727,7 @@ export function createBackend(config: AgentConfig): AgentBackend {
     case 'anthropic':
       return new AnthropicBackend(config);
     case 'openai-compatible':
+    case 'lmstudio':
       return new OpenAICompatibleBackend(config);
     case 'alois': {
       // Lazy import to avoid loading Alois modules when not needed

@@ -11,6 +11,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, readdirSy
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
+import type { Socket } from 'net';
 import { CommunionLoop, CommunionEvent } from './communionLoop';
 import { CommunionConfig, AgentConfig } from './types';
 import { VOICES } from './voice';
@@ -29,6 +30,7 @@ const __dirname = dirname(__filename);
 const PORT = Number(process.env.PORT) || 3000;
 
 let clients: ServerResponse[] = [];
+let sockets = new Set<Socket>();
 let lastReceiptClusterLogId = '';
 const WORK_QUEUE_TYPES = WORK_NODE_TYPES.filter(t => t !== 'ActionLog' && t !== 'VetoEvent' && t !== 'WorkExecutionEvent' && t !== 'WorkResolutionEvent');
 const WORK_QUEUE_TYPES_SET = new Set<string>(WORK_QUEUE_TYPES as readonly string[]);
@@ -616,8 +618,12 @@ async function main() {
       const params = new URLSearchParams(url.split('?')[1] || '');
       const agentId = params.get('agentId') || undefined;
       const getLLMReceipt = (communion as any).getLLMReceipt;
+      const getRelationalTrace = (communion as any).getRelationalTrace;
       const receipt = typeof getLLMReceipt === 'function'
         ? getLLMReceipt.call(communion, agentId)
+        : null;
+      const trace = typeof getRelationalTrace === 'function'
+        ? getRelationalTrace.call(communion, agentId)
         : null;
       if (receipt && receipt.requestId !== lastReceiptClusterLogId) {
         lastReceiptClusterLogId = receipt.requestId;
@@ -632,6 +638,7 @@ async function main() {
       });
       res.end(JSON.stringify({
         receipt,
+        trace,
       }));
       return;
     }
@@ -2076,6 +2083,10 @@ async function main() {
     res.writeHead(404);
     res.end('Not found');
   });
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+  });
 
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`Communion Space running at http://localhost:${PORT}\n`);
@@ -2086,6 +2097,49 @@ async function main() {
 
   // Graceful shutdown
   let shutdownPromise: Promise<void> | null = null;
+  const logShutdownStage = (stage: string, startedAt: number): void => {
+    console.log(`[SHUTDOWN] ${stage} elapsed=${Date.now() - startedAt}ms`);
+  };
+  const logShutdownHandles = (): void => {
+    const liveSockets = [...sockets].filter(socket => !socket.destroyed);
+    const activeHandles = typeof (process as any)._getActiveHandles === 'function'
+      ? (process as any)._getActiveHandles() as any[]
+      : [];
+    const timerHandles = activeHandles.filter(handle => {
+      const name = handle?.constructor?.name || '';
+      return name === 'Timeout' || name === 'Immediate';
+    });
+    console.error('[SHUTDOWN] diagnostics', {
+      sseClients: clients.length,
+      trackedSockets: sockets.size,
+      liveSockets: liveSockets.length,
+      liveSocketDetails: liveSockets.map(socket => ({
+        localAddress: socket.localAddress,
+        localPort: socket.localPort,
+        remoteAddress: socket.remoteAddress,
+        remotePort: socket.remotePort,
+      })),
+      timerHandles: timerHandles.length,
+      activeHandleTypes: activeHandles.map(handle => handle?.constructor?.name || typeof handle),
+    });
+  };
+  const awaitWithTimeout = async <T>(label: string, promise: Promise<T>, timeoutMs: number): Promise<T | null> => {
+    let timer: NodeJS.Timeout | null = null;
+    try {
+      return await Promise.race<T | null>([
+        promise,
+        new Promise<null>(resolve => {
+          timer = setTimeout(() => {
+            console.error(`[SHUTDOWN] ${label} timed out after ${timeoutMs}ms`);
+            resolve(null);
+          }, timeoutMs);
+          timer.unref();
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  };
   const shutdown = async (signal: string) => {
     if (shutdownPromise) return shutdownPromise;
     isShuttingDown = true;
@@ -2093,25 +2147,65 @@ async function main() {
     shutdownPromise = (async () => {
       const bailout = setTimeout(() => {
         console.error('[SHUTDOWN] timeout');
+        logShutdownHandles();
         process.exit(1);
       }, 30000);
       bailout.unref();
       try {
-        const shutdownFn = (communion as any).shutdown;
-        if (typeof shutdownFn === 'function') {
-          await shutdownFn.call(communion, signal);
-        } else {
-          await communion.stop();
+        const shutdownStartedAt = Date.now();
+        console.log(`[SHUTDOWN] shutdown:start signal=${signal} elapsed=0ms`);
+        const saveBrainStartedAt = Date.now();
+        console.log('[SHUTDOWN] shutdown:saveBrainState:start elapsed=0ms');
+        // saveBrainSync() is synchronous; this stage is measured but not preemptible.
+        // If this stalls, the next targeted fix is a real async/worker save path.
+        communion.saveBrainSync();
+        logShutdownStage('shutdown:saveBrainState:end', saveBrainStartedAt);
+        rl.close();
+        for (const client of clients.splice(0)) {
+          try { client.end(); } catch { /* ignore */ }
+          try { client.destroy(); } catch { /* ignore */ }
         }
-        await new Promise<void>(resolve => {
+        for (const socket of sockets) {
+          try { socket.end(); } catch { /* ignore */ }
+          try { socket.destroy(); } catch { /* ignore */ }
+        }
+        const shutdownFn = (communion as any).shutdown;
+        const stopStartedAt = Date.now();
+        console.log('[SHUTDOWN] shutdown:communion.stop:start elapsed=0ms');
+        if (typeof shutdownFn === 'function') {
+          await awaitWithTimeout('communion.shutdown', shutdownFn.call(communion, signal), 12000);
+        } else {
+          await awaitWithTimeout('communion.stop', communion.stop(), 12000);
+        }
+        logShutdownStage('shutdown:communion.stop:end', stopStartedAt);
+        try { (server as any).closeIdleConnections?.(); } catch { /* ignore */ }
+        try { (server as any).closeAllConnections?.(); } catch { /* ignore */ }
+        for (const socket of sockets) {
+          try { socket.destroy(); } catch { /* ignore */ }
+        }
+        sockets.clear();
+        const serverCloseStartedAt = Date.now();
+        console.log('[SHUTDOWN] shutdown:server.close:start elapsed=0ms');
+        await awaitWithTimeout('server.close', new Promise<void>(resolve => {
+          const forceCloseTimer = setTimeout(() => {
+            try { (server as any).closeIdleConnections?.(); } catch { /* ignore */ }
+            try { (server as any).closeAllConnections?.(); } catch { /* ignore */ }
+            for (const socket of sockets) {
+              try { socket.destroy(); } catch { /* ignore */ }
+            }
+            sockets.clear();
+          }, 200);
+          forceCloseTimer.unref();
           server.close(() => resolve());
-        });
+        }), 3000);
+        logShutdownStage('shutdown:server.close:end', serverCloseStartedAt);
         clearTimeout(bailout);
-        console.log('[SHUTDOWN] complete');
+        logShutdownStage('shutdown:done', shutdownStartedAt);
         process.exit(0);
       } catch (err) {
         clearTimeout(bailout);
         console.error('[SHUTDOWN] error:', err);
+        logShutdownHandles();
         process.exit(1);
       }
     })();

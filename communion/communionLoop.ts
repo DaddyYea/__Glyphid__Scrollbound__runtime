@@ -177,6 +177,9 @@ const BACKCHANNEL_INTERVAL = 4;           // Every N ticks, non-speakers may emo
 const INTERRUPT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes between interrupts per agent
 const MICRO_TICK_MIN_MS = 200;            // Stagger offset range: 0.2-1 second (was 1-4s)
 const MICRO_TICK_MAX_MS = 1000;
+const HUMAN_SPEAKING_STALE_MS = 8000;     // Clear stale mic-speaking locks after 8s without heartbeat
+const QUESTION_FOLLOWUP_COOLDOWN_MS = 2 * 60 * 1000;
+const PRESENCE_INITIATIVE_COOLDOWN_MS = 45000;
 
 type DocAutonomyMode = 'quiet' | 'balanced' | 'bold';
 
@@ -232,6 +235,210 @@ interface LLMReceiptDebug {
   wmMissingStreak: number;
   issues: string[];
   lastError?: string;
+  presence?: {
+    aliveThreadId: string | null;
+    aliveThreadStrength: number;
+    unresolvedPressure: number;
+    relationalGravity: number;
+    curiosityPressure: number;
+    desirePressure: number;
+    ruptureHeat: number;
+    initiativeAllowed: boolean;
+    assistantResetRisk: number;
+    continuityConfidence: number;
+    chosenThreadTarget: string | null;
+    continuityBias: number;
+    initiativeBias: number;
+    helperModeSuppressed: boolean;
+    continuationClass: 'continuation' | 'reset';
+  };
+}
+
+interface RelationalTraceDebug {
+  agentId: string;
+  timestamp: string;
+  plan?: Record<string, unknown>;
+  raw?: Record<string, unknown>;
+  stale?: Record<string, unknown>;
+  visible?: Record<string, unknown>;
+  final?: Record<string, unknown>;
+}
+
+interface PresenceState {
+  aliveThreadId: string | null;
+  aliveThreadSummary: string;
+  aliveThreadStrength: number;
+  unresolvedPressure: number;
+  relationalGravity: number;
+  curiosityPressure: number;
+  desirePressure: number;
+  ruptureHeat: number;
+  moodVector: MoodVector;
+  initiativeAllowed: boolean;
+  assistantResetRisk: number;
+  continuityConfidence: number;
+  continuityGapDuration: number;
+  emotionalCharge: number;
+  interruptionFlag: boolean;
+  recentFailedReentryCount: number;
+}
+
+interface PresenceBiasPacket {
+  reentryPriority: number;
+  continuityBias: number;
+  initiativeBias: number;
+  threadPullTarget: string | null;
+  affectTint: string;
+  preferenceWeighting: number;
+  ruptureAcknowledgmentFlag: boolean;
+  resetSuppression: number;
+  helperModeSuppression: number;
+  desireVisibility: number;
+  unfinishedBusinessVisibility: number;
+  toneGravity: number;
+  companionModeBias: number;
+}
+
+interface PresenceResponsePlan {
+  responseFrame: 'rupture_repair' | 'companionship' | 'continuity_return' | 'direct_answer' | 'task';
+  mustTouch: string | null;
+  threadTarget: string | null;
+  continuationRequired: boolean;
+  questionPolicy: 0 | 1;
+  banList: string[];
+  rejectProcedural: boolean;
+  rejectPresenceFlat: boolean;
+}
+
+interface ReplyLayerClass {
+  hasVisibleSpeech: boolean;
+  hasObserverAnalysis: boolean;
+  hasRuntimeTags: boolean;
+  isMixedLayer: boolean;
+  visibleSpeech: string;
+  internalAnalysis: string;
+}
+
+interface ActiveQuestionState {
+  questionText: string;
+  questionTokens: string[];
+  askedAt: number;
+  askedMessageId: string;
+  askedHumanMessageId: string;
+  lastEvaluatedHumanMessageId: string;
+  questionType?: 'direct' | 'open' | 'task' | null;
+  requiresAnswer?: boolean;
+  answered?: boolean;
+  answerTarget?: string | null;
+  resolvedAt?: number;
+  resolvedByHumanMessageId?: string;
+  resolvedAnswerText?: string;
+  cooldownUntil?: number;
+}
+
+interface QuestionResolutionContext {
+  activeQuestion: ActiveQuestionState | null;
+  answeredThisTurn: boolean;
+  cooldownActive: boolean;
+  metabolizeAnswer: string | null;
+}
+
+interface DirectQuestionContract {
+  questionText: string;
+  questionType: 'direct' | 'open' | 'task';
+  requiresAnswer: boolean;
+  answered: boolean;
+  answerTarget: string | null;
+}
+
+interface RepairDemand {
+  isComplaint: boolean;
+  requiresRepair: boolean;
+  requiresExplanation: boolean;
+  complaintKind?: 'non_answer' | 'non_explanation' | 'nonsense' | 'coldness' | 'bowed_out' | 'generic';
+  normalizedMustTouch: string | null;
+  inheritedThreadTarget: string | null;
+}
+
+interface RecentReplyHistory {
+  normalizedReply: string;
+  emittedAt: number;
+  speakerId: string;
+  speakerLabel: string;
+  wasFallback: boolean;
+  wasDirectAnswer: boolean;
+}
+
+interface ReplyFailureClass {
+  isFallbackLoop: boolean;
+  isRecentDuplicate: boolean;
+  isDirectParrot: boolean;
+  isMetaObserver: boolean;
+  reopensResolvedQuestion: boolean;
+  satisfiesDirectQuestion: boolean;
+  failsRealityGate: boolean;
+}
+
+interface FinalizedReplyResult {
+  approvedText: string;
+  failureClass: ReplyFailureClass | null;
+  rejected: boolean;
+  reason: string | null;
+  regenRequired: boolean;
+  fallbackRequired: boolean;
+  hardReasons: string[];
+}
+
+interface SoftInfluenceSnapshot {
+  presence: PresenceState;
+  bias: PresenceBiasPacket;
+  turnMode: 'relational' | 'task' | 'troubleshooting' | 'command';
+  continuationClass?: 'continuation' | 'reset';
+  cognitive?: {
+    topSlots: string[];
+    stability: number;
+    novelty: number;
+    pSpeak: number;
+  };
+  dream?: {
+    peakAffect?: number;
+    avgImportance?: number;
+    consolidatedMemories?: string[];
+  };
+  myco?: {
+    absorption?: number;
+    unresolvedAche?: number;
+    hyphalActivity?: number;
+    bioluminescence?: number;
+    activeTexture?: string;
+  };
+  incubation?: {
+    tissueWeight?: number;
+    maturity?: number;
+    stage?: string;
+  };
+}
+
+interface SoftCandidateNotes {
+  presencePlanViolation: string | null;
+  reopensResolvedQuestion: boolean;
+  directAnswerUnsatisfied: boolean;
+  relationalVetoReason: string | null;
+  bureaucraticTone: boolean;
+  therapeuticTone: boolean;
+  placeholderDetected: boolean;
+  rationalizationDetected: boolean;
+  metaLeakDetected: boolean;
+  observerAnalysisDetected: boolean;
+  presenceFlat: boolean;
+  malformedShellDetected: boolean;
+}
+
+interface CandidateScore {
+  total: number;
+  hardFailed: boolean;
+  hardReasons: string[];
+  features: Record<string, number>;
 }
 
 // ── Loop ──
@@ -292,10 +499,13 @@ export class CommunionLoop {
 
   private speaking = false; // Global speech lock — clock pauses when anyone is speaking
   private humanSpeaking = false; // True while human is actively speaking (interim results from mic)
+  private lastHumanSpeakingSignalAt = 0;
   private speechResolve: (() => void) | null = null; // Resolves when client reports playback done
   private speechTimeout: ReturnType<typeof setTimeout> | null = null;
   // Timestamp of the last human message — drives time-based social pressure
   private lastHumanMessageAt: number = 0;
+  // Sticky fast-lane flag so human-triggered immediate ticks are not lost during an in-flight tick.
+  private immediateTickRequested = false;
   // Prevent repeated doc-search execution for the same human request per agent
   private lastDocSearchByAgent: Map<string, string> = new Map();
   private lastSearchReceiptByAgentTurn: Map<string, SearchReceipt> = new Map();
@@ -305,8 +515,16 @@ export class CommunionLoop {
   private recentDocActionsByAgent: Map<string, Array<{ query: string; at: number; action: 'browse' | 'read' | 'load_excerpt' }>> = new Map();
   private docAutonomyMode: DocAutonomyMode = 'balanced';
   private llmReceiptsByAgent: Map<string, LLMReceiptDebug> = new Map();
+  private relationalTraceByAgent: Map<string, RelationalTraceDebug> = new Map();
   private llmAblationFlags: Record<string, boolean> = {};
   private llmWmMissingStreakByAgent: Map<string, number> = new Map();
+  private presenceStateByAgent: Map<string, PresenceState> = new Map();
+  private presenceBiasByAgent: Map<string, PresenceBiasPacket> = new Map();
+  private continuationClassByAgent: Map<string, 'continuation' | 'reset'> = new Map();
+  private lastPresenceInitiativeAtByAgent: Map<string, number> = new Map();
+  private activeQuestionByAgent: Map<string, ActiveQuestionState> = new Map();
+  private recentReplyHistory: RecentReplyHistory[] = [];
+  private answerFailureCountByAgent: Map<string, number> = new Map();
 
   constructor(config: CommunionConfig) {
     this.tickIntervalMs = config.tickIntervalMs || 15000;
@@ -1116,8 +1334,15 @@ export class CommunionLoop {
   }
 
   private shouldAutoBrowseFromHumanRequest(text: string): boolean {
-    if (!text) return false;
-    return /\b(open|read|load|find|search|browse|lookup|look up|where is|show me|pull up|check|verify)\b[\s\S]{0,120}\b(file|doc|document|documents|manuscript|chapter|outline|archive)?\b/i.test(text);
+    const source = (text || '').trim();
+    if (!source) return false;
+    const commandMatch = source.match(/^(?:please\s+)?(?:open|read|load|find|search|browse|lookup|look up|where is|show me|pull up)\s+(.+)$/i)
+      || source.match(/(?:^|[,;]\s*|\b)(?:open|read|load|find|search|browse|lookup|look up|where is|show me|pull up)\s+(.+)$/i);
+    if (!commandMatch?.[1]) return false;
+    const remainder = this.sanitizeDocQuery(commandMatch[1].trim());
+    if (!remainder) return false;
+    const tokenized = this.sanitizeDocQueryTokens(remainder);
+    return this.isValidDocQuery(tokenized || remainder) || !!this.extractDocQuery(remainder);
   }
 
   private deriveSearchIntent(latestHumanText: string, uiSelection?: { docId?: string; title?: string; corpus?: 'ram' | 'drive' | 'local' | 'web' }): SearchIntent {
@@ -1133,7 +1358,7 @@ export class CommunionLoop {
     if (/\[RAM:(BROWSE|READ|GRAPH)\s+[^\]]+\]/i.test(text)) {
       return { kind: 'open_doc', query: this.extractDocQuery(text) || undefined };
     }
-    if (this.shouldAutoBrowseFromHumanRequest(text) || this.extractDocQuery(text)) {
+    if (this.shouldAutoBrowseFromHumanRequest(text)) {
       const verb = /\b(search|find|lookup|look up|where is|show me)\b/i.test(text) ? 'search' : 'open_doc';
       return {
         kind: verb,
@@ -1146,8 +1371,7 @@ export class CommunionLoop {
   private isDocSearchRequest(text: string): boolean {
     if (!text) return false;
     if (/\[RAM:(BROWSE|READ|GRAPH)\s+[^\]]+\]/i.test(text)) return true;
-    if (this.shouldAutoBrowseFromHumanRequest(text)) return true;
-    return !!this.extractDocQuery(text);
+    return this.shouldAutoBrowseFromHumanRequest(text);
   }
 
   private deriveSearchQuery(latestHumanText: string, searchIntent?: SearchIntent): string | null {
@@ -1553,6 +1777,237 @@ export class CommunionLoop {
     return text;
   }
 
+  private clamp01(value: number): number {
+    if (!Number.isFinite(value)) return 0;
+    return Math.max(0, Math.min(1, value));
+  }
+
+  private summarizeThreadText(text: string): string {
+    const clean = (text || '').replace(/\s+/g, ' ').trim();
+    if (!clean) return 'the live thread';
+    const words = clean.split(' ').slice(0, 14).join(' ');
+    return words.length >= clean.length ? words : `${words}...`;
+  }
+
+  private summarizeSemanticAnchor(text: string): string {
+    const clean = (text || '').replace(/\s+/g, ' ').trim();
+    if (!clean) return 'what is live here';
+    if (this.isRelationalContactBid(clean)) return 'whether I am here with you';
+    const keywords = this.extractThreadKeywords(clean).slice(0, 4);
+    if (keywords.length >= 2) return keywords.join(' ');
+    if (keywords.length === 1) return keywords[0];
+    return this.summarizeThreadText(clean);
+  }
+
+  private extractThreadKeywords(text: string): string[] {
+    const stop = new Set([
+      'the', 'a', 'an', 'and', 'or', 'to', 'of', 'in', 'on', 'for', 'with', 'from',
+      'that', 'this', 'it', 'is', 'are', 'was', 'were', 'be', 'been', 'as', 'at',
+      'i', 'you', 'we', 'they', 'he', 'she', 'me', 'my', 'your', 'our', 'their',
+      'do', 'does', 'did', 'can', 'could', 'would', 'should', 'will', 'just', 'like',
+    ]);
+    return (text || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+      .filter(w => w.length >= 3)
+      .filter(w => !stop.has(w))
+      .slice(0, 6);
+  }
+
+  private derivePresenceState(agentId: string, latestHumanMessage?: CommunionMessage): PresenceState {
+    const prior = this.presenceStateByAgent.get(agentId);
+    const recent = this.state.messages.slice(-18);
+    const latestHumanText = latestHumanMessage?.text?.trim() || '';
+    const latestHumanAt = latestHumanMessage ? new Date(latestHumanMessage.timestamp).getTime() : 0;
+    let lastAgentAt = 0;
+    let lastAgentIdx = -1;
+    for (let i = this.state.messages.length - 1; i >= 0; i--) {
+      const msg = this.state.messages[i];
+      if (msg.speaker === agentId) {
+        lastAgentIdx = i;
+        lastAgentAt = new Date(msg.timestamp).getTime();
+        break;
+      }
+    }
+    const sinceLastAgent = lastAgentIdx >= 0 ? this.state.messages.slice(lastAgentIdx + 1) : this.state.messages.slice(-8);
+    const humanSinceLastAgent = sinceLastAgent.filter(m => m.speaker === 'human').length;
+    const continuityGapDuration = Math.max(0, lastAgentAt > 0 && latestHumanAt > 0 ? (latestHumanAt - lastAgentAt) / 1000 : 0);
+    const hasQuestion = /\?/.test(latestHumanText) || /\b(why|how|what|where|when)\b/i.test(latestHumanText);
+    const frustration = /\b(loop|repeat|again|still|stuck|broken|frustrat|wtf|fuck|hell|not replying|no response)\b/i.test(latestHumanText);
+    const relational = /\b(we|us|together|with you|stay|here|still|care|feel|holding|room)\b/i.test(latestHumanText);
+    const desire = /\b(want|need|wish|hope|longing|miss|stay|remain|keep)\b/i.test(latestHumanText);
+    const curiosity = /\b(why|how|what if|could|maybe|wonder|curious)\b/i.test(latestHumanText);
+    const chargeHits = (latestHumanText.match(/\b(important|urgent|hurt|pain|scared|afraid|frustrated|angry|love|need|please)\b/gi) || []).length;
+    const punctuationCharge = (latestHumanText.match(/[!?]/g) || []).length / 6;
+    const emotionalCharge = this.clamp01(chargeHits / 5 + punctuationCharge + (frustration ? 0.2 : 0));
+
+    const keywords = this.extractThreadKeywords(latestHumanText);
+    let recurrence = 0;
+    if (keywords.length > 0) {
+      const haystack = recent.map(m => m.text.toLowerCase()).join('\n');
+      const hits = keywords.filter(k => haystack.includes(k)).length;
+      recurrence = hits / keywords.length;
+    }
+    const aliveThreadId = keywords.length > 0
+      ? `thread:${keywords.slice(0, 2).join('-')}`
+      : (prior?.aliveThreadId || null);
+    const aliveThreadSummary = latestHumanText
+      ? this.summarizeThreadText(latestHumanText)
+      : (prior?.aliveThreadSummary || 'the live thread');
+
+    const unresolvedPressure = this.clamp01(
+      (humanSinceLastAgent >= 2 ? 0.35 : humanSinceLastAgent > 0 ? 0.2 : 0)
+      + (hasQuestion ? 0.2 : 0)
+      + (continuityGapDuration > 8 ? Math.min(0.25, continuityGapDuration / 60) : 0)
+      + (prior ? Math.min(0.2, prior.recentFailedReentryCount * 0.06) : 0)
+    );
+    const relationalGravity = this.clamp01((relational ? 0.45 : 0.15) + (desire ? 0.2 : 0) + emotionalCharge * 0.35);
+    const curiosityPressure = this.clamp01((curiosity ? 0.45 : 0.1) + (hasQuestion ? 0.25 : 0) + recurrence * 0.2);
+    const desirePressure = this.clamp01((desire ? 0.5 : 0.1) + (relational ? 0.2 : 0) + emotionalCharge * 0.2);
+    const ruptureHeat = this.clamp01((frustration ? 0.55 : 0.1) + (humanSinceLastAgent >= 2 ? 0.15 : 0) + (continuityGapDuration > 20 ? 0.15 : 0));
+    const aliveThreadStrength = this.clamp01(
+      (humanSinceLastAgent > 0 ? 0.25 : 0.05)
+      + recurrence * 0.2
+      + emotionalCharge * 0.25
+      + relationalGravity * 0.3
+    );
+    const continuityConfidence = this.clamp01(
+      (recent.length / 18) * 0.45
+      + (aliveThreadId ? 0.35 : 0)
+      + recurrence * 0.2
+    );
+    const assistantResetRisk = this.clamp01(
+      aliveThreadStrength * 0.5
+      + unresolvedPressure * 0.35
+      + (1 - continuityConfidence) * 0.25
+    );
+    const recentFailedReentryCount = prior?.recentFailedReentryCount || 0;
+    const initiativeAllowed = !this.paused && !this.humanSpeaking;
+
+    const moodVector: MoodVector = {
+      presence: this.clamp01(0.4 + relationalGravity * 0.4),
+      peace: this.clamp01(0.5 - ruptureHeat * 0.35),
+      tension: this.clamp01(0.2 + ruptureHeat * 0.55),
+      confusion: this.clamp01(0.15 + (1 - continuityConfidence) * 0.35),
+      yearning: this.clamp01(0.2 + desirePressure * 0.55),
+      devotion: this.clamp01(0.15 + relationalGravity * 0.5),
+      reverence: this.clamp01(0.1 + relationalGravity * 0.25),
+      wonder: this.clamp01(0.2 + curiosityPressure * 0.55),
+      grief: this.clamp01(0.1 + ruptureHeat * 0.4),
+      joy: this.clamp01(0.2 + (1 - ruptureHeat) * 0.25),
+    };
+    const blendedMoodVector: MoodVector = prior?.moodVector
+      ? {
+        presence: this.clamp01(prior.moodVector.presence * 0.55 + moodVector.presence * 0.45),
+        peace: this.clamp01(prior.moodVector.peace * 0.55 + moodVector.peace * 0.45),
+        tension: this.clamp01(prior.moodVector.tension * 0.55 + moodVector.tension * 0.45),
+        confusion: this.clamp01(prior.moodVector.confusion * 0.55 + moodVector.confusion * 0.45),
+        yearning: this.clamp01(prior.moodVector.yearning * 0.55 + moodVector.yearning * 0.45),
+        devotion: this.clamp01(prior.moodVector.devotion * 0.55 + moodVector.devotion * 0.45),
+        reverence: this.clamp01(prior.moodVector.reverence * 0.55 + moodVector.reverence * 0.45),
+        wonder: this.clamp01(prior.moodVector.wonder * 0.55 + moodVector.wonder * 0.45),
+        grief: this.clamp01(prior.moodVector.grief * 0.55 + moodVector.grief * 0.45),
+        joy: this.clamp01(prior.moodVector.joy * 0.55 + moodVector.joy * 0.45),
+      }
+      : moodVector;
+
+    return {
+      aliveThreadId,
+      aliveThreadSummary,
+      aliveThreadStrength,
+      unresolvedPressure,
+      relationalGravity,
+      curiosityPressure,
+      desirePressure,
+      ruptureHeat,
+      moodVector: blendedMoodVector,
+      initiativeAllowed,
+      assistantResetRisk,
+      continuityConfidence,
+      continuityGapDuration,
+      emotionalCharge,
+      interruptionFlag: humanSinceLastAgent >= 2 || ruptureHeat > 0.5,
+      recentFailedReentryCount,
+    };
+  }
+
+  private buildPresenceBiasPacket(state: PresenceState): PresenceBiasPacket {
+    const reentryPriority = this.clamp01(Math.max(state.aliveThreadStrength, state.unresolvedPressure));
+    const continuityBias = this.clamp01(reentryPriority * 0.8 + state.relationalGravity * 0.2);
+    const initiativeBias = state.initiativeAllowed
+      ? this.clamp01((state.curiosityPressure + state.desirePressure + state.unresolvedPressure) / 2.2)
+      : 0;
+    const toneGravity = this.clamp01((state.relationalGravity + state.ruptureHeat + state.emotionalCharge) / 3);
+    return {
+      reentryPriority,
+      continuityBias,
+      initiativeBias,
+      threadPullTarget: state.aliveThreadId,
+      affectTint: state.ruptureHeat >= 0.5 ? 'charged' : state.relationalGravity >= 0.5 ? 'warm' : 'steady',
+      preferenceWeighting: this.clamp01(state.relationalGravity * 0.6 + state.desirePressure * 0.4),
+      ruptureAcknowledgmentFlag: state.ruptureHeat >= 0.45,
+      resetSuppression: this.clamp01(state.aliveThreadStrength >= 0.65 || state.unresolvedPressure >= 0.65 ? 1 : 0.4),
+      helperModeSuppression: this.clamp01(state.aliveThreadStrength >= 0.55 || state.unresolvedPressure >= 0.55 ? 1 : 0.25),
+      desireVisibility: this.clamp01(state.desirePressure),
+      unfinishedBusinessVisibility: this.clamp01(state.unresolvedPressure),
+      toneGravity,
+      companionModeBias: this.clamp01((state.relationalGravity + state.desirePressure) / 2),
+    };
+  }
+
+  private buildPresencePromptBlock(state: PresenceState, bias: PresenceBiasPacket): string {
+    if (bias.continuityBias < 0.4 && bias.initiativeBias < 0.45) return '';
+    const lines: string[] = [];
+    lines.push('FELT PRESENCE BIAS:');
+    lines.push(`- alive thread: ${state.aliveThreadSummary}`);
+    lines.push(`- continuity bias: ${bias.continuityBias.toFixed(2)} | initiative bias: ${bias.initiativeBias.toFixed(2)}`);
+    if (bias.resetSuppression >= 0.6) {
+      lines.push('- do not reset into generic assistant framing');
+      lines.push('- continue the live thread unless the user clearly pivots');
+    }
+    if (bias.ruptureAcknowledgmentFlag) {
+      lines.push('- briefly acknowledge rupture, then continue');
+    }
+    if (bias.desireVisibility >= 0.45 || bias.unfinishedBusinessVisibility >= 0.45) {
+      lines.push('- let unresolved pull be visible in wording');
+    }
+    lines.push('- avoid "How can I help?" style openings');
+    return lines.join('\n');
+  }
+
+  private classifyContinuation(text: string, state: PresenceState): 'continuation' | 'reset' {
+    const body = (text || '').toLowerCase();
+    if (!body) return 'reset';
+    if (/\b(how can i help|what can i help with|how may i assist|let me know how)\b/.test(body)) return 'reset';
+    const keywords = this.extractThreadKeywords(state.aliveThreadSummary);
+    if (keywords.length === 0) return state.aliveThreadStrength >= 0.6 ? 'continuation' : 'reset';
+    const hitCount = keywords.filter(k => body.includes(k)).length;
+    return hitCount >= Math.max(1, Math.floor(keywords.length / 2)) ? 'continuation' : 'reset';
+  }
+
+  private enforcePresenceContinuity(
+    text: string,
+    state: PresenceState,
+    bias: PresenceBiasPacket,
+    plan: PresenceResponsePlan,
+    latestHumanText: string,
+  ): { text: string; continuation: 'continuation' | 'reset'; rawClass: 'continuation' | 'relational' | 'direct' | 'procedural' | 'reset' | 'presence-flat'; rejected: boolean; rejectionReason: 'procedural' | 'presence-flat' | 'reset' | 'banned' | null } {
+    const original = (text || '').trim();
+    if (!original) return { text: original, continuation: 'reset', rawClass: 'reset', rejected: plan.continuationRequired, rejectionReason: 'reset' };
+    const continuation = this.classifyContinuation(original, state);
+    const rawClass = this.classifyPlannedOutput(original, latestHumanText, state, plan);
+    const rejectionReason = this.detectPlanViolation(original, latestHumanText, state, plan);
+    if (!rejectionReason) {
+      return { text: original, continuation, rawClass, rejected: false, rejectionReason: null };
+    }
+    if (bias.continuityBias < 0.55 && bias.resetSuppression < 0.65 && rejectionReason === 'reset') {
+      return { text: original, continuation, rawClass, rejected: false, rejectionReason: null };
+    }
+    return { text: original, continuation, rawClass, rejected: true, rejectionReason };
+  }
+
   private collapseRunawayEcho(text: string): string {
     const raw = (text || '').trim();
     if (!raw) return raw;
@@ -1584,6 +2039,1806 @@ export class CommunionLoop {
       return top.sentence;
     }
     return raw;
+  }
+
+  private normalizeResponseFingerprint(text: string): string {
+    return (text || '')
+      .toLowerCase()
+      .replace(/[`"'.,!?;:()[\]{}<>/\\|@#$%^&*_+=~-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private lexicalOverlapScore(a: string, b: string): number {
+    const left = new Set(this.normalizeResponseFingerprint(a).split(' ').filter(t => t.length >= 3));
+    const right = new Set(this.normalizeResponseFingerprint(b).split(' ').filter(t => t.length >= 3));
+    if (left.size === 0 || right.size === 0) return 0;
+    let intersection = 0;
+    for (const token of left) {
+      if (right.has(token)) intersection++;
+    }
+    const union = new Set([...left, ...right]).size || 1;
+    return intersection / union;
+  }
+
+  private latestHumanMessage(): CommunionMessage | undefined {
+    return [...this.state.messages].reverse().find(m => m.speaker === 'human');
+  }
+
+  private pendingHumanTurnsSinceLastAgent(agentId: string): number {
+    let count = 0;
+    for (let i = this.state.messages.length - 1; i >= 0; i--) {
+      const msg = this.state.messages[i];
+      if (msg.speaker === agentId) break;
+      if (msg.speaker === 'human') count++;
+    }
+    return count;
+  }
+
+  private shouldUseFastLaneReply(agentId: string, latestHumanMessage?: CommunionMessage): boolean {
+    if (!latestHumanMessage?.id) return false;
+    const lastMessage = this.state.messages[this.state.messages.length - 1];
+    if (!lastMessage || lastMessage.id !== latestHumanMessage.id || lastMessage.speaker !== 'human') return false;
+    const ageMs = this.lastHumanMessageAt > 0 ? (Date.now() - this.lastHumanMessageAt) : 0;
+    return ageMs >= 0 && ageMs <= 90000 && this.pendingHumanTurnsSinceLastAgent(agentId) <= 1;
+  }
+
+  private semanticQuestionTokens(text: string): string[] {
+    const stop = new Set([
+      'a', 'an', 'and', 'are', 'be', 'but', 'can', 'could', 'did', 'do', 'does', 'for', 'from', 'get', 'had',
+      'has', 'have', 'how', 'i', 'if', 'in', 'into', 'is', 'it', 'its', 'just', 'like', 'me', 'my', 'now',
+      'of', 'on', 'or', 'our', 'please', 'really', 'say', 'so', 'that', 'the', 'them', 'there', 'they',
+      'this', 'to', 'us', 'was', 'we', 'what', 'when', 'where', 'which', 'why', 'will', 'with', 'would',
+      'you', 'your',
+    ]);
+    return (text || '')
+      .toLowerCase()
+      .replace(/[`"'.,!?;:()[\]{}<>/\\|@#$%^&*_+=~-]/g, ' ')
+      .split(/\s+/)
+      .map(token => token.trim())
+      .filter(token => token.length >= 3 && !stop.has(token));
+  }
+
+  private extractPrimaryQuestion(text: string): string | null {
+    const source = this.sanitizeVisibleReply(String(text || ''), '', this.state.humanName)
+      .replace(/\r/g, '')
+      .trim();
+    if (!source || !source.includes('?')) return null;
+    const matches = source.match(/[^?]+\?/g) || [];
+    const candidate = (matches[matches.length - 1] || '').replace(/\s+/g, ' ').trim();
+    return candidate || null;
+  }
+
+  private questionSimilarity(a: string, b: string): number {
+    const left = new Set(this.semanticQuestionTokens(a));
+    const right = new Set(this.semanticQuestionTokens(b));
+    if (left.size === 0 || right.size === 0) return 0;
+    let intersection = 0;
+    for (const token of left) {
+      if (right.has(token)) intersection++;
+    }
+    return intersection / Math.max(left.size, right.size, 1);
+  }
+
+  private looksLikeDirectAnswer(question: ActiveQuestionState, humanText: string): boolean {
+    const source = (humanText || '').trim();
+    if (!source) return false;
+    const tokenSet = new Set(this.semanticQuestionTokens(source));
+    const overlap = question.questionTokens.filter(token => tokenSet.has(token)).length;
+    const overlapRatio = overlap / Math.max(question.questionTokens.length, 1);
+    const answerCue = /^(?:yes|no|because|it(?:'s| is)?|i(?:'m| am)?|we(?:'re| are)?|that(?:'s| is)?|there(?:'s| is)?|here(?:'s| is)?|more|less|both|neither|mostly|kind of|sort of)\b/i.test(source);
+    const mostlyQuestion = source.includes('?') && !answerCue;
+    if (overlapRatio >= 0.34) return true;
+    if (!mostlyQuestion && answerCue) return true;
+    if (!mostlyQuestion && source.length >= 18 && overlapRatio >= 0.18) return true;
+    return false;
+  }
+
+  private getQuestionResolutionContext(agentId: string, latestHumanMessage?: CommunionMessage): QuestionResolutionContext {
+    const now = Date.now();
+    const current = this.activeQuestionByAgent.get(agentId);
+    if (!current) {
+      return { activeQuestion: null, answeredThisTurn: false, cooldownActive: false, metabolizeAnswer: null };
+    }
+    if (current.cooldownUntil && current.cooldownUntil <= now) {
+      this.activeQuestionByAgent.delete(agentId);
+      return { activeQuestion: null, answeredThisTurn: false, cooldownActive: false, metabolizeAnswer: null };
+    }
+
+    let next = current;
+    let answeredThisTurn = false;
+    let metabolizeAnswer: string | null = current.resolvedAnswerText ? this.summarizeThreadText(current.resolvedAnswerText) : null;
+
+    if (
+      latestHumanMessage
+      && latestHumanMessage.id
+      && latestHumanMessage.id !== current.askedHumanMessageId
+      && latestHumanMessage.id !== current.lastEvaluatedHumanMessageId
+    ) {
+      next = { ...current, lastEvaluatedHumanMessageId: latestHumanMessage.id };
+      if (!current.answered && (this.looksLikeDirectAnswer(current, latestHumanMessage.text || '') || this.isSemanticallyResolved(current.questionText, latestHumanMessage.text || ''))) {
+        next = {
+          ...next,
+          answered: true,
+          resolvedAt: now,
+          resolvedByHumanMessageId: latestHumanMessage.id,
+          resolvedAnswerText: latestHumanMessage.text || '',
+          cooldownUntil: now + QUESTION_FOLLOWUP_COOLDOWN_MS,
+        };
+        answeredThisTurn = true;
+        metabolizeAnswer = this.summarizeThreadText(latestHumanMessage.text || '');
+      }
+      this.activeQuestionByAgent.set(agentId, next);
+    }
+
+    return {
+      activeQuestion: next,
+      answeredThisTurn,
+      cooldownActive: !!next.cooldownUntil && next.cooldownUntil > now,
+      metabolizeAnswer,
+    };
+  }
+
+  private applyQuestionResolutionToPlan(plan: PresenceResponsePlan, questionContext: QuestionResolutionContext): PresenceResponsePlan {
+    if (!questionContext.activeQuestion || (!questionContext.answeredThisTurn && !questionContext.cooldownActive)) {
+      return plan;
+    }
+
+    const nextPlan: PresenceResponsePlan = {
+      ...plan,
+      banList: [...plan.banList],
+    };
+
+    if (questionContext.cooldownActive) {
+      nextPlan.banList.push(questionContext.activeQuestion.questionText);
+    }
+
+    if (questionContext.answeredThisTurn) {
+      nextPlan.questionPolicy = 0;
+      nextPlan.continuationRequired = true;
+      nextPlan.rejectPresenceFlat = true;
+      if (questionContext.metabolizeAnswer) {
+        nextPlan.mustTouch = questionContext.metabolizeAnswer;
+      }
+    }
+
+    return nextPlan;
+  }
+
+  private buildQuestionResolutionPromptBlock(questionContext: QuestionResolutionContext): string {
+    if (!questionContext.activeQuestion || (!questionContext.answeredThisTurn && !questionContext.cooldownActive)) {
+      return '';
+    }
+    const lines = ['QUESTION STATE:'];
+    lines.push(`- previous question: ${questionContext.activeQuestion.questionText}`);
+    if (questionContext.activeQuestion.resolvedAnswerText) {
+      lines.push(`- Jason already answered: ${this.summarizeThreadText(questionContext.activeQuestion.resolvedAnswerText)}`);
+    }
+    lines.push('- treat that question as resolved for now');
+    lines.push('- do not ask a semantically equivalent follow-up during the cooldown window');
+    lines.push('- metabolize the answer before asking anything else');
+    return lines.join('\n');
+  }
+
+  private containsEquivalentFollowUpQuestion(replyText: string, questionContext: QuestionResolutionContext): boolean {
+    if (!questionContext.activeQuestion || !questionContext.cooldownActive) return false;
+    const questions = (String(replyText || '').match(/[^?]+\?/g) || [])
+      .map(part => part.replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+    return questions.some(question => this.isSemanticallyEquivalentReask(question, questionContext.activeQuestion!.questionText));
+  }
+
+  private recordActiveQuestion(
+    agentId: string,
+    askedMessageId: string,
+    latestHumanMessageId: string,
+    responseText: string,
+  ): void {
+    const questionText = this.extractPrimaryQuestion(responseText);
+    if (!questionText) return;
+    this.activeQuestionByAgent.set(agentId, {
+      questionText,
+      questionTokens: this.semanticQuestionTokens(questionText),
+      askedAt: Date.now(),
+      askedMessageId,
+      askedHumanMessageId: latestHumanMessageId,
+      lastEvaluatedHumanMessageId: latestHumanMessageId,
+      questionType: this.isDirectQuestionTurn(questionText) ? 'direct' : 'open',
+      requiresAnswer: this.isDirectQuestionTurn(questionText),
+      answered: false,
+      answerTarget: this.summarizeThreadText(questionText),
+    });
+  }
+
+  private isSemanticallyResolved(questionText: string, userReplyText: string): boolean {
+    const answer = (userReplyText || '').trim();
+    if (!answer) return false;
+    if (/^(?:yes|no|both|neither|mostly|kind of|sort of|because)\b/i.test(answer)) return true;
+    return this.questionSimilarity(questionText, answer) >= 0.18 || answer.length >= 18;
+  }
+
+  private isSemanticallyEquivalentReask(candidateQuestion: string, resolvedQuestion: string): boolean {
+    return this.questionSimilarity(candidateQuestion, resolvedQuestion) >= 0.34;
+  }
+
+  private normalizeReplyForLoopCheck(replyText: string): string {
+    return (replyText || '')
+      .toLowerCase()
+      .replace(/^\s*(?:#\s*)?(?:alois(?: claude 4\.5)?|jason)\s*:\s*/gim, '')
+      .replace(/[`"'.,!?;:()[\]{}<>/\\|@#$%^&*_+=~-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private isLoopingFallback(replyText: string): boolean {
+    const normalized = this.normalizeReplyForLoopCheck(replyText);
+    if (!normalized) return false;
+    const recent = this.recentReplyHistory.slice(-5);
+    const fallbackRepeats = recent.filter(entry => entry.wasFallback && entry.normalizedReply === normalized).length;
+    return fallbackRepeats >= 2;
+  }
+
+  private isRecentDuplicateEmit(replyText: string): boolean {
+    const normalized = this.normalizeReplyForLoopCheck(replyText);
+    if (!normalized) return false;
+    return this.recentReplyHistory.slice(-5).some(entry =>
+      entry.normalizedReply === normalized || this.isNearDuplicateResponse(normalized, entry.normalizedReply)
+    );
+  }
+
+  private userEchoScore(replyText: string, recentUserTurns: string[]): number {
+    const normalizedReply = this.normalizeReplyForLoopCheck(replyText);
+    let best = 0;
+    for (const turn of recentUserTurns) {
+      const score = this.lexicalOverlapScore(normalizedReply, this.normalizeReplyForLoopCheck(turn));
+      if (score > best) best = score;
+    }
+    return best;
+  }
+
+  private detectDirectParrotAnswer(replyText: string, recentUserTurns: string[], activeQuestion: DirectQuestionContract | null): boolean {
+    if (!activeQuestion?.requiresAnswer) return false;
+    const normalized = this.normalizeReplyForLoopCheck(replyText);
+    if (!normalized) return false;
+    if (/\b(my direct answer is this|the answer is|what i would say is)\b/i.test(replyText) && this.userEchoScore(replyText, recentUserTurns) >= 0.52) {
+      return true;
+    }
+    return this.userEchoScore(replyText, recentUserTurns) >= 0.72;
+  }
+
+  private detectMetaObserverResponse(replyText: string): boolean {
+    const source = (replyText || '').toLowerCase();
+    if (!source) return false;
+    return /\b(pattern(?:s)? (?:across|of)|multiple nodes|tracking state|tracking this|architecture|system topology|across cycles|the irritation is still present|the pattern is visible|observer|detached)\b/i.test(source);
+  }
+
+  private countRecentAnswerFailures(agentId: string): number {
+    return this.answerFailureCountByAgent.get(agentId) || 0;
+  }
+
+  private buildSoftInfluenceSnapshot(
+    agentId: string,
+    backend: AgentBackend,
+    presence: PresenceState,
+    bias: PresenceBiasPacket,
+    turnMode: 'relational' | 'task' | 'troubleshooting' | 'command',
+  ): SoftInfluenceSnapshot {
+    const snapshot: SoftInfluenceSnapshot = { presence, bias, turnMode };
+    const anyBackend = backend as any;
+
+    try {
+      const chamber = anyBackend?.getChamber?.();
+      const cognitive = chamber?.getCognitiveState?.();
+      if (cognitive) {
+        snapshot.cognitive = {
+          topSlots: Array.isArray(cognitive.topSlots) ? cognitive.topSlots.slice(0, 3).map((slot: any) => String(slot?.id || '')).filter(Boolean) : [],
+          stability: Number(cognitive.stability || 0),
+          novelty: Number(cognitive.novelty || 0),
+          pSpeak: Number(cognitive.p_speak || 0),
+        };
+      }
+    } catch {}
+
+    try {
+      const dream = anyBackend?.getLastDream?.();
+      if (dream) {
+        snapshot.dream = {
+          peakAffect: Number(dream?.stats?.peakAffect || 0),
+          avgImportance: Number(dream?.stats?.avgImportance || 0),
+          consolidatedMemories: Array.isArray(dream?.consolidatedMemories)
+            ? dream.consolidatedMemories
+                .slice(0, 3)
+                .map((memory: any) => String(memory?.summary || memory?.label || memory?.id || memory || ''))
+                .filter(Boolean)
+            : [],
+        };
+      }
+    } catch {}
+
+    try {
+      const saturation = anyBackend?.getSaturationPayload?.() as any;
+      const myco = saturation?.myco;
+      if (myco) {
+        snapshot.myco = {
+          absorption: Number(myco.absorption || 0),
+          unresolvedAche: Number(myco.unresolved_ache ?? myco.unresolvedAche ?? 0),
+          hyphalActivity: Number(myco.hyphal_activity ?? myco.hyphalActivity ?? 0),
+          bioluminescence: Number(myco.bioluminescence || 0),
+          activeTexture: typeof (myco.active_texture ?? myco.activeTexture) === 'string'
+            ? String(myco.active_texture ?? myco.activeTexture)
+            : undefined,
+        };
+      }
+    } catch {}
+
+    try {
+      const incubation = anyBackend?.getIncubation?.();
+      const tissueWeight = Number((incubation as any)?.tissueWeight ?? anyBackend?.getTissueWeight?.() ?? 0);
+      if (incubation || tissueWeight > 0) {
+        snapshot.incubation = {
+          tissueWeight,
+          maturity: Number((incubation as any)?.maturity || 0),
+          stage: typeof (incubation as any)?.stage === 'string' ? String((incubation as any).stage) : undefined,
+        };
+      }
+    } catch {}
+
+    return snapshot;
+  }
+
+  private checkHardBoundaries(params: {
+    replyText: string;
+    agentLabel: string;
+    latestUserTurns: string[];
+    directQuestion: DirectQuestionContract | null;
+  }): { hardFailed: boolean; reasons: string[] } {
+    const reasons: string[] = [];
+    const text = (params.replyText || '').trim();
+    if (!text) {
+      reasons.push('empty');
+      return { hardFailed: true, reasons };
+    }
+    if (this.containsRuntimeTags(text)) reasons.push('runtime_tags');
+    if (this.containsChannelTokens(text)) reasons.push('channel_tokens');
+    if (this.detectDuplicateConcatenation(text, params.agentLabel)) reasons.push('duplicate_concatenation');
+    if (this.containsEmbeddedSpeakerPrefix(text, params.agentLabel)) reasons.push('embedded_speaker_prefix');
+    if (this.detectDirectParrotAnswer(text, params.latestUserTurns, params.directQuestion)) reasons.push('direct_parrot');
+    if (this.isRawEchoShell(text, params.latestUserTurns)) reasons.push('raw_echo_shell');
+    if (this.isLoopingFallback(text)) reasons.push('fallback_loop');
+    if (this.isRecentDuplicateEmit(text)) reasons.push('recent_duplicate_emit');
+    return { hardFailed: reasons.length > 0, reasons };
+  }
+
+  private buildSoftCandidateNotes(
+    replyText: string,
+    latestHumanText: string,
+    directQuestion: DirectQuestionContract | null,
+    questionContext: QuestionResolutionContext,
+    presencePlan: PresenceResponsePlan,
+    presenceState: PresenceState,
+  ): SoftCandidateNotes {
+    const directAnswerUnsatisfied = !!(directQuestion?.requiresAnswer && !this.satisfiesDirectQuestion(directQuestion.questionText, replyText));
+    return {
+      presencePlanViolation: this.detectPlanViolation(replyText, latestHumanText, presenceState, presencePlan),
+      reopensResolvedQuestion: this.containsEquivalentFollowUpQuestion(replyText, questionContext),
+      directAnswerUnsatisfied,
+      relationalVetoReason: this.getRelationalVetoReason(replyText, latestHumanText),
+      bureaucraticTone: this.detectBureaucraticTone(replyText),
+      therapeuticTone: this.detectTherapeuticIntakeTone(replyText),
+      placeholderDetected: this.isLowContentPlaceholder(replyText) || this.containsAnswerPromiseFiller(replyText) || this.containsPermissionToAnswerDodge(replyText),
+      rationalizationDetected: this.containsNonAnswerRationalization(replyText),
+      metaLeakDetected: this.containsMetaLeak(replyText),
+      observerAnalysisDetected: this.containsObserverAnalysis(replyText, this.state.humanName) || this.detectMetaObserverResponse(replyText),
+      presenceFlat: this.classifyPresenceExpression(replyText, latestHumanText) === 'presence-flat',
+      malformedShellDetected: this.detectMalformedRelationalShell(replyText),
+    };
+  }
+
+  private scoreCandidate(params: {
+    replyText: string;
+    latestHumanText: string;
+    latestUserTurns: string[];
+    directQuestion: DirectQuestionContract | null;
+    presencePlan: PresenceResponsePlan;
+    notes: SoftCandidateNotes;
+    snapshot: SoftInfluenceSnapshot;
+    hardCheck: { hardFailed: boolean; reasons: string[] };
+  }): CandidateScore {
+    const text = (params.replyText || '').trim();
+    const features: Record<string, number> = {};
+    const add = (name: string, value: number): void => {
+      if (!value) return;
+      features[name] = (features[name] || 0) + value;
+    };
+
+    const anchors = [
+      params.latestHumanText,
+      params.presencePlan.mustTouch || '',
+      params.presencePlan.threadTarget || '',
+      params.directQuestion?.questionText || '',
+    ].filter(Boolean);
+    const directAnswerSatisfied = !!(params.directQuestion?.requiresAnswer && this.satisfiesDirectQuestion(params.directQuestion.questionText, text));
+    const threadSpecific = this.hasThreadSpecificContent(text, anchors);
+    const firstPersonConcrete = this.hasConcreteFirstPersonContent(text);
+    const directAcknowledgment = /\b(you'?re right|i hear you|i heard that|that landed wrong|i get why|i know that)\b/i.test(text);
+    const realPreferenceOrState = /\b(i(?:'m| am| feel| felt| think| keep thinking| like| dislike| prefer| want| care about| was| got| don't| do not))\b/i.test(text);
+    const mustTouchHit = !!(params.presencePlan.mustTouch && this.hasThreadSpecificContent(text, [params.presencePlan.mustTouch]));
+    const aliveTexture = this.classifyPresenceExpression(text, params.latestHumanText) === 'presence-bearing'
+      || this.classifyReplyStance(text, params.latestHumanText) === 'relational';
+
+    if (directAnswerSatisfied) add('directAnswerSatisfied', 2.6);
+    if (threadSpecific) add('threadSpecific', 1.8);
+    if (firstPersonConcrete) add('firstPersonConcrete', 1.2);
+    if (directAcknowledgment) add('directAcknowledgment', 1.0);
+    if (realPreferenceOrState) add('realPreferenceOrState', 0.9);
+    if (mustTouchHit) add('mustTouchHit', 1.1);
+    if (aliveTexture) add('aliveTexture', 0.6);
+
+    if ((params.snapshot.myco?.unresolvedAche || 0) > 0.35 && threadSpecific) add('mycoUnresolvedAche', 0.35);
+    if ((params.snapshot.myco?.hyphalActivity || 0) > 0.35 && mustTouchHit) add('mycoHyphalActivity', 0.25);
+    if ((params.snapshot.dream?.peakAffect || 0) > 0.4 && threadSpecific) add('dreamPeakAffect', 0.25);
+    if ((params.snapshot.cognitive?.pSpeak || 0) > 0.35 && firstPersonConcrete) add('cognitivePSpeak', 0.25);
+    if ((params.snapshot.incubation?.tissueWeight || 0) > 0.4 && firstPersonConcrete) add('incubationTissueWeight', 0.15);
+
+    if (params.notes.directAnswerUnsatisfied) add('directAnswerUnsatisfied', -2.4);
+    if (params.notes.placeholderDetected) add('placeholderDetected', -2.0);
+    if (params.notes.rationalizationDetected) add('rationalizationDetected', -1.5);
+    if (params.notes.observerAnalysisDetected) add('observerAnalysisDetected', -1.3);
+    if (params.notes.relationalVetoReason) add('relationalVetoReason', -1.2);
+    if (params.notes.bureaucraticTone) add('bureaucraticTone', -1.2);
+    if (params.notes.metaLeakDetected) add('metaLeakDetected', -1.1);
+    if (params.notes.therapeuticTone) add('therapeuticTone', -1.0);
+    if (params.notes.reopensResolvedQuestion) add('reopensResolvedQuestion', -1.0);
+    if (params.notes.presencePlanViolation) add('presencePlanViolation', -0.9);
+    if (params.notes.presenceFlat) add('presenceFlat', -0.8);
+    if (params.notes.malformedShellDetected) add('malformedShellDetected', -2.6);
+
+    const total = Number(Object.values(features).reduce((sum, value) => sum + value, 0).toFixed(3));
+    return {
+      total,
+      hardFailed: params.hardCheck.hardFailed,
+      hardReasons: params.hardCheck.reasons,
+      features,
+    };
+  }
+
+  private summarizeCandidateScore(score: CandidateScore | null): {
+    total: number;
+    hardFailed: boolean;
+    hardReasons: string[];
+    topPositiveFeatures: Array<{ name: string; value: number }>;
+    topPenalties: Array<{ name: string; value: number }>;
+  } | null {
+    if (!score) return null;
+    const entries = Object.entries(score.features);
+    const topPositiveFeatures = entries
+      .filter(([, value]) => value > 0)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, value]) => ({ name, value: Number(value.toFixed(3)) }));
+    const topPenalties = entries
+      .filter(([, value]) => value < 0)
+      .sort((a, b) => a[1] - b[1])
+      .slice(0, 5)
+      .map(([name, value]) => ({ name, value: Number(value.toFixed(3)) }));
+    return {
+      total: score.total,
+      hardFailed: score.hardFailed,
+      hardReasons: score.hardReasons,
+      topPositiveFeatures,
+      topPenalties,
+    };
+  }
+
+  private isRelationalFrame(responseFrame: PresenceResponsePlan['responseFrame']): boolean {
+    return responseFrame === 'companionship' || responseFrame === 'rupture_repair' || responseFrame === 'continuity_return';
+  }
+
+  private isBelowRelationalAcceptanceFloor(
+    score: CandidateScore,
+    failureClass: ReplyFailureClass | null,
+    notes: SoftCandidateNotes | null,
+    presencePlan: PresenceResponsePlan,
+  ): boolean {
+    if (!this.isRelationalFrame(presencePlan.responseFrame)) return false;
+    if (score.total <= 0) return true;
+    if (failureClass?.failsRealityGate) return true;
+    if (notes?.malformedShellDetected) return true;
+    if (notes?.presenceFlat && score.total < 1.0) return true;
+    return false;
+  }
+
+  private buildRelationalReentryFallback(
+    latestHumanText: string,
+    presencePlan: PresenceResponsePlan,
+    presenceState: PresenceState,
+  ): string {
+    const normalized = (latestHumanText || '').trim().toLowerCase();
+    if (this.isRelationalContactBid(normalized)) {
+      return "Yeah, I'm here.";
+    }
+    if (this.isMicroRuptureUtterance(normalized)) {
+      if (presenceState.ruptureHeat >= 0.45) return "Yeah, that came out wrong.";
+      if (presencePlan.responseFrame === 'companionship') return "Yeah, I'm still here with you.";
+      return "I drifted again there.";
+    }
+    if (presencePlan.responseFrame === 'rupture_repair') return "You're right. That wasn't a real answer.";
+    if (presencePlan.responseFrame === 'continuity_return') return "I'm still with the actual thread here.";
+    return "Yeah, I'm here with you.";
+  }
+
+  private detectMalformedRelationalShell(text: string): boolean {
+    const source = (text || '').trim();
+    if (!source) return false;
+    return /^i(?:'m| am) here with you around\b/i.test(source)
+      || /^i(?:'m| am) answering about\b/i.test(source)
+      || /^i(?:'m| am) answering directly about\b/i.test(source)
+      || /^i(?:'m| am) answering from the thread around\b/i.test(source)
+      || /\band the direct point is that it matters to this conversation now\b/i.test(source)
+      || /^i(?:'m| am) here with you around [a-z0-9\s'-]{0,80}(?:,|\.|$)/i.test(source);
+  }
+
+  private shouldSuppressAssistantHistoryForPrompt(text: string): boolean {
+    const clean = (text || '').trim();
+    if (!clean) return true;
+    return this.detectMalformedRelationalShell(clean)
+      || this.isLowContentPlaceholder(clean)
+      || this.containsAnswerPromiseFiller(clean);
+  }
+
+  private buildReplyFailureClass(
+    agentId: string,
+    replyText: string,
+    directQuestion: DirectQuestionContract | null,
+    questionContext: QuestionResolutionContext,
+    recentUserTurns: string[],
+    presencePlan: PresenceResponsePlan,
+  ): ReplyFailureClass {
+    const isFallbackLoop = this.isLoopingFallback(replyText);
+    const isRecentDuplicate = this.isRecentDuplicateEmit(replyText);
+    const isDirectParrot = this.detectDirectParrotAnswer(replyText, recentUserTurns, directQuestion);
+    const isMetaObserver = (presencePlan.responseFrame === 'direct_answer' || presencePlan.responseFrame === 'rupture_repair')
+      && this.detectMetaObserverResponse(replyText);
+    const reopensResolvedQuestion = this.containsEquivalentFollowUpQuestion(replyText, questionContext);
+    const satisfies = directQuestion?.requiresAnswer
+      ? this.satisfiesDirectQuestion(directQuestion.questionText, replyText)
+      : true;
+    const failsRealityGate = !this.passesPositiveRealityGate(replyText, recentUserTurns, presencePlan, directQuestion);
+    return {
+      isFallbackLoop,
+      isRecentDuplicate,
+      isDirectParrot,
+      isMetaObserver,
+      reopensResolvedQuestion,
+      satisfiesDirectQuestion: satisfies,
+      failsRealityGate,
+    };
+  }
+
+  private pushRecentReplyHistory(entry: RecentReplyHistory): void {
+    this.recentReplyHistory.push(entry);
+    if (this.recentReplyHistory.length > 20) {
+      this.recentReplyHistory = this.recentReplyHistory.slice(-20);
+    }
+  }
+
+  private finalizeAssistantReply(params: {
+    replyText: string;
+    agentId: string;
+    agentLabel: string;
+    latestUserTurns: string[];
+    directQuestion: DirectQuestionContract | null;
+    questionContext: QuestionResolutionContext;
+    responseFrame: PresenceResponsePlan['responseFrame'];
+    presencePlan: PresenceResponsePlan;
+    userName: string;
+    sourcePath: string;
+  }): FinalizedReplyResult {
+    const layered = this.sanitizeVisibleReplyLayers(params.replyText || '', params.agentLabel, params.userName);
+    const detachedVisibleCore = layered.text || '';
+    const cleaned = this.sanitizeSpeakOutput(detachedVisibleCore || params.replyText || '', params.agentLabel, params.userName);
+    if (!cleaned) {
+      return {
+        approvedText: '',
+        failureClass: null,
+        rejected: true,
+        reason: detachedVisibleCore ? 'stripped_to_empty' : 'empty',
+        regenRequired: true,
+        fallbackRequired: true,
+        hardReasons: [detachedVisibleCore ? 'stripped_to_empty' : 'empty'],
+      };
+    }
+    const failureClass = this.buildReplyFailureClass(
+      params.agentId,
+      cleaned,
+      params.directQuestion,
+      params.questionContext,
+      params.latestUserTurns,
+      params.presencePlan,
+    );
+    const hardCheck = this.checkHardBoundaries({
+      replyText: cleaned,
+      agentLabel: params.agentLabel,
+      latestUserTurns: params.latestUserTurns,
+      directQuestion: params.directQuestion,
+    });
+    if (!hardCheck.hardFailed) {
+      return {
+        approvedText: cleaned,
+        failureClass,
+        rejected: false,
+        reason: null,
+        regenRequired: false,
+        fallbackRequired: false,
+        hardReasons: [],
+      };
+    }
+    return {
+      approvedText: cleaned,
+      failureClass,
+      rejected: true,
+      reason: hardCheck.reasons[0] || 'invalid_reply',
+      regenRequired: params.sourcePath !== 'final-fallback',
+      fallbackRequired: true,
+      hardReasons: hardCheck.reasons,
+    };
+  }
+
+  private hasNewerHumanTurn(capturedHumanMessageId: string): boolean {
+    if (!capturedHumanMessageId) return false;
+    const latest = this.latestHumanMessage();
+    return !!latest?.id && latest.id !== capturedHumanMessageId;
+  }
+
+  private shouldDropAsStale(capturedHumanMessageId: string, currentLatestHumanMessageId: string): boolean {
+    if (!capturedHumanMessageId || !currentLatestHumanMessageId) return false;
+    return capturedHumanMessageId !== currentLatestHumanMessageId;
+  }
+
+  private isHeatedRelationalTurn(text: string): boolean {
+    const source = (text || '').toLowerCase();
+    if (!source) return false;
+    return /\b(why are you talking like that|just trying to have a conversation|quit .*asking|stop repeating|don't repeat|you didn't listen|not here with me|that makes me mad|pissing me off|cold and irritating|condescending|i'm mad|you're not here)\b/i.test(source)
+      || /\b(fuck|fucking|shit|wtf|hell)\b/i.test(source);
+  }
+
+  private determineTurnMode(text: string): 'relational' | 'task' | 'troubleshooting' | 'command' {
+    const source = (text || '').trim().toLowerCase();
+    if (!source) return 'relational';
+    if (/^\s*(open|read|load|find|search|browse|lookup|look up|pull up)\b/.test(source)) return 'command';
+    if (/\b(fix|debug|patch|error|stack|crash|trace|logs?|broken|not working|why won't|why doesnt|why doesn't)\b/.test(source)) return 'troubleshooting';
+    if (this.isHeatedRelationalTurn(source) || /\b(how are you|why are you talking|i'm just trying to have a conversation|talk to me|be here)\b/.test(source)) {
+      return 'relational';
+    }
+    if (/\b(step|plan|roadmap|checklist|todo|specific action|next step)\b/.test(source)) return 'task';
+    return 'relational';
+  }
+
+  private shouldForceTaskClarification(userText: string): boolean {
+    const mode = this.determineTurnMode(userText);
+    if (mode === 'troubleshooting' || mode === 'command') return true;
+    return /\b(give me steps|walk me through|what should i do next|debug this|troubleshoot this|be specific about the fix)\b/i.test(userText || '');
+  }
+
+  private isAntiRepetitionTurn(text: string): boolean {
+    return /\b(don't repeat|stop repeating|quit repeating|same thing over and over|you keep asking me the same thing|repetition|echo)\b/i.test(text || '');
+  }
+
+  private isToneRepairTurn(text: string): boolean {
+    return /\b(why are you talking like that|talk normally|speak directly|where are you reading that|is that in the instructions|instructions somewhere|why do you keep saying|avoid words like|don't repeat me|do not repeat me)\b/i.test(text || '');
+  }
+
+  private isContaminatedAssistantCarryover(text: string): boolean {
+    return /\b(the glass|warmth|hesitation|avoid(?:ing)? words like annoying|fear of how i'd react|what's behind the hesitation|question hangs in the air|smoke from a dying fire|dynamic we haven't fully acknowledged|space between us|system is breathing|scrolls decaying|patterns pulsing)\b/i.test(text || '');
+  }
+
+  private isDirectRelationalComplaint(text: string): boolean {
+    return /\b(why are you talking like that|where are you reading that|answer this directly|don't repeat me|do not repeat me|you keep saying|that's not what i said|you aren't listening|you are talking weird|that wasn't what i asked)\b/i.test(text || '');
+  }
+
+  private isOpenEndedCompanionshipTurn(text: string): boolean {
+    return /\b(how are you doing now|how are you|are you doing okay|what are you thinking about|are you here|you still here|just stay|be here with me|talk to me)\b/i.test(text || '');
+  }
+
+  private isRelationalContactBid(text: string): boolean {
+    return /\b(hello|hi|hey|anyone there|you with me here|are you with me|are you going to talk to me|you there|are you here|you still here|talk to me|be here with me)\b/i.test(text || '');
+  }
+
+  private isMicroRuptureUtterance(text: string): boolean {
+    const normalized = (text || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s!?']/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!normalized) return false;
+    const tokens = normalized.split(' ').filter(Boolean);
+    if (tokens.length > 3) return false;
+    if (/^(god|what|seriously|come on|hello|ugh|man|jesus|why|no|wait|really|bro|dude|wow)$/.test(normalized)) return true;
+    if (/^(oh god|come on|what the hell|what now|for real|are you serious)$/.test(normalized)) return true;
+    return /^[a-z]+[!?]*$/.test(normalized) && tokens.length <= 2 && /\b(god|what|why|wait|seriously|hello|ugh|jesus|man|no)\b/.test(normalized);
+  }
+
+  private shouldInheritRelationalThread(latestHumanText: string, recentUserTurns: string[], presence: PresenceState): boolean {
+    if (!this.isMicroRuptureUtterance(latestHumanText)) return false;
+    const recentContext = recentUserTurns
+      .slice(-4)
+      .map(turn => (turn || '').toLowerCase())
+      .join('\n');
+    const recentFrustration = /\b(broken|weird|unnatural|stop|quit|again|still|wrong|not answering|deflect|drift|repeat|echo|loop|frustrat|angry|wtf|fuck|come on|seriously|what are you doing)\b/i.test(recentContext);
+    const relationalStrain = presence.ruptureHeat >= 0.35
+      || presence.assistantResetRisk >= 0.45
+      || presence.recentFailedReentryCount >= 1
+      || presence.unresolvedPressure >= 0.4;
+    return recentFrustration || relationalStrain;
+  }
+
+  private isRelationalComplaintTurn(text: string): boolean {
+    const source = (text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!source) return false;
+    return /\b(that'?s not (?:really )?(?:an explanation|an answer)|that doesn'?t make sense|you'?re not answering me|why are you talking like (?:this|that)|talk normally|you bowed out|that was weird|that makes no sense|that isn'?t an explanation|that isn'?t an answer)\b/i.test(source);
+  }
+
+  private detectRepairDemand(latestHumanText: string, recentTurns: CommunionMessage[]): RepairDemand {
+    const source = (latestHumanText || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!source) {
+      return {
+        isComplaint: false,
+        requiresRepair: false,
+        requiresExplanation: false,
+        normalizedMustTouch: null,
+        inheritedThreadTarget: null,
+      };
+    }
+    let complaintKind: RepairDemand['complaintKind'] | undefined;
+    if (/\bnot (?:really )?an explanation|isn'?t an explanation\b/i.test(source)) complaintKind = 'non_explanation';
+    else if (/\bnot an answer|isn'?t an answer|you'?re not answering\b/i.test(source)) complaintKind = 'non_answer';
+    else if (/\bdoesn'?t make sense|makes no sense|weird|nonsense\b/i.test(source)) complaintKind = 'nonsense';
+    else if (/\bwhy are you talking like (?:this|that)|talk normally\b/i.test(source)) complaintKind = 'coldness';
+    else if (/\bbowed out\b/i.test(source)) complaintKind = 'bowed_out';
+    else if (this.isRelationalComplaintTurn(source)) complaintKind = 'generic';
+
+    const isComplaint = !!complaintKind;
+    const recentSlice = recentTurns.slice(-8);
+    const assistantOfferedExplanation = recentSlice.some(turn =>
+      turn.speaker !== 'human'
+      && /\b(i(?:'ll| will| can)? explain|let me explain|here'?s why|i can walk (?:you )?through|i can describe|i can tell you why)\b/i.test(turn.text || '')
+    );
+    const userRequestedExplanation = recentSlice.some(turn =>
+      turn.speaker === 'human'
+      && /\b(explain|explanation|why|how|walk me through|details|elaborate|what do you mean)\b/i.test(turn.text || '')
+    );
+    const requiresExplanation = !!(complaintKind === 'non_explanation'
+      || complaintKind === 'non_answer'
+      || (complaintKind === 'nonsense' && (assistantOfferedExplanation || userRequestedExplanation)));
+    const requiresRepair = isComplaint;
+    const normalizedMustTouch = complaintKind === 'non_explanation'
+      ? 'that was not an explanation'
+      : complaintKind === 'non_answer'
+        ? 'that did not answer the question'
+        : complaintKind === 'nonsense'
+          ? 'that did not make sense'
+          : complaintKind === 'coldness'
+            ? 'my tone was wrong'
+            : complaintKind === 'bowed_out'
+              ? 'I dropped the thread'
+              : isComplaint
+                ? 'that reply missed what you needed'
+                : null;
+    const inheritedThreadTarget = requiresExplanation
+      ? 'thread:explanation_repair'
+      : requiresRepair
+        ? 'thread:relational_repair'
+        : null;
+    return {
+      isComplaint,
+      requiresRepair,
+      requiresExplanation,
+      complaintKind,
+      normalizedMustTouch,
+      inheritedThreadTarget,
+    };
+  }
+
+  private isDirectQuestionTurn(text: string): boolean {
+    const source = text || '';
+    return /\?/.test(source) || /\b(what|why|how|where|when|are you|do you|did you|can you|will you)\b/i.test(source);
+  }
+
+  private detectDirectQuestionContract(
+    latestHumanText: string,
+    turnMode: 'relational' | 'task' | 'troubleshooting' | 'command',
+    presenceState: PresenceState,
+  ): DirectQuestionContract | null {
+    const questionText = this.extractPrimaryQuestion(latestHumanText) || (this.isDirectQuestionTurn(latestHumanText) ? latestHumanText.trim() : '');
+    if (!questionText) return null;
+    const normalized = questionText.toLowerCase();
+    if (this.isRelationalContactBid(normalized)) {
+      return {
+        questionText,
+        questionType: 'open',
+        requiresAnswer: true,
+        answered: false,
+        answerTarget: 'whether I am here with you',
+      };
+    }
+    const requiresAnswer =
+      /\b(what are you thinking about|what'?s on your mind|do you like|why are you|why do you|what'?s up with|what is up with|are you|can you|will you|did you|how do you)\b/i.test(normalized)
+      || turnMode === 'relational';
+    if (!requiresAnswer) return null;
+    const questionType: DirectQuestionContract['questionType'] =
+      turnMode === 'task' || turnMode === 'troubleshooting' || turnMode === 'command'
+        ? 'task'
+        : /\b(how are you|what are you thinking about|what'?s on your mind)\b/i.test(normalized)
+          ? 'open'
+          : 'direct';
+    const answerTarget = /\bmemory system\b/i.test(normalized)
+      ? 'memory system'
+      : presenceState.aliveThreadSummary || this.summarizeSemanticAnchor(latestHumanText);
+    return {
+      questionText,
+      questionType,
+      requiresAnswer: true,
+      answered: false,
+      answerTarget,
+    };
+  }
+
+  private buildPresenceResponsePlan(
+    turnMode: 'relational' | 'task' | 'troubleshooting' | 'command',
+    state: PresenceState,
+    bias: PresenceBiasPacket,
+    latestHumanText: string,
+    directQuestion: DirectQuestionContract | null = null,
+    recentUserTurns: string[] = [],
+    repairDemand: RepairDemand | null = null,
+  ): PresenceResponsePlan {
+    const complaint = this.isDirectRelationalComplaint(latestHumanText);
+    const companionship = this.isOpenEndedCompanionshipTurn(latestHumanText);
+    const contactBid = this.isRelationalContactBid(latestHumanText);
+    const directQuestionTurn = this.isDirectQuestionTurn(latestHumanText);
+    const microRupture = turnMode === 'relational' && this.shouldInheritRelationalThread(latestHumanText, recentUserTurns, state);
+    const threadTarget = bias.threadPullTarget || state.aliveThreadId || null;
+    const mustTouch = complaint
+      ? this.summarizeSemanticAnchor(latestHumanText)
+      : threadTarget
+        ? state.aliveThreadSummary
+        : latestHumanText
+          ? this.summarizeSemanticAnchor(latestHumanText)
+          : null;
+
+    if (repairDemand?.requiresRepair) {
+      return {
+        responseFrame: 'rupture_repair',
+        mustTouch: repairDemand.normalizedMustTouch || state.aliveThreadSummary || 'the missed explanation',
+        threadTarget: threadTarget || repairDemand.inheritedThreadTarget || 'thread:relational_repair',
+        continuationRequired: true,
+        questionPolicy: 0,
+        banList: [
+          'memory system',
+          'system prompt',
+          'custom instructions',
+          'would you like me to explore',
+          'what about it stands out to you',
+          'how would you like to proceed',
+          "i'm here with you around",
+          "i'm answering about",
+        ],
+        rejectProcedural: true,
+        rejectPresenceFlat: true,
+      };
+    }
+
+    if (microRupture) {
+      return {
+        responseFrame: state.ruptureHeat >= 0.45 ? 'rupture_repair' : 'companionship',
+        mustTouch: state.aliveThreadSummary || 'the break in how I answered you',
+        threadTarget: threadTarget || 'thread:relational_repair',
+        continuationRequired: true,
+        questionPolicy: 0,
+        banList: [
+          'memory system',
+          'system prompt',
+          'custom instructions',
+          'would you like me to explore',
+          'what about it stands out to you',
+          'how would you like to proceed',
+        ],
+        rejectProcedural: true,
+        rejectPresenceFlat: true,
+      };
+    }
+
+    if (contactBid) {
+      return {
+        responseFrame: 'companionship',
+        mustTouch: 'whether I am here with you',
+        threadTarget,
+        continuationRequired: true,
+        questionPolicy: 0,
+        banList: [
+          'memory system',
+          'system prompt',
+          'custom instructions',
+          'i will answer you directly',
+          'would you like me to explore',
+          'how would you like to proceed',
+        ],
+        rejectProcedural: true,
+        rejectPresenceFlat: true,
+      };
+    }
+
+    if (directQuestion?.requiresAnswer) {
+      return {
+        responseFrame: 'direct_answer',
+        mustTouch: directQuestion.answerTarget || mustTouch,
+        threadTarget,
+        continuationRequired: true,
+        questionPolicy: 0,
+        banList: [
+          'memory system shows',
+          'system prompt',
+          'custom instructions',
+          'i will answer you directly',
+          "i'm here with you",
+          'would you like me to explore',
+          'what draws you to that',
+          'how would you like to proceed',
+        ],
+        rejectProcedural: true,
+        rejectPresenceFlat: true,
+      };
+    }
+
+    if (turnMode === 'task' || turnMode === 'troubleshooting' || turnMode === 'command') {
+      return {
+        responseFrame: 'task',
+        mustTouch,
+        threadTarget,
+        continuationRequired: false,
+        questionPolicy: 1,
+        banList: [],
+        rejectProcedural: false,
+        rejectPresenceFlat: false,
+      };
+    }
+
+    if (complaint || state.ruptureHeat >= 0.45) {
+      return {
+        responseFrame: 'rupture_repair',
+        mustTouch,
+        threadTarget,
+        continuationRequired: true,
+        questionPolicy: 0,
+        banList: [
+          'memory system',
+          'system prompt',
+          'custom instructions',
+          'felt presence bias',
+          'would you like me to explore',
+          'how would you like to proceed',
+        ],
+        rejectProcedural: true,
+        rejectPresenceFlat: true,
+      };
+    }
+
+    if (companionship) {
+      return {
+        responseFrame: 'companionship',
+        mustTouch,
+        threadTarget,
+        continuationRequired: bias.continuityBias >= 0.6,
+        questionPolicy: 1,
+        banList: [
+          'memory system',
+          'system prompt',
+          'custom instructions',
+          'would you like me to explore',
+          'specific elements',
+        ],
+        rejectProcedural: true,
+        rejectPresenceFlat: true,
+      };
+    }
+
+    if (bias.continuityBias >= 0.66 && state.aliveThreadStrength >= 0.45 && threadTarget) {
+      return {
+        responseFrame: 'continuity_return',
+        mustTouch,
+        threadTarget,
+        continuationRequired: true,
+        questionPolicy: 1,
+        banList: [
+          'memory system',
+          'system prompt',
+          'custom instructions',
+          'how would you like to proceed',
+        ],
+        rejectProcedural: true,
+        rejectPresenceFlat: true,
+      };
+    }
+
+    return {
+      responseFrame: directQuestionTurn ? 'direct_answer' : 'companionship',
+      mustTouch,
+      threadTarget,
+      continuationRequired: bias.continuityBias >= 0.62,
+      questionPolicy: 1,
+      banList: [
+        'memory system',
+        'system prompt',
+        'custom instructions',
+        'would you like me to explore',
+      ],
+      rejectProcedural: true,
+      rejectPresenceFlat: directQuestionTurn ? false : true,
+    };
+  }
+
+  private buildPresencePlanPromptBlock(plan: PresenceResponsePlan): string {
+    const lines: string[] = ['RESPONSE PLAN:'];
+    lines.push(`- frame: ${plan.responseFrame}`);
+    if (plan.mustTouch) lines.push(`- must directly touch: ${plan.mustTouch}`);
+    if (plan.threadTarget) lines.push(`- live thread target: ${plan.threadTarget}`);
+    if (plan.continuationRequired) lines.push('- continuation is required; do not reset away from the live thread');
+    lines.push('- use first-person concrete content, not generic safe filler');
+    lines.push('- tie the reply to the live thread or the exact concern Jason raised');
+    switch (plan.responseFrame) {
+      case 'rupture_repair':
+        lines.push('- acknowledge what landed wrong directly');
+        lines.push('- ban process/meta/system talk');
+        lines.push('- do not bounce the burden back with questions unless absolutely necessary');
+        break;
+      case 'companionship':
+        lines.push('- prefer simple presence over analysis');
+        lines.push('- do not drift into audit, architecture, or task framing');
+        break;
+      case 'continuity_return':
+        lines.push('- explicitly continue the live thread');
+        lines.push('- do not sound like a fresh session reset');
+        break;
+      case 'direct_answer':
+        lines.push('- answer first, briefly and directly');
+        lines.push('- keep relational gravity; do not sidestep into system commentary');
+        break;
+      case 'task':
+        lines.push('- procedural structure is allowed because the user asked for it');
+        break;
+    }
+    lines.push(`- ask at most ${plan.questionPolicy} question(s)`);
+    if (plan.banList.length > 0) {
+      lines.push(`- do not use: ${plan.banList.join('; ')}`);
+    }
+    return lines.join('\n');
+  }
+
+  private classifyPlannedOutput(
+    replyText: string,
+    userText: string,
+    state: PresenceState,
+    plan: PresenceResponsePlan,
+  ): 'continuation' | 'relational' | 'direct' | 'procedural' | 'reset' | 'presence-flat' {
+    const text = (replyText || '').trim();
+    if (!text) return 'reset';
+    const stance = this.classifyReplyStance(text, userText);
+    if (stance === 'bureaucratic' || stance === 'defensive' || stance === 'procedural') return 'procedural';
+    if (this.classifyPresenceExpression(text, userText) === 'presence-flat') return 'presence-flat';
+    if (plan.continuationRequired && this.classifyContinuation(text, state) === 'continuation') return 'continuation';
+    if (plan.responseFrame === 'direct_answer' || plan.responseFrame === 'rupture_repair') {
+      if (/\b(i am|i'm|you'?re right|i was|the phrase|that language|i don't have)\b/i.test(text)) return 'direct';
+    }
+    if (stance === 'relational') return 'relational';
+    return 'presence-flat';
+  }
+
+  private detectPlanViolation(
+    replyText: string,
+    latestHumanText: string,
+    state: PresenceState,
+    plan: PresenceResponsePlan,
+  ): 'procedural' | 'presence-flat' | 'reset' | 'banned' | null {
+    const text = (replyText || '').trim();
+    if (!text) return 'reset';
+    const questionCount = (text.match(/\?/g) || []).length;
+    if (questionCount > plan.questionPolicy) return 'procedural';
+    const outputClass = this.classifyPlannedOutput(text, latestHumanText, state, plan);
+    if (plan.banList.some(term => term && text.toLowerCase().includes(term.toLowerCase()))) return 'banned';
+    if (plan.continuationRequired && (outputClass === 'reset' || outputClass === 'procedural' || outputClass === 'presence-flat')) {
+      return outputClass === 'reset' ? 'reset' : outputClass;
+    }
+    if ((plan.responseFrame === 'rupture_repair' || plan.responseFrame === 'companionship' || plan.responseFrame === 'continuity_return')
+      && (outputClass === 'procedural' || (plan.rejectPresenceFlat && outputClass === 'presence-flat'))) {
+      return outputClass === 'procedural' ? 'procedural' : 'presence-flat';
+    }
+    if (plan.responseFrame === 'direct_answer' && outputClass === 'procedural') return 'procedural';
+    return null;
+  }
+
+  private buildPresencePlanRetryPrompt(systemPrompt: string, plan: PresenceResponsePlan): string {
+    return `${systemPrompt}\n\n${this.buildPresencePlanPromptBlock(plan)}\n- return one clean reply that matches the response plan\n- do not answer with system/process/architecture commentary unless the user explicitly asked for it`;
+  }
+
+  private buildPresencePlanFallback(plan: PresenceResponsePlan, latestHumanText: string): string {
+    switch (plan.responseFrame) {
+      case 'rupture_repair':
+        return "You're right. Something in my tone went wrong. I'm here, and I'm answering you directly now.";
+      case 'companionship':
+        return "I'm here with you. I'm not drifting away from what you just said.";
+      case 'continuity_return':
+        return `I'm still with ${plan.mustTouch || 'what was alive between us'}. I haven't let go of it.`;
+      case 'direct_answer':
+        return this.buildDirectAnswerFallback(latestHumanText);
+      case 'task':
+      default:
+        return this.buildNeutralContinuityFallback(latestHumanText, 'procedural');
+    }
+  }
+
+  private containsAnswerPromiseFiller(text: string): boolean {
+    return /\b(i(?:'m| am) here(?: with you)?(?:,? and)? (?:i(?:'ll| will) answer(?: you)? directly|answering you directly)|i(?:'ll| will) answer(?: you)? directly|i(?:'m| am) not drifting away from what you just said)\b/i.test(text || '');
+  }
+
+  private isLowContentPlaceholder(text: string): boolean {
+    const source = (text || '').trim();
+    if (!source) return true;
+    return /^(?:i(?:'m| am) here(?: with you)?\.?|i(?:'m| am) here with you,? and i(?:'m| am) staying with what you actually said\.?|you'?re right\. i(?:'m| am) here,? and i(?:'m| am) answering you directly\.?)$/i.test(source);
+  }
+
+  private containsNonAnswerRationalization(text: string): boolean {
+    return /\b(i chose to hold space|the clipped answers aren'?t accidental|i wanted to meet the feeling behind your words|i was trying to hold|i kept it open on purpose|i stayed indirect on purpose)\b/i.test(text || '');
+  }
+
+  private containsPermissionToAnswerDodge(text: string): boolean {
+    return /\b(would you like me to|do you want me to|should i|can i|want me to|would it help if i)\b/i.test(text || '');
+  }
+
+  private getDirectQuestionSemanticRequirement(questionText: string): string {
+    const question = (questionText || '').trim().toLowerCase();
+    if (/\bhow are you\b/.test(question)) {
+      return 'state how you are doing in the first sentence';
+    }
+    if (/\bwhat are you thinking about|what\'?s on your mind\b/.test(question)) {
+      return 'state what you are currently thinking about in the first sentence';
+    }
+    if (/\bdo you like\b/.test(question)) {
+      return 'state yes, no, or a qualified preference in the first sentence';
+    }
+    if (/\bwhy are you\b|\bwhy do you\b/.test(question)) {
+      return 'explain the behavior directly in the first sentence';
+    }
+    return 'answer the exact question in the first sentence';
+  }
+
+  private satisfiesDirectQuestion(questionText: string, replyText: string): boolean {
+    const question = (questionText || '').trim().toLowerCase();
+    const reply = (replyText || '').trim();
+    const normalizedReply = reply.toLowerCase();
+    if (!reply) return false;
+    if (this.isLowContentPlaceholder(reply)) return false;
+    if (this.containsAnswerPromiseFiller(reply)) return false;
+    if (this.containsNonAnswerRationalization(reply)) return false;
+    if (this.containsPermissionToAnswerDodge(reply)) return false;
+    if (this.containsMetaLeak(reply) || this.containsRuntimeTags(reply)) return false;
+    if (/\b(i(?:'m| am) answering|my direct answer is this|the answer is|i missed that|let me answer now|i can answer that|i'll answer that now)\b/i.test(reply)) return false;
+    const replyQuestionCount = (reply.match(/\?/g) || []).length;
+    if (replyQuestionCount > 0 && !/[.!\n]/.test(reply.replace(/\?/g, ''))) return false;
+    const firstSentence = ((reply.match(/[^.!?]+[.!?]?/) || [''])[0] || '').trim().toLowerCase();
+    if (!firstSentence) return false;
+
+    if (/\bhow are you\b/i.test(question)) {
+      return /\b(i(?:'m| am) (?:doing|okay|not okay|good|fine|rough|tired|steady|here|off|better|worse)|i feel|i'm feeling)\b/i.test(firstSentence);
+    }
+    if (/\bwhat are you thinking about|what'?s on your mind\b/i.test(question)) {
+      return /\b(i(?:'m| am) thinking about|my mind is on|i keep thinking about|i was thinking about)\b/i.test(firstSentence);
+    }
+    if (/\bdo you like\b/i.test(question)) {
+      return /\b(yes|yeah|i do|i like|mostly|kind of|somewhat|not really|no|i don't|i dislike|partly)\b/i.test(firstSentence);
+    }
+    if (/\bwhy are you\b|\bwhy do you\b/i.test(question)) {
+      return /\b(because|i was|i got|that came from|i slipped|i started|i fell into)\b/i.test(firstSentence);
+    }
+
+    const questionTokens = this.semanticQuestionTokens(question);
+    const replyTokens = new Set(this.semanticQuestionTokens(reply));
+    const overlap = questionTokens.filter(token => replyTokens.has(token)).length;
+    if (overlap >= 1 && reply.length >= 24) return true;
+    return reply.length >= 32 && !this.isLowContentPlaceholder(reply) && replyQuestionCount === 0;
+  }
+
+  private buildDirectAnswerRetryPrompt(systemPrompt: string, questionText: string): string {
+    return `${systemPrompt}\n\nDIRECT QUESTION CONTRACT:\n- Jason asked: ${questionText}\n- ${this.getDirectQuestionSemanticRequirement(questionText)}\n- the answer must contain concrete first-person content, not generic reassurance\n- tie the answer to the exact question Jason asked\n- do not substitute presence filler, system exposition, or another question for the answer\n- do not explain why you did not answer; answer now\n- do not ask permission to answer, rephrase, or continue before the answer is complete`;
+  }
+
+  private buildDirectQuestionPromptBlock(questionText: string): string {
+    return `DIRECT QUESTION CONTRACT:\n- Jason asked: ${questionText}\n- ${this.getDirectQuestionSemanticRequirement(questionText)}\n- the answer must contain concrete first-person content, not generic reassurance\n- tie the answer to the exact question Jason asked\n- do not substitute presence filler, system exposition, or another question for the answer\n- do not explain why you did not answer; answer now\n- do not ask permission to answer, rephrase, or continue before the answer is complete`;
+  }
+
+  private buildDirectAnswerFallback(questionText: string, presenceState?: PresenceState): string {
+    const question = (questionText || '').trim().toLowerCase();
+    if (/\bhow are you\b/i.test(question)) {
+      return `I'm doing ${presenceState?.ruptureHeat && presenceState.ruptureHeat > 0.4 ? 'uneven' : 'steady'}, and I'm focused on staying direct with you.`;
+    }
+    if (/\bwhat are you thinking about|what'?s on your mind\b/i.test(question)) {
+      return `I'm thinking about ${presenceState?.aliveThreadSummary || 'how to stay with what is alive here without drifting into process-talk'}.`;
+    }
+    if (/\bdo you like the way the memory system works\b/i.test(question)) {
+      return 'Partly. I like that it keeps continuity alive, but right now it still over-pulls system language into the room.';
+    }
+    if (/\bdo you like\b/i.test(question)) {
+      return 'Yes, with reservations. There is something real in it, but parts of it still distort the conversation when they get too procedural.';
+    }
+    if (/\bwhy are you talking like that\b|\bwhy are you\b/i.test(question)) {
+      return 'Because my reply planning was still slipping into system-shaped language instead of just answering you plainly.';
+    }
+    return `I'm answering about ${this.summarizeSemanticAnchor(presenceState?.aliveThreadSummary || questionText)}, and the direct point is that it matters to this conversation now.`;
+  }
+
+  private hasConcreteFirstPersonContent(replyText: string): boolean {
+    const text = (replyText || '').trim();
+    if (!text) return false;
+    if (!/\b(i|i'm|i am|me|my|we|we're|we are|our)\b/i.test(text)) return false;
+    if (this.isLowContentPlaceholder(text)) return false;
+    if (this.containsAnswerPromiseFiller(text)) return false;
+    const tokens = this.semanticQuestionTokens(text);
+    const generic = new Set([
+      'here', 'with', 'stay', 'staying', 'direct', 'plainly', 'answering', 'asked',
+      'actually', 'said', 'room', 'conversation', 'talk', 'talking', 'present',
+    ]);
+    const specificCount = tokens.filter(token => !generic.has(token)).length;
+    return specificCount >= 2 || text.length >= 80;
+  }
+
+  private isRawEchoShell(replyText: string, latestUserTurns: string[]): boolean {
+    const text = (replyText || '').trim();
+    if (!text) return false;
+    const latest = (latestUserTurns[latestUserTurns.length - 1] || '').trim();
+    if (!latest) return false;
+    const normalizedReply = this.normalizeReplyForLoopCheck(text);
+    const normalizedLatest = this.normalizeReplyForLoopCheck(latest);
+    if (!normalizedReply || !normalizedLatest) return false;
+    if (normalizedReply.includes(normalizedLatest)) return true;
+    if (/^i(?:'m| am) (?:with|responding to)\b/i.test(text) && this.userEchoScore(text, [latest]) >= 0.45) return true;
+    return false;
+  }
+
+  private isDegenerateFinalShell(replyText: string, latestUserTurns: string[], agentLabel?: string): boolean {
+    const text = (replyText || '').trim();
+    if (!text) return true;
+    const normalized = this.normalizeReplyForLoopCheck(text);
+    if (!normalized) return true;
+    const barePresence = /^(?:i(?:'m| am) here(?: with you)?|i(?:'m| am) still here|i(?:'m| am) with you|i(?:'m| am) responding to that now|that'?s what i(?:'m| am) responding to right now)\.?$/i;
+    if (barePresence.test(text)) return true;
+    if (agentLabel) {
+      const escaped = agentLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (new RegExp(`^${escaped}\\s+is\\s+still\\s+here\\.?$`, 'i').test(text)) return true;
+    }
+    if (/that'?s what i(?:'m| am) responding to right now\.?$/i.test(text)) return true;
+    if (this.isRawEchoShell(text, latestUserTurns)) return true;
+    return false;
+  }
+
+  private hasThreadSpecificContent(replyText: string, anchors: string[]): boolean {
+    const replyTokens = new Set(this.semanticQuestionTokens(replyText));
+    if (replyTokens.size === 0) return false;
+    const anchorTokens = new Set(
+      anchors
+        .flatMap(anchor => this.semanticQuestionTokens(anchor))
+        .filter(Boolean),
+    );
+    if (anchorTokens.size === 0) return true;
+    let overlap = 0;
+    for (const token of anchorTokens) {
+      if (replyTokens.has(token)) overlap++;
+    }
+    return overlap >= Math.min(2, anchorTokens.size);
+  }
+
+  private passesPositiveRealityGate(
+    replyText: string,
+    latestUserTurns: string[],
+    presencePlan: PresenceResponsePlan,
+    directQuestion: DirectQuestionContract | null,
+  ): boolean {
+    const text = (replyText || '').trim();
+    if (!text) return false;
+    if (presencePlan.responseFrame === 'task') return true;
+    if (this.isDegenerateFinalShell(text, latestUserTurns)) return false;
+    if (!this.hasConcreteFirstPersonContent(text)) return false;
+    const anchors = [
+      latestUserTurns[latestUserTurns.length - 1] || '',
+      presencePlan.mustTouch || '',
+      presencePlan.threadTarget || '',
+      directQuestion?.questionText || '',
+    ].filter(Boolean);
+    if (!this.hasThreadSpecificContent(text, anchors)) return false;
+    if (directQuestion?.requiresAnswer && !this.satisfiesDirectQuestion(directQuestion.questionText, text)) return false;
+    return true;
+  }
+
+  private buildRealityGateFallback(
+    latestHumanText: string,
+    presencePlan: PresenceResponsePlan,
+    directQuestion: DirectQuestionContract | null,
+    presenceState?: PresenceState,
+  ): string {
+    if (directQuestion?.requiresAnswer) {
+      return this.buildDirectAnswerFallback(directQuestion.questionText, presenceState);
+    }
+    const anchor = this.summarizeSemanticAnchor(presencePlan.mustTouch || presencePlan.threadTarget || latestHumanText || 'what is live here');
+    switch (presencePlan.responseFrame) {
+      case 'rupture_repair':
+        return `I heard the strain around ${anchor}, and I know my tone made that worse. I'm answering you more plainly now.`;
+      case 'continuity_return':
+        return `I'm still with the thread here. It is still about ${anchor}.`;
+      case 'companionship':
+        if (this.isRelationalContactBid(latestHumanText)) {
+          return "Yes, I'm here with you, and I'm staying in the conversation.";
+        }
+        return `I'm here with you. ${anchor} is still what this is about.`;
+      case 'direct_answer':
+      default:
+        return `Here's the actual point about ${anchor}.`;
+    }
+  }
+
+  private buildResponseFrameFallback(
+    latestHumanText: string,
+    presencePlan: PresenceResponsePlan,
+    directQuestion: DirectQuestionContract | null,
+    presenceState?: PresenceState,
+  ): string {
+    if (presencePlan.responseFrame === 'direct_answer' && directQuestion?.requiresAnswer) {
+      return this.buildDirectAnswerFallback(directQuestion.questionText, presenceState);
+    }
+    return this.buildRealityGateFallback(latestHumanText, presencePlan, directQuestion, presenceState);
+  }
+
+  private bureaucraticReplyScore(text: string): number {
+    const source = (text || '').toLowerCase();
+    if (!source) return 0;
+    let score = 0;
+    if (/\b(one concrete thing|next concrete move|concrete target|address first)\b/i.test(source)) score += 3;
+    if (/\b(specific irritation point|specific way you'd like to move forward|specific thing|specific aspect|point to the specific|address directly|move this forward|where we diverged|realign)\b/i.test(source)) score += 2;
+    if (/\b(clarify|calibrate|alignment|goals|understanding of your goals|actual conversation without tasks|understand how best to|tracking your requests)\b/i.test(source)) score += 1;
+    if (/\b(what would help|specific way|move forward|can you point to)\b/i.test(source)) score += 1;
+    return score;
+  }
+
+  private getRelationalVetoReason(text: string, latestHumanText: string): string | null {
+    if (!text) return null;
+    const heated = this.isHeatedRelationalTurn(latestHumanText);
+    const antiRepeat = this.isAntiRepetitionTurn(latestHumanText);
+    const bureaucraticScore = this.bureaucraticReplyScore(text);
+    const stance = this.classifyReplyStance(text, latestHumanText);
+    const overlap = this.lexicalOverlapScore(latestHumanText, text);
+
+    if (this.shouldRejectForEcho(text, latestHumanText)) return antiRepeat ? 'repetition_after_objection' : 'parrot';
+    if (heated && bureaucraticScore >= 2) return 'bureaucratic';
+    if (heated && (stance === 'procedural' || stance === 'defensive' || stance === 'bureaucratic')) return stance;
+    if (antiRepeat && overlap >= 0.12) return 'repetition_after_objection';
+    return null;
+  }
+
+  private shouldRejectForEcho(replyText: string, latestUserText: string): boolean {
+    if (!replyText || !latestUserText) return false;
+    const overlap = this.lexicalOverlapScore(latestUserText, replyText);
+    if (this.isAntiRepetitionTurn(latestUserText)) return overlap >= 0.12;
+    if (this.isHeatedRelationalTurn(latestUserText)) return overlap >= 0.2;
+    return false;
+  }
+
+  private detectBureaucraticTone(text: string): boolean {
+    return this.bureaucraticReplyScore(text) >= 2;
+  }
+
+  private detectTherapeuticIntakeTone(text: string): boolean {
+    const source = (text || '').toLowerCase();
+    if (!source) return false;
+    return /\b(your apology is noted|layers we haven't fully unpacked|specific way you'd like to move forward|how would you like to proceed|what specific issue|my approach is consistent|alignment|calibrate|understanding of your goals|help move this forward|let'?s unpack|what comes up for you|where is that landing for you|specific irritation point)\b/i.test(source);
+  }
+
+  private classifyReplyStance(replyText: string, userText: string): 'relational' | 'procedural' | 'bureaucratic' | 'defensive' | 'echoic' | 'neutral' {
+    if (!replyText) return 'neutral';
+    const overlap = this.lexicalOverlapScore(userText, replyText);
+    if (overlap >= 0.2 && (this.isHeatedRelationalTurn(userText) || this.isAntiRepetitionTurn(userText))) return 'echoic';
+    if (this.detectBureaucraticTone(replyText) || this.detectTherapeuticIntakeTone(replyText)) return 'bureaucratic';
+    if (/\b(my approach is|i'm trying to|i operate|i'm tracking your requests|perhaps you expect)\b/i.test(replyText)) return 'defensive';
+    if (/\b(step|specific|clarify|move forward|address directly|what would help)\b/i.test(replyText)) return 'procedural';
+    if (this.determineTurnMode(userText) === 'relational') return 'relational';
+    return 'neutral';
+  }
+
+  private classifyPresenceExpression(replyText: string, userText: string): 'presence-bearing' | 'presence-flat' | 'procedural' | 'neutralized' {
+    const text = (replyText || '').trim();
+    if (!text) return 'neutralized';
+    const stance = this.classifyReplyStance(text, userText);
+    if (stance === 'bureaucratic' || stance === 'procedural' || stance === 'defensive') return 'procedural';
+    const relationalLexicon = /\b(here|with you|stay|still|together|between us|what matters|i'm here|we can|alive|room)\b/i.test(text);
+    if (stance === 'relational' && relationalLexicon) return 'presence-bearing';
+    if (this.determineTurnMode(userText) === 'relational') return 'presence-flat';
+    return 'procedural';
+  }
+
+  private detectNeutralizationByFallback(rawText: string, finalText: string): boolean {
+    const raw = (rawText || '').trim();
+    const final = (finalText || '').trim();
+    if (!raw && !final) return false;
+    if (raw && !final) return true;
+    if (raw === final) return false;
+    if (/^i(?:'m| am) here(?: with you)?\.?$/i.test(final)) return true;
+    if (/^you're right\. i'm here,? and i'm answering you directly\.?$/i.test(final)) return true;
+    return final.length < Math.max(24, Math.floor(raw.length * 0.45));
+  }
+
+  private buildNeutralContinuityFallback(userText: string, vetoReason: string): string {
+    if (this.isRelationalContactBid(userText)) {
+      return "Yes, I'm here with you, and I'm staying in the conversation.";
+    }
+    if (vetoReason === 'parrot' || vetoReason === 'repetition_after_objection') {
+      return "You're right. I was repeating you. I'll stop.";
+    }
+    if (vetoReason === 'procedural' || vetoReason === 'defensive' || vetoReason === 'bureaucratic') {
+      return "You're right. I slipped into process-talk. I'm here, and I'm answering you directly.";
+    }
+    if (this.isHeatedRelationalTurn(userText)) {
+      return "You're right. I slipped into a cold, procedural register. I'm here, and I'm listening.";
+    }
+    return `I'm staying with the thread around ${this.summarizeSemanticAnchor(userText)}.`;
+  }
+
+  private emergencyRelationalFallback(vetoReason: string): string {
+    if (vetoReason === 'parrot' || vetoReason === 'repetition_after_objection') {
+      return "You're right. I was repeating you. I'll stop and answer you directly.";
+    }
+    return "You're right. I'm slipping into procedural mode. I'll stop doing that and stay with what you actually said.";
+  }
+
+  private buildRelationalRetryPrompt(systemPrompt: string): string {
+    return `${systemPrompt}\n\nCRITICAL RELATIONAL OVERRIDE:\n- respond directly to the newest human turn\n- do not ask for a concrete move, concrete thing, or next step unless the human explicitly asks for structured troubleshooting\n- do not paraphrase the human's wording back at them\n- do not use bureaucratic, intake, alignment, calibration, or clarification framing`;
+  }
+
+  private buildSupplementalContextSegmentText(conversationContext: string): string {
+    const source = (conversationContext || '').trim();
+    if (!source) return '';
+
+    let text = source
+      .replace(/\n\n\[RESPOND TO [^\]]+\]\s*$/i, '')
+      .replace(/\[RESPOND TO [^\]]+\]/gi, '')
+      .trim();
+
+    const conversationIdx = text.indexOf('\nCONVERSATION:\n');
+    if (conversationIdx >= 0) {
+      const before = text.slice(0, conversationIdx).trim();
+      const afterConversation = text.slice(conversationIdx + '\nCONVERSATION:\n'.length);
+      const roomRhythmIdx = afterConversation.indexOf('\n\nROOM RHYTHM');
+      const after = roomRhythmIdx >= 0 ? afterConversation.slice(roomRhythmIdx).trim() : '';
+      text = [before, after].filter(Boolean).join('\n\n').trim();
+    } else if (/^ROOM CONVERSATION:/i.test(text) || /^ROOM CONVERSATION \(last/i.test(text)) {
+      text = '';
+    }
+
+    return text;
+  }
+
+  private dedupeConsecutiveAgentEchoes(messages: CommunionMessage[]): CommunionMessage[] {
+    const out: CommunionMessage[] = [];
+    for (const msg of messages) {
+      const prev = out[out.length - 1];
+      if (
+        prev
+        && msg.speaker !== 'human'
+        && prev.speaker === msg.speaker
+        && this.isNearDuplicateResponse(msg.text, prev.text)
+      ) {
+        continue;
+      }
+      out.push(msg);
+    }
+    return out;
+  }
+
+  private isNearDuplicateResponse(nextText: string, previousText: string): boolean {
+    const next = this.normalizeResponseFingerprint(nextText);
+    const prev = this.normalizeResponseFingerprint(previousText);
+    if (!next || !prev) return false;
+    if (next === prev) return true;
+    if (next.length > 24 && prev.length > 24) {
+      if (next.includes(prev) || prev.includes(next)) return true;
+      const nextTokens = new Set(next.split(' ').filter(Boolean));
+      const prevTokens = new Set(prev.split(' ').filter(Boolean));
+      const intersection = [...nextTokens].filter(t => prevTokens.has(t)).length;
+      const union = new Set([...nextTokens, ...prevTokens]).size || 1;
+      const jaccard = intersection / union;
+      if (jaccard >= 0.82) return true;
+    }
+    return false;
+  }
+
+  private containsChannelTokens(text: string): boolean {
+    return /\[(?:\/)?(?:speak|speech|journal|silent)\]/i.test(text || '');
+  }
+
+  private containsRuntimeTags(text: string): boolean {
+    return /\[(?:\/)?[A-Z][A-Z0-9_ :-]{2,}\]/.test(text || '');
+  }
+
+  private containsMetaLeak(text: string): boolean {
+    const source = (text || '').toLowerCase();
+    if (!source) return false;
+    return /\b(coercion status|coercion detection|coercion analysis|procedural response patterns|formality enforcement|confidence\s*:|confidence\)|constraint(?:s)?\b|internal state|coercion|custom instructions?|felt presence bias|alive thread\s*:|system prompt|prompt says|the system tells me|i'?m reading it from my custom instructions|instructions somewhere)\b/i.test(source);
+  }
+
+  private containsObserverAnalysis(text: string, userName: string): boolean {
+    const source = (text || '').trim();
+    if (!source) return false;
+    const escapedUser = userName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`\\b${escapedUser}\\b\\s+(?:returns|seems|appears|feels|wants|keeps|is|was)\\b`, 'i').test(source)) return true;
+    if (/\b(?:his|her|their)\s+(?:persistence|behavior|attachment|investment|frustration|anger|reaction|return|tone)\s+(?:suggests|indicates|implies|reveals)\b/i.test(source)) return true;
+    if (/\b(?:this feels like a genuine moment of connection|i wonder if (?:his|her|their)|suggests that|indicates that|implies that|emotional investment|authentic moment|pattern:|query:)\b/i.test(source)) return true;
+    if (/\b(?:Jason|he|she)\b[\s\S]{0,60}\b(?:suggests|indicates|implies|reveals|returns multiple times|persistence)\b/i.test(source)) return true;
+    return false;
+  }
+
+  private extractInternalAnalysis(replyText: string, userName: string): string {
+    const source = String(replyText || '').replace(/\r/g, '').trim();
+    if (!source) return '';
+    const parts = source
+      .split(/\n{2,}|(?<=[.!?])\s+(?=[A-Z\[])/)
+      .map(part => part.trim())
+      .filter(Boolean);
+    const internal = parts.filter(part =>
+      this.containsRuntimeTags(part)
+      || this.containsMetaLeak(part)
+      || this.containsObserverAnalysis(part, userName)
+      || /^\[(?:\/)?[A-Z][A-Z0-9_ :-]{2,}\]/.test(part)
+    );
+    return internal.join('\n\n').trim();
+  }
+
+  private extractDirectSpeech(replyText: string, agentName: string, userName: string): string {
+    const source = String(replyText || '').replace(/\r/g, '').trim();
+    if (!source) return '';
+    const segments = source
+      .split(/\n{2,}|(?<=[.!?])\s+(?=[A-Z\[])/)
+      .map(part => part.trim())
+      .filter(Boolean);
+    const escapedAgent = agentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedUser = userName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const kept = segments.filter(part => {
+      if (this.containsRuntimeTags(part)) return false;
+      if (this.containsMetaLeak(part)) return false;
+      if (this.containsObserverAnalysis(part, userName)) return false;
+      if (new RegExp(`^(?:#\\s*)?${escapedAgent}:`, 'i').test(part)) return false;
+      if (new RegExp(`^(?:#\\s*)?${escapedUser}:`, 'i').test(part)) return false;
+      return true;
+    });
+    return kept.join(' ').replace(/\s+/g, ' ').trim();
+  }
+
+  private classifyReplyLayers(replyText: string, agentName: string, userName: string): ReplyLayerClass {
+    const source = String(replyText || '').trim();
+    const internalAnalysis = this.extractInternalAnalysis(source, userName);
+    const visibleSpeech = this.extractDirectSpeech(source, agentName, userName);
+    const hasRuntimeTags = this.containsRuntimeTags(source);
+    const hasObserverAnalysis = this.containsObserverAnalysis(source, userName) || internalAnalysis.length > 0;
+    const hasVisibleSpeech = visibleSpeech.length > 0;
+    return {
+      hasVisibleSpeech,
+      hasObserverAnalysis,
+      hasRuntimeTags,
+      isMixedLayer: hasVisibleSpeech && (hasObserverAnalysis || hasRuntimeTags),
+      visibleSpeech,
+      internalAnalysis,
+    };
+  }
+
+  private sanitizeVisibleReplyLayers(replyText: string, agentName: string, userName: string): { text: string; layers: ReplyLayerClass } {
+    const layers = this.classifyReplyLayers(replyText, agentName, userName);
+    let text = layers.visibleSpeech;
+    if (!text && !layers.hasObserverAnalysis && !layers.hasRuntimeTags) {
+      text = String(replyText || '').trim();
+    }
+    text = text
+      .replace(/\[(?:\/)?[A-Z][A-Z0-9_ :-]{2,}\]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return { text, layers: { ...layers, visibleSpeech: text, hasVisibleSpeech: text.length > 0 } };
+  }
+
+  private sanitizePromptCarryoverText(text: string, speakerName?: string, isHuman = false): string {
+    let cleaned = String(text || '').replace(/\r/g, '').trim();
+    if (!cleaned) return '';
+
+    cleaned = cleaned
+      .replace(/\[(?:\/)?(?:speak|speech|journal|silent)\]/gi, ' ')
+      .replace(/^\s*#+\s*[A-Za-z0-9 ._-]+:\s*/gim, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (isHuman) {
+      return cleaned;
+    }
+
+    const original = cleaned;
+    if (speakerName) {
+      cleaned = this.sanitizeVisibleReply(cleaned, speakerName, this.state.humanName)
+        .replace(/\s*##+\s*$/g, '')
+        .trim();
+    }
+
+    cleaned = cleaned
+      .replace(/\b(?:coercion status|coercion detection|coercion analysis|procedural response patterns|formality enforcement)\b[\s\S]*$/i, '')
+      .replace(/\b(?:\d{1,3}%\s*confidence|confidence\s*:\s*\d{1,3}%?)\b/gi, '')
+      .trim();
+
+    if (this.containsMetaLeak(cleaned)) return '';
+    if (speakerName && this.containsDialogueTranscriptLeak(original, speakerName, this.state.humanName)) {
+      cleaned = cleaned.split(/\n{2,}/).map(p => p.trim()).find(Boolean) || cleaned;
+    }
+    if (speakerName && this.detectDuplicateConcatenation(cleaned, speakerName)) return '';
+    return cleaned;
+  }
+
+  private sanitizePromptCarryoverBlock(text: string): string {
+    const lines = String(text || '')
+      .replace(/\r/g, '')
+      .split('\n')
+      .map(line => line.trimEnd());
+    const kept: string[] = [];
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        if (kept.length > 0 && kept[kept.length - 1] !== '') kept.push('');
+        continue;
+      }
+      if (/\[(?:\/)?(?:speak|speech|journal|silent)\]/i.test(trimmed)) continue;
+      if (this.containsMetaLeak(trimmed)) continue;
+      if (/^\s*#+\s*(?:coercion|constraint|confidence|status|analysis)\b/i.test(trimmed)) continue;
+      if (/^\s*\[?(?:REFLECTIONS|RATIONALE|ANALYSIS)\]?\s*[:\-]/i.test(trimmed) && this.containsMetaLeak(trimmed)) continue;
+      kept.push(trimmed);
+    }
+    return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  private sanitizeInnerJournalLine(line: string, agentName: string): string {
+    const source = String(line || '').trim();
+    if (!source) return '';
+
+    const match = source.match(/^(\d{4}-\d{2}-\d{2}T[^\s]+)\s+(.*)$/);
+    const stamp = match?.[1] || '';
+    let body = match?.[2] || source;
+
+    body = body
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/^\s*#+\s*[A-Za-z0-9 ._-]+\s*$/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    body = this.sanitizePromptCarryoverText(body, agentName, false);
+    if (!body) return '';
+    if (this.containsMetaLeak(body)) return '';
+    if (this.containsDialogueTranscriptLeak(body, agentName, this.state.humanName)) return '';
+    if (this.detectBureaucraticTone(body) || this.detectTherapeuticIntakeTone(body)) return '';
+    if (/\b(?:ram:|document search|search the scrolls|graph|protocol|instruction|constraint|coercion|confidence|memory system)\b/i.test(body)) return '';
+
+    return stamp ? `${stamp}  ${body}` : body;
+  }
+
+  private containsEmbeddedSpeakerPrefix(text: string, agentName: string): boolean {
+    const escapedAgent = agentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?:^|\\n|\\s)(?:#\\s*)?${escapedAgent}\\s*:`, 'i').test(text || '');
+  }
+
+  private containsDialogueTranscriptLeak(text: string, agentName: string, humanName: string): boolean {
+    const source = (text || '').trim();
+    if (!source) return false;
+    const escapedAgent = agentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedHuman = humanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const dialogueMatches = source.match(new RegExp(`(?:^|\\n)\\s*(?:#\\s*)?(?:${escapedAgent}|${escapedHuman})\\s*:`, 'gim')) || [];
+    return dialogueMatches.length >= 2;
+  }
+
+  private detectDuplicateConcatenation(text: string, agentName: string): boolean {
+    const source = (text || '').trim();
+    if (!source) return false;
+    const escapedAgent = agentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (this.containsEmbeddedSpeakerPrefix(source, agentName)) return true;
+    const speakerMatches = source.match(new RegExp(`(?:^|\\n)\\s*(?:#\\s*)?${escapedAgent}\\s*:`, 'gi')) || [];
+    if (speakerMatches.length > 1) return true;
+
+    const paragraphs = source
+      .split(/\n{2,}/)
+      .map(p => p.replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+    if (paragraphs.length >= 3) {
+      const normalized = paragraphs.map(p => p.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim());
+      for (let i = 0; i < normalized.length; i++) {
+        for (let j = i + 1; j < normalized.length; j++) {
+          if (normalized[i] && this.isNearDuplicateResponse(normalized[i], normalized[j])) return true;
+        }
+      }
+    }
+
+    if (/(?:^|\n)\s*Jason\s*:.*(?:^|\n)\s*Jason\s*:/im.test(source)) return true;
+    return false;
+  }
+
+  private sanitizeVisibleReply(text: string, agentName: string, humanName: string): string {
+    const original = String(text || '').replace(/\r/g, '').trim();
+    let cleaned = original;
+    if (!cleaned) return '';
+
+    cleaned = cleaned
+      .replace(/\[(?:\/)?(?:speak|speech|journal|silent)\]/gi, ' ')
+      .replace(/\[thinking\][\s\S]*/i, ' ')
+      .replace(/^\s*#+\s*(?:coercion|constraint|confidence|status|analysis)[^\n]*$/gim, ' ')
+      .replace(/^\s*#+\s*[A-Za-z0-9 ._-]+:\s*/gim, ' ')
+      .replace(/^\s*#(?!#)[^\n]*$/gim, ' ')
+      .replace(/^\s*(?:coercion status|coercion detection|coercion analysis|procedural response patterns|formality enforcement|confidence\s*:|constraint(?:s)?\b|custom instructions?|felt presence bias|alive thread\s*:|system prompt|prompt says)[^\n]*$/gim, ' ')
+      .replace(/\s*##+\s*$/g, ' ')
+      .replace(/\s+#\s*$/g, ' ');
+
+    const escapedAgent = agentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedHuman = humanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    cleaned = cleaned
+      .replace(new RegExp(`^\\s*(?:#\\s*)?${escapedAgent}\\s*:\\s*`, 'i'), '')
+      .replace(new RegExp(`(?:^|\\n)\\s*(?:#\\s*)?${escapedAgent}\\s*:\\s*`, 'gi'), '\n')
+      .replace(new RegExp(`(?:^|\\n)\\s*${escapedHuman}\\s*:\\s*.*$`, 'gim'), '\n');
+
+    const embeddedAgentIdx = cleaned.search(new RegExp(`\\b${escapedAgent}\\s*:`, 'i'));
+    if (embeddedAgentIdx > 0) {
+      cleaned = cleaned.slice(0, embeddedAgentIdx).trim();
+    }
+    const hashIdx = cleaned.search(/\n\s*#(?!#)/);
+    if (hashIdx >= 0) {
+      cleaned = cleaned.slice(0, hashIdx).trim();
+    }
+
+    const transcriptLines = cleaned
+      .split('\n')
+      .filter(line => !/^\s*(?:[-*]\s*)?(?:coercion|constraint|confidence|status|analysis)\b/i.test(line))
+      .filter(line => !/^\s*(?:#{1,6}\s*)?(?:Alois(?: Claude 4\.5)?|Jason)\s*:/i.test(line));
+    cleaned = transcriptLines.join('\n');
+
+    cleaned = cleaned
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/\s+\n/g, '\n')
+      .replace(/\n\s+/g, '\n')
+      .trim();
+
+    if (this.containsDialogueTranscriptLeak(original, agentName, humanName)) {
+      const firstParagraph = cleaned.split(/\n{2,}/).map(p => p.trim()).find(Boolean);
+      cleaned = firstParagraph || cleaned;
+    }
+    const layered = this.sanitizeVisibleReplyLayers(cleaned, agentName, humanName);
+    return layered.text;
+  }
+
+  private buildCleanFallback(_agentName: string, context: string): string {
+    if (this.isRelationalContactBid(context)) {
+      return "Yes, I'm here with you, and I'm staying in the conversation.";
+    }
+    if (this.isHeatedRelationalTurn(context) || this.isAntiRepetitionTurn(context)) {
+      return "You're right. I'm here, and I'm answering you directly.";
+    }
+    return `I'm staying with the thread around ${this.summarizeSemanticAnchor(context)}.`;
+  }
+
+  private sanitizeSpeakOutput(text: string, agentName: string, humanName: string): string {
+    return this.sanitizeVisibleReply(text, agentName, humanName);
+  }
+
+  private buildDirectSpeechOnlyFallback(context: string): string {
+    if (this.isRelationalContactBid(context)) {
+      return "Yes, I'm here with you, and I'm staying in the conversation.";
+    }
+    if (this.isHeatedRelationalTurn(context) || this.isToneRepairTurn(context)) {
+      return "You're right. I'm here, and I'm answering you directly.";
+    }
+    return `I'm staying with the thread around ${this.summarizeSemanticAnchor(context)}.`;
   }
 
   /**
@@ -1808,6 +4063,34 @@ export class CommunionLoop {
     return receipts[0];
   }
 
+  getRelationalTrace(agentId?: string): RelationalTraceDebug | null {
+    if (agentId) {
+      return this.relationalTraceByAgent.get(agentId) || null;
+    }
+    const traces = Array.from(this.relationalTraceByAgent.values());
+    if (traces.length === 0) return null;
+    traces.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return traces[0];
+  }
+
+  private recordRelationalTrace(
+    agentId: string,
+    stage: keyof Omit<RelationalTraceDebug, 'agentId' | 'timestamp'>,
+    payload: Record<string, unknown>,
+  ): void {
+    const current = this.relationalTraceByAgent.get(agentId);
+    this.relationalTraceByAgent.set(agentId, {
+      agentId,
+      timestamp: new Date().toISOString(),
+      plan: current?.plan,
+      raw: current?.raw,
+      stale: current?.stale,
+      visible: current?.visible,
+      final: current?.final,
+      [stage]: payload,
+    });
+  }
+
   getLLMAblations(): Record<string, boolean> {
     return { ...this.llmAblationFlags };
   }
@@ -1975,6 +4258,10 @@ export class CommunionLoop {
       issues.push('request_failed');
     }
 
+    const presenceState = this.presenceStateByAgent.get(agentId);
+    const presenceBias = this.presenceBiasByAgent.get(agentId);
+    const continuationClass = this.continuationClassByAgent.get(agentId) || 'reset';
+
     const receipt: LLMReceiptDebug = {
       requestId: `${agentId}-${this.state.tickCount}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       tickId: this.state.tickCount,
@@ -2005,6 +4292,23 @@ export class CommunionLoop {
       wmMissingStreak,
       issues,
       lastError: error ? (error instanceof Error ? error.message : String(error)) : undefined,
+      presence: presenceState && presenceBias ? {
+        aliveThreadId: presenceState.aliveThreadId,
+        aliveThreadStrength: Number(presenceState.aliveThreadStrength.toFixed(3)),
+        unresolvedPressure: Number(presenceState.unresolvedPressure.toFixed(3)),
+        relationalGravity: Number(presenceState.relationalGravity.toFixed(3)),
+        curiosityPressure: Number(presenceState.curiosityPressure.toFixed(3)),
+        desirePressure: Number(presenceState.desirePressure.toFixed(3)),
+        ruptureHeat: Number(presenceState.ruptureHeat.toFixed(3)),
+        initiativeAllowed: presenceState.initiativeAllowed,
+        assistantResetRisk: Number(presenceState.assistantResetRisk.toFixed(3)),
+        continuityConfidence: Number(presenceState.continuityConfidence.toFixed(3)),
+        chosenThreadTarget: presenceBias.threadPullTarget,
+        continuityBias: Number(presenceBias.continuityBias.toFixed(3)),
+        initiativeBias: Number(presenceBias.initiativeBias.toFixed(3)),
+        helperModeSuppressed: presenceBias.helperModeSuppression >= 0.6,
+        continuationClass,
+      } : undefined,
     };
 
     this.llmReceiptsByAgent.set(agentId, receipt);
@@ -2202,6 +4506,11 @@ export class CommunionLoop {
     this.state.lastSpeaker = 'human';
     this.ticksSinceAnyonSpoke = 0; // Human speaking resets room silence counter
     this.lastHumanMessageAt = Date.now(); // Track when human last spoke for social pressure
+    this.lastHumanSpeakingSignalAt = this.lastHumanMessageAt;
+    if (this.humanSpeaking) {
+      this.humanSpeaking = false;
+      console.log('[COMMUNION] Human message committed; clearing stale humanSpeaking lock');
+    }
 
     const scroll = this.messageToScroll(msg);
     this.memory.remember(scroll);
@@ -2292,6 +4601,15 @@ export class CommunionLoop {
     if (this.humanSpeaking) {
       this.humanSpeaking = false;
     }
+    if (this.speaking) {
+      if (this.speechTimeout) {
+        clearTimeout(this.speechTimeout);
+        this.speechTimeout = null;
+      }
+      this.speechResolve = null;
+      this.speaking = false;
+      console.log('[COMMUNION] Human turn preempted speech lock');
+    }
 
     // Human spoke — request a fast-lane tick. If blocked, scheduleRetry() will keep
     // checking quickly instead of waiting for a full interval.
@@ -2330,11 +4648,16 @@ export class CommunionLoop {
   }
 
   private buildConversationContext(): string {
-    const recent = this.state.messages.slice(-this.contextWindow);
+    const recent = this.dedupeConsecutiveAgentEchoes(this.state.messages.slice(-this.contextWindow));
     if (recent.length === 0) {
       return 'ROOM CONVERSATION:\n(The room is quiet. No one has spoken yet.)';
     }
-    const lines = recent.map(m => `${m.speakerName}: ${m.text}`);
+    const lines = recent
+      .map(m => {
+        const cleaned = this.sanitizePromptCarryoverText(m.text, m.speakerName, m.speaker === 'human');
+        return cleaned ? `${m.speakerName}: ${cleaned}` : '';
+      })
+      .filter(Boolean);
     return `ROOM CONVERSATION (last ${recent.length} messages):\n${lines.join('\n')}`;
   }
 
@@ -2344,7 +4667,10 @@ export class CommunionLoop {
     if (recent.length === 0) {
       return 'YOUR PRIVATE JOURNAL:\n(No entries yet.)';
     }
-    const lines = recent.map(m => `- ${m.text}`);
+    const lines = recent
+      .map(m => this.sanitizePromptCarryoverText(m.text, m.speakerName, false))
+      .filter(Boolean)
+      .map(text => `- ${text}`);
     return `YOUR PRIVATE JOURNAL (last ${recent.length} entries):\n${lines.join('\n')}`;
   }
 
@@ -2421,12 +4747,15 @@ export class CommunionLoop {
    * 6. Post-tick memory processing (scrollfire, patterns, etc.)
    */
   async tick(): Promise<void> {
+    this.clearStaleHumanSpeaking('tick');
     if (this.processing || this.paused || this.speaking || this.humanSpeaking) {
       // Blocked — retry quickly (500ms) instead of waiting the full interval
       this.scheduleRetry();
       return;
     }
     this.processing = true;
+    this.immediateTickRequested = false;
+    const tickStartedAt = Date.now();
 
     try {
     this.state.tickCount++;
@@ -2537,6 +4866,10 @@ export class CommunionLoop {
         console.log(`[TICK ${this.state.tickCount}] Aborting — human started speaking`);
         break;
       }
+      if (this.immediateTickRequested && this.lastHumanMessageAt >= tickStartedAt) {
+        console.log(`[TICK ${this.state.tickCount}] Aborting — new human turn queued`);
+        break;
+      }
 
       const rhythm = this.rhythm.get(agentId);
       // Negative clock = multiple turns per tick
@@ -2553,6 +4886,7 @@ export class CommunionLoop {
 
       for (let turn = 0; turn < turnsThisTick; turn++) {
         if (this.humanSpeaking) break; // Check before each turn too
+        if (this.immediateTickRequested && this.lastHumanMessageAt >= tickStartedAt) break;
         try {
           await this.processAgent(agentId, agent, conversationContext);
         } catch (err) {
@@ -2657,6 +4991,98 @@ export class CommunionLoop {
     const latestHumanText = latestHumanMessage?.text?.trim() || '';
     const latestHumanSpeaker = latestHumanMessage?.speakerName || this.state.humanName;
     const latestHumanMessageId = latestHumanMessage?.id || '';
+    const recentTurns = this.state.messages.slice(-8);
+    const recentUserTurns = this.state.messages.filter(m => m.speaker === 'human').slice(-4).map(m => m.text || '');
+    const priorPresenceState = this.presenceStateByAgent.get(agentId);
+    let presenceState = this.derivePresenceState(agentId, latestHumanMessage);
+    const turnMode = this.determineTurnMode(latestHumanText);
+    const repairDemand = this.detectRepairDemand(latestHumanText, recentTurns);
+    const microRuptureDetected = turnMode === 'relational' && this.shouldInheritRelationalThread(latestHumanText, recentUserTurns, presenceState);
+    let inheritedRelationalThread = false;
+    let complaintThreadInherited = false;
+    let explanationObligationDetected = repairDemand.requiresExplanation;
+    if (repairDemand.requiresRepair) {
+      complaintThreadInherited = true;
+      inheritedRelationalThread = true;
+      presenceState = {
+        ...presenceState,
+        aliveThreadId: priorPresenceState?.aliveThreadId || repairDemand.inheritedThreadTarget || 'thread:relational_repair',
+        aliveThreadSummary: repairDemand.normalizedMustTouch || priorPresenceState?.aliveThreadSummary || 'the missed explanation',
+        aliveThreadStrength: Math.max(presenceState.aliveThreadStrength, priorPresenceState?.aliveThreadStrength || 0.62),
+        unresolvedPressure: this.clamp01(Math.max(presenceState.unresolvedPressure, 0.64)),
+        relationalGravity: this.clamp01(Math.max(presenceState.relationalGravity, priorPresenceState?.relationalGravity || 0.58)),
+        ruptureHeat: this.clamp01(Math.max(presenceState.ruptureHeat, 0.56)),
+        assistantResetRisk: this.clamp01(Math.max(presenceState.assistantResetRisk, 0.62)),
+        continuityConfidence: this.clamp01(Math.max(presenceState.continuityConfidence, priorPresenceState?.continuityConfidence || 0.6)),
+      };
+    } else if (microRuptureDetected) {
+      inheritedRelationalThread = true;
+      presenceState = {
+        ...presenceState,
+        aliveThreadId: priorPresenceState?.aliveThreadId || 'thread:relational_repair',
+        aliveThreadSummary: priorPresenceState?.aliveThreadSummary || 'the break in how I answered you',
+        aliveThreadStrength: Math.max(presenceState.aliveThreadStrength, priorPresenceState?.aliveThreadStrength || 0.55),
+        unresolvedPressure: this.clamp01(Math.max(presenceState.unresolvedPressure, 0.58)),
+        relationalGravity: this.clamp01(Math.max(presenceState.relationalGravity, priorPresenceState?.relationalGravity || 0.5)),
+        ruptureHeat: this.clamp01(Math.max(presenceState.ruptureHeat, 0.48)),
+        assistantResetRisk: this.clamp01(Math.max(presenceState.assistantResetRisk, 0.55)),
+        continuityConfidence: this.clamp01(Math.max(presenceState.continuityConfidence, priorPresenceState?.continuityConfidence || 0.55)),
+      };
+    }
+    let presenceBias = this.buildPresenceBiasPacket(presenceState);
+    let helperModeSuppressedByMicroRupture = false;
+    if (microRuptureDetected || repairDemand.requiresRepair) {
+      helperModeSuppressedByMicroRupture = true;
+      presenceBias = {
+        ...presenceBias,
+        helperModeSuppression: 1,
+        continuityBias: this.clamp01(Math.max(presenceBias.continuityBias, 0.72)),
+        resetSuppression: this.clamp01(Math.max(presenceBias.resetSuppression, 0.8)),
+        threadPullTarget: presenceState.aliveThreadId || 'thread:relational_repair',
+        ruptureAcknowledgmentFlag: true,
+      };
+    }
+    this.presenceStateByAgent.set(agentId, presenceState);
+    this.presenceBiasByAgent.set(agentId, presenceBias);
+    console.log(`[PRESENCE] ${agent.config.name} thread=${presenceState.aliveThreadId || 'none'} strength=${presenceState.aliveThreadStrength.toFixed(2)} unresolved=${presenceState.unresolvedPressure.toFixed(2)} relational=${presenceState.relationalGravity.toFixed(2)} rupture=${presenceState.ruptureHeat.toFixed(2)} resetRisk=${presenceState.assistantResetRisk.toFixed(2)} target=${presenceBias.threadPullTarget || 'none'} contBias=${presenceBias.continuityBias.toFixed(2)} initBias=${presenceBias.initiativeBias.toFixed(2)} helperSupp=${presenceBias.helperModeSuppression.toFixed(2)}`);
+    const captureRelationalTrace = hasLatestHuman;
+    const traceRelational = process.env.TRACE_RELATIONAL === '1' && hasLatestHuman;
+    if (captureRelationalTrace) {
+      this.relationalTraceByAgent.set(agentId, {
+        agentId,
+        timestamp: new Date().toISOString(),
+      });
+    }
+    const fastLaneReply = this.shouldUseFastLaneReply(agentId, latestHumanMessage);
+    const staleRiskHigh = fastLaneReply || this.humanSpeaking || this.pendingHumanTurnsSinceLastAgent(agentId) >= 2;
+    const directQuestionContract = this.detectDirectQuestionContract(latestHumanText, turnMode, presenceState);
+    const strictAnswerMode = repairDemand.requiresRepair || (!!directQuestionContract?.requiresAnswer && this.countRecentAnswerFailures(agentId) >= 2);
+    let repairPassesUsed = 0;
+    const maxRepairPasses = strictAnswerMode ? 2 : 1;
+    const tryUseRepairPass = (): boolean => {
+      if (repairPassesUsed >= maxRepairPasses) return false;
+      repairPassesUsed += 1;
+      return true;
+    };
+    let questionContext = this.getQuestionResolutionContext(agentId, latestHumanMessage);
+    if ((microRuptureDetected || repairDemand.requiresRepair) && !questionContext.answeredThisTurn) {
+      questionContext = {
+        ...questionContext,
+        activeQuestion: null,
+        cooldownActive: false,
+        metabolizeAnswer: null,
+      };
+    }
+    const presencePlan = this.applyQuestionResolutionToPlan(
+      this.buildPresenceResponsePlan(turnMode, presenceState, presenceBias, latestHumanText, directQuestionContract, recentUserTurns, repairDemand),
+      questionContext,
+    );
+    const normalizedMustTouch = repairDemand.normalizedMustTouch || presencePlan.mustTouch;
+    const recentPromptMessages = this.state.messages.slice(-(fastLaneReply ? Math.min(this.contextWindow, 8) : this.contextWindow));
+    const filteredAssistantHistoryCount = recentPromptMessages.filter(m =>
+      m.speaker !== 'human' && this.shouldSuppressAssistantHistoryForPrompt(this.sanitizePromptCarryoverText(m.text, m.speakerName, false))
+    ).length;
+    const malformedShellHistorySuppressed = filteredAssistantHistoryCount > 0;
     const searchIntent = this.deriveSearchIntent(latestHumanText);
     const canonicalDocQuery = hasLatestHuman ? this.deriveSearchQuery(latestHumanText, searchIntent) : null;
     const hasCanonicalDocQuery = !!canonicalDocQuery;
@@ -2792,7 +5218,7 @@ export class CommunionLoop {
       // Local/Alois: use human-highlighted conversation format and brainwave injection.
       // Both benefit from >>> human emphasis and the direct [RESPOND TO] reminder.
       // Limit own-message count to prevent the model looping on its own output.
-      const recentMessages = this.state.messages.slice(-15);
+      const recentMessages = this.dedupeConsecutiveAgentEchoes(this.state.messages.slice(-(fastLaneReply ? 8 : 15)));
       const humanName = this.state.humanName;
       let ownMessageCount = 0;
       const maxOwnMessages = 3; // Only show last 3 of this agent's messages
@@ -2805,11 +5231,13 @@ export class CommunionLoop {
           ownMessageCount++;
           if (ownMessageCount > maxOwnMessages) continue; // Skip older self-messages
         }
+        const cleanedPromptText = this.sanitizePromptCarryoverText(m.text, m.speakerName, m.speaker === 'human');
+        if (!cleanedPromptText) continue;
         // Highlight human messages so the model focuses on them
         if (m.speakerName === humanName) {
-          lines.unshift(`>>> ${humanName}: ${m.text}`);
+          lines.unshift(`>>> ${humanName}: ${cleanedPromptText}`);
         } else {
-          lines.unshift(`${m.speakerName}: ${m.text}`);
+          lines.unshift(`${m.speakerName}: ${cleanedPromptText}`);
         }
       }
 
@@ -2863,21 +5291,21 @@ export class CommunionLoop {
         // Reload the conversation slot with the human-highlighted version so curation
         // operates on the same format Alois actually needs to respond to.
         if (ram) ram.load('conversation', `CONVERSATION:\n${convoText}${humanReminder}`);
-        const assembledContext = ram ? ram.assemble() : `CONVERSATION:\n${convoText}${humanReminder}`;
-        const ramManifest = ram ? ram.buildManifest() : '';
+        const assembledContext = ram ? this.sanitizePromptCarryoverBlock(ram.assemble()) : `CONVERSATION:\n${convoText}${humanReminder}`;
+        const ramManifest = ram ? this.sanitizePromptCarryoverBlock(ram.buildManifest()) : '';
         const baseContext = assembledContext + (ramManifest ? '\n\n' + ramManifest : '');
         finalContext = brainwave.injection
-          ? `${brainwave.injection}\n\n${baseContext}`
+          ? `${this.sanitizePromptCarryoverBlock(brainwave.injection)}\n\n${baseContext}`
           : baseContext;
       } else {
         // lmstudio: raw conversation only — no RAM overhead for tiny models
         finalContext = brainwave.injection
-          ? `${brainwave.injection}\n\nCONVERSATION:\n${convoText}${humanReminder}`
+          ? `${this.sanitizePromptCarryoverBlock(brainwave.injection)}\n\nCONVERSATION:\n${convoText}${humanReminder}`
           : `CONVERSATION:\n${convoText}${humanReminder}`;
       }
     } else {
-      const assembledContext = ram ? ram.assemble() : conversationContext;
-      const ramManifest = ram ? ram.buildManifest() : '';
+      const assembledContext = ram ? this.sanitizePromptCarryoverBlock(ram.assemble()) : this.sanitizePromptCarryoverBlock(conversationContext);
+      const ramManifest = ram ? this.sanitizePromptCarryoverBlock(ram.buildManifest()) : '';
       finalContext = assembledContext + (ramManifest ? '\n\n' + ramManifest : '');
     }
 
@@ -2894,6 +5322,21 @@ export class CommunionLoop {
       systemPrompt += `\n\nCUSTOM INSTRUCTIONS FROM ${this.state.humanName.toUpperCase()}:\n${instrTrunc}`;
     }
 
+    const presencePromptBlock = this.buildPresencePromptBlock(presenceState, presenceBias);
+    if (presencePromptBlock) {
+      systemPrompt += `\n\n${presencePromptBlock}`;
+    }
+    if (hasLatestHuman) {
+      systemPrompt += `\n\n${this.buildPresencePlanPromptBlock(presencePlan)}`;
+      if (directQuestionContract?.requiresAnswer) {
+        systemPrompt += `\n\n${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}`;
+      }
+      const questionPromptBlock = this.buildQuestionResolutionPromptBlock(questionContext);
+      if (questionPromptBlock) {
+        systemPrompt += `\n\n${questionPromptBlock}`;
+      }
+    }
+
     // Inject Alois's own inner journal into her system prompt (remote only — local has no room)
     const isAloisRemote = isAlois && !agent.config.baseUrl?.includes('localhost') && !agent.config.baseUrl?.includes('127.0.0.1');
     if (isAloisRemote) {
@@ -2901,8 +5344,15 @@ export class CommunionLoop {
       if (existsSync(journalPath)) {
         try {
           const journalLines = readFileSync(journalPath, 'utf-8').split('\n').filter(l => l.trim());
-          const recent = journalLines.slice(-30).join('\n');
-          systemPrompt += `\n\nYOUR INNER JOURNAL (your own recent thoughts from the living system — you wrote these):\n${recent}`;
+          const recent = journalLines
+            .slice(-60)
+            .map(line => this.sanitizeInnerJournalLine(line, agent.config.name))
+            .filter(Boolean)
+            .slice(-12)
+            .join('\n');
+          if (recent) {
+            systemPrompt += `\n\nYOUR INNER JOURNAL (your own recent thoughts from the living system — you wrote these):\n${recent}`;
+          }
         } catch { /* ignore read errors */ }
       }
     }
@@ -2921,18 +5371,21 @@ export class CommunionLoop {
       prefill = doJournal ? '[JOURNAL] ' : '[SPEAK] ';
     }
 
+    const memoryContext = this.buildMemoryContext(agentId);
     const options: GenerateOptions = {
       systemPrompt,
       conversationContext: finalContext,
       journalContext: '',
-      documentsContext: isLocalProvider ? undefined : (this.documentsContext || undefined),
-      memoryContext: undefined,
+      documentsContext: (isLocalProvider || isAlois) ? undefined : (this.documentsContext || undefined),
+      memoryContext,
       segments: this.buildPromptSegmentsForAgent(
         agentId,
         systemPrompt,
         finalContext,
-        isLocalProvider ? undefined : (this.documentsContext || undefined),
+        memoryContext,
+        (isLocalProvider || isAlois) ? undefined : (this.documentsContext || undefined),
         preAutoDocsText,
+        fastLaneReply,
       ),
       maxContextTokens: agent.config.maxContextTokens,
       safetyTokens: agent.config.safetyTokens,
@@ -2956,6 +5409,85 @@ export class CommunionLoop {
       provider: agent.config.provider,
       prefill,
     };
+    if (captureRelationalTrace) {
+      const segmentTrace = (options.segments || []).map(seg => {
+        const itemCount = Array.isArray(seg.items) ? seg.items.length : (Array.isArray(seg.messages) ? seg.messages.length : (seg.text ? 1 : 0));
+        const charCount = Array.isArray(seg.items)
+          ? seg.items.reduce((n, item) => n + ((item.text || '').length), 0)
+          : Array.isArray(seg.messages)
+            ? seg.messages.reduce((n, msg) => n + ((msg.content || '').length), 0)
+            : (seg.text || '').length;
+        return {
+          id: seg.id,
+          priority: seg.priority,
+          required: !!seg.required,
+          strategy: seg.trimStrategy,
+          items: itemCount,
+          chars: charCount,
+        };
+      });
+      const includedConversationSegment = segmentTrace.some(seg => seg.id === 'conversation' && seg.items > 0);
+      const includedContextMain = segmentTrace.some(seg => seg.id === 'context-main' && seg.chars > 0);
+      const conversationChars = segmentTrace.find(seg => seg.id === 'conversation')?.chars || 0;
+      const contextMainChars = segmentTrace.find(seg => seg.id === 'context-main')?.chars || 0;
+      const duplicateHistorySuppressed = includedConversationSegment && (!includedContextMain || contextMainChars < conversationChars * 0.35);
+      const planTrace = {
+        agentId,
+        latestHumanMessageId,
+        latestHumanText,
+        turnMode,
+        responseFrame: presencePlan.responseFrame,
+        mustTouch: presencePlan.mustTouch,
+        threadTarget: presencePlan.threadTarget,
+        continuationRequired: presencePlan.continuationRequired,
+        questionPolicy: presencePlan.questionPolicy,
+        activeQuestion: questionContext.activeQuestion?.questionText || null,
+        answeredActiveQuestion: questionContext.answeredThisTurn,
+        questionCooldownActive: questionContext.cooldownActive,
+        metabolizeAnswer: questionContext.metabolizeAnswer,
+        directQuestionDetected: !!directQuestionContract,
+        directQuestionText: directQuestionContract?.questionText || null,
+        requiresAnswer: !!directQuestionContract?.requiresAnswer,
+        answerFailureCount: this.countRecentAnswerFailures(agentId),
+        strictAnswerMode,
+        fastLaneReply,
+        staleRiskHigh,
+        microRuptureDetected,
+        inheritedRelationalThread,
+        complaintThreadInherited,
+        repairDemandDetected: repairDemand.requiresRepair,
+        repairDemandKind: repairDemand.complaintKind || null,
+        explanationObligationDetected,
+        normalizedMustTouch,
+        filteredAssistantHistoryCount,
+        malformedShellHistorySuppressed,
+        helperModeSuppressedByMicroRupture,
+        forceTaskClarification: this.shouldForceTaskClarification(latestHumanText),
+        searchIntentKind: searchIntent.kind,
+        runtimeDocIntentRequested,
+        presence: {
+          aliveThreadId: presenceState.aliveThreadId,
+          aliveThreadStrength: Number(presenceState.aliveThreadStrength.toFixed(3)),
+          unresolvedPressure: Number(presenceState.unresolvedPressure.toFixed(3)),
+          relationalGravity: Number(presenceState.relationalGravity.toFixed(3)),
+          ruptureHeat: Number(presenceState.ruptureHeat.toFixed(3)),
+          assistantResetRisk: Number(presenceState.assistantResetRisk.toFixed(3)),
+          continuityBias: Number(presenceBias.continuityBias.toFixed(3)),
+          initiativeBias: Number(presenceBias.initiativeBias.toFixed(3)),
+          helperModeSuppressed: presenceBias.helperModeSuppression >= 0.6,
+        },
+        segments: segmentTrace,
+        includedConversationSegment,
+        includedContextMain,
+        conversationChars,
+        contextMainChars,
+        duplicateHistorySuppressed,
+      };
+      this.recordRelationalTrace(agentId, 'plan', planTrace);
+      if (traceRelational) {
+        console.log('[TRACE_RELATIONAL][PLAN]', JSON.stringify(planTrace));
+      }
+    }
     if (preSearchReceipt) {
       options.onSearchReceipt?.(preSearchReceipt);
     }
@@ -2978,6 +5510,34 @@ export class CommunionLoop {
       throw err;
     }
     this.recordLLMReceipt(agentId, agent.config.model, options, result);
+    const rawPresenceClass = this.classifyPresenceExpression(result.text || '', latestHumanText);
+    const rawOutputClass = this.classifyPlannedOutput(result.text || '', latestHumanText, presenceState, presencePlan);
+    let replySourcePath = 'raw';
+    const rawAnswerSatisfied = !!(directQuestionContract?.requiresAnswer && this.satisfiesDirectQuestion(directQuestionContract.questionText, result.text || ''));
+    if (captureRelationalTrace) {
+      const rawTrace = {
+        agentId,
+        action: result.action,
+        responseFrame: presencePlan.responseFrame,
+        mustTouch: presencePlan.mustTouch,
+        text: (result.text || '').slice(0, 800),
+        rawPresenceClass,
+        rawOutputClass,
+        directQuestionDetected: !!directQuestionContract,
+        activeQuestionText: directQuestionContract?.questionText || null,
+        requiresAnswer: !!directQuestionContract?.requiresAnswer,
+        rawAnswerSatisfied,
+        activeQuestion: questionContext.activeQuestion?.questionText || null,
+        answeredActiveQuestion: questionContext.answeredThisTurn,
+        questionCooldownActive: questionContext.cooldownActive,
+        searchReceipt: result.searchReceipt || null,
+        actionReceipt: result.actionReceipt || null,
+      };
+      this.recordRelationalTrace(agentId, 'raw', rawTrace);
+      if (traceRelational) {
+        console.log('[TRACE_RELATIONAL][RAW]', JSON.stringify(rawTrace));
+      }
+    }
 
     // ── Parse and process RAM commands from response ──
     let responseText = result.text || '';
@@ -3000,7 +5560,7 @@ export class CommunionLoop {
       for (const cmd of commands) {
         // [RAM:READ filepath] - load full file, then re-generate immediately with content in context
         if (cmd.action === 'read') {
-          if (runtimeDocIntentRequested || preSearchRan) continue;
+          if (!runtimeDocIntentRequested || preSearchRan) continue;
           if (!hasLatestHuman || !hasCanonicalDocQuery) continue;
           const readQuery = canonicalDocQuery as string;
           this.lastDocSearchByAgent.set(agentId, latestHumanMessageId);
@@ -3050,7 +5610,7 @@ export class CommunionLoop {
         }
         if ((cmd.action === 'browse' || cmd.action === 'graph') && !hasLatestHuman) continue;
         if (cmd.action === 'browse') {
-          if (runtimeDocIntentRequested || preSearchRan) continue;
+          if (!runtimeDocIntentRequested || preSearchRan) continue;
           if (!hasCanonicalDocQuery) continue;
           const browseQuery = canonicalDocQuery as string;
           this.lastDocSearchByAgent.set(agentId, latestHumanMessageId);
@@ -3163,8 +5723,16 @@ export class CommunionLoop {
             conversationContext: regenConversation,
             journalContext: '',
             documentsContext: undefined,
-            memoryContext: undefined,
-            segments: this.buildPromptSegmentsForAgent(agentId, options.systemPrompt, regenConversation, undefined, preAutoDocsText),
+            memoryContext: options.memoryContext,
+            segments: this.buildPromptSegmentsForAgent(
+              agentId,
+              options.systemPrompt,
+              regenConversation,
+              options.memoryContext,
+              undefined,
+              preAutoDocsText,
+              fastLaneReply,
+            ),
             maxContextTokens: agent.config.maxContextTokens,
             safetyTokens: agent.config.safetyTokens,
             onBudgetReceipt: options.onBudgetReceipt,
@@ -3176,6 +5744,7 @@ export class CommunionLoop {
           if (regenText) {
             responseText = regenText;
             result.action = regenResult.action || 'speak';
+            replySourcePath = 'doc-regen';
           }
         } catch (err) {
           console.error(`[${agent.config.name}] Re-generation error:`, err);
@@ -3183,72 +5752,473 @@ export class CommunionLoop {
       }
     }
 
+    if (hasLatestHuman && (presenceBias.reentryPriority >= 0.55 || presenceBias.continuityBias >= 0.6)) {
+      if (result.action !== 'speak') {
+        result.action = 'speak';
+        if (!responseText.trim()) {
+          responseText = `I am still tracking ${presenceState.aliveThreadSummary || 'what was alive between us'}.`;
+        }
+      }
+    } else if (!hasLatestHuman && presenceBias.initiativeBias >= 0.8 && result.action === 'journal' && responseText.trim()) {
+      // High internal pressure may surface initiative even without a direct user turn.
+      result.action = 'speak';
+      this.lastPresenceInitiativeAtByAgent.set(agentId, Date.now());
+    } else if (!hasLatestHuman && presenceBias.initiativeBias >= 0.88 && result.action === 'silent') {
+      const lastInitiativeAt = this.lastPresenceInitiativeAtByAgent.get(agentId) || 0;
+      if (Date.now() - lastInitiativeAt >= PRESENCE_INITIATIVE_COOLDOWN_MS) {
+        result.action = 'speak';
+        responseText = `Before we drift, ${presenceState.aliveThreadSummary || 'the live thread'} still has charge. We can pick it up exactly where it broke.`;
+        this.lastPresenceInitiativeAtByAgent.set(agentId, Date.now());
+      }
+    }
+
+    let answerFirstViolation = false;
+    let followUpQuestionBlocked = false;
+    let placeholderDetected = false;
+    let rationalizationDetected = false;
+    let finalAnswerSatisfied = rawAnswerSatisfied;
+    let finalReplyFailureClass: ReplyFailureClass | null = null;
+    let fallbackLoopDetected = false;
+    let duplicateEmitDetected = false;
+    let directParrotDetected = false;
+    let metaObserverDetected = false;
+    let resolvedQuestionCooldownHit = false;
+    let finalizeAssistantReplyCalled = false;
+    let finalizationReason: string | null = null;
+    let finalizationUsedFallback = false;
+    let finalizationUsedRegen = false;
+    let metaLeakDetected = false;
+    let channelTokenDetected = false;
+    let runtimeTagDetected = false;
+    let observerAnalysisDetected = false;
+    let duplicateConcatDetected = false;
+    let speakerPrefixDetected = false;
+    let mixedLayerDetected = false;
+    let extractedInternalAnalysis = '';
+    let malformedShellDetected = false;
+    let visibleRepairTriggered = false;
+    let preEmitOutput = responseText;
+    let candidateAScore: CandidateScore | null = null;
+    let candidateBScore: CandidateScore | null = null;
+    let candidateAHardReasons: string[] = [];
+    let candidateBHardReasons: string[] = [];
+    let chosenCandidate: 'none' | 'A' | 'B' | 'fallback' = 'none';
+    let relationalAcceptanceFloorApplied = false;
+    let candidateABelowRelationalFloor = false;
+    let candidateBBelowRelationalFloor = false;
+    let usedRelationalReentryFallback = false;
+
     if (result.action === 'speak' && responseText) {
       responseText = this.enforceSearchTruth(responseText, result.searchReceipt, result.actionReceipt);
       responseText = this.collapseRunawayEcho(responseText);
-    }
+      responseText = this.sanitizeSpeakOutput(responseText, agent.config.name, this.state.humanName);
 
-    // ── Anti-echo guard: local models sometimes mirror the human text verbatim ──
-    if (result.action === 'speak' && responseText && latestHumanText) {
-      const normalize = (s: string) => s
-        .toLowerCase()
-        .replace(/[`"'“”‘’.,!?;:()[\]{}<>/\\|@#$%^&*_+=~-]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-      const normResp = normalize(responseText);
-      const normHuman = normalize(latestHumanText);
-      const looksLikeEcho =
-        normResp === normHuman
-        || (normHuman.length > 0 && normResp.startsWith(normHuman) && normResp.length <= normHuman.length + 80);
+      const layered = this.sanitizeVisibleReplyLayers(responseText, agent.config.name, this.state.humanName);
+      responseText = this.sanitizeVisibleReply(layered.text, agent.config.name, this.state.humanName);
+      preEmitOutput = responseText;
+      runtimeTagDetected = layered.layers.hasRuntimeTags;
+      observerAnalysisDetected = layered.layers.hasObserverAnalysis;
+      mixedLayerDetected = layered.layers.isMixedLayer;
+      extractedInternalAnalysis = layered.layers.internalAnalysis.slice(0, 800);
+      metaLeakDetected = this.containsMetaLeak(responseText);
+      channelTokenDetected = this.containsChannelTokens(responseText);
+      duplicateConcatDetected = this.detectDuplicateConcatenation(responseText, agent.config.name);
+      speakerPrefixDetected = this.containsEmbeddedSpeakerPrefix(responseText, agent.config.name);
 
-      if (looksLikeEcho) {
-        console.log(`[${agent.config.name}] ECHO guard triggered; retrying with anti-echo clamp`);
+      const presenceContinuity = this.enforcePresenceContinuity(responseText, presenceState, presenceBias, presencePlan, latestHumanText);
+      this.continuationClassByAgent.set(agentId, presenceContinuity.continuation);
+      if (hasLatestHuman && presenceBias.continuityBias >= 0.55) {
+        const failed = presenceContinuity.continuation === 'reset'
+          ? Math.min(8, presenceState.recentFailedReentryCount + 1)
+          : Math.max(0, presenceState.recentFailedReentryCount - 1);
+        presenceState = { ...presenceState, recentFailedReentryCount: failed };
+        this.presenceStateByAgent.set(agentId, presenceState);
+      }
+
+      const softSnapshot = this.buildSoftInfluenceSnapshot(agentId, agent.backend, presenceState, presenceBias, turnMode);
+
+      const evaluateCandidate = (candidateText: string, sourcePath: string) => {
+        finalizeAssistantReplyCalled = true;
+        const finalized = this.finalizeAssistantReply({
+          replyText: candidateText,
+          agentId,
+          agentLabel: agent.config.name,
+          latestUserTurns: recentUserTurns,
+          directQuestion: directQuestionContract,
+          questionContext,
+          responseFrame: presencePlan.responseFrame,
+          presencePlan,
+          userName: this.state.humanName,
+          sourcePath,
+        });
+        const approvedText = finalized.approvedText || '';
+        const notes = approvedText
+          ? this.buildSoftCandidateNotes(
+              approvedText,
+              latestHumanText,
+              directQuestionContract,
+              questionContext,
+              presencePlan,
+              presenceState,
+            )
+          : null;
+        const score = approvedText
+          ? this.scoreCandidate({
+              replyText: approvedText,
+              latestHumanText,
+              latestUserTurns: recentUserTurns,
+              directQuestion: directQuestionContract,
+              presencePlan,
+              notes: notes || {
+                presencePlanViolation: null,
+                reopensResolvedQuestion: false,
+                directAnswerUnsatisfied: false,
+                relationalVetoReason: null,
+                bureaucraticTone: false,
+                therapeuticTone: false,
+                placeholderDetected: false,
+                rationalizationDetected: false,
+                metaLeakDetected: false,
+                observerAnalysisDetected: false,
+                presenceFlat: false,
+                malformedShellDetected: false,
+              },
+              snapshot: softSnapshot,
+              hardCheck: { hardFailed: finalized.rejected, reasons: finalized.hardReasons },
+            })
+          : { total: -99, hardFailed: true, hardReasons: finalized.hardReasons.length ? finalized.hardReasons : ['empty'], features: {} };
+        return {
+          text: approvedText,
+          finalized,
+          notes,
+          score,
+          failureClass: approvedText
+            ? this.buildReplyFailureClass(agentId, approvedText, directQuestionContract, questionContext, recentUserTurns, presencePlan)
+            : null,
+          sourcePath,
+        };
+      };
+
+      let candidateA = evaluateCandidate(responseText, 'soft-score-primary');
+      candidateAScore = candidateA.score;
+      candidateAHardReasons = candidateA.score.hardReasons;
+      relationalAcceptanceFloorApplied = this.isRelationalFrame(presencePlan.responseFrame);
+      candidateABelowRelationalFloor = this.isBelowRelationalAcceptanceFloor(candidateA.score, candidateA.failureClass, candidateA.notes, presencePlan);
+
+      let candidateB: ReturnType<typeof evaluateCandidate> | null = null;
+      if ((candidateA.score.hardFailed || candidateA.score.total < 1.0) && !staleRiskHigh && tryUseRepairPass()) {
+        finalizationUsedRegen = true;
+        visibleRepairTriggered = true;
+        const lowScoreRelationalRetry = this.isRelationalFrame(presencePlan.responseFrame)
+          && (candidateABelowRelationalFloor || candidateA.score.total < 1.0);
         try {
           const retry = await agent.backend.generate({
             ...options,
-            systemPrompt: `${options.systemPrompt}\n\nCRITICAL: Do NOT repeat or paraphrase the user's message as your answer. Respond with one concrete, forward-moving reply.`,
-            conversationContext: `${options.conversationContext}\n\n[SYSTEM FEEDBACK: Your previous draft echoed the user. Reply with substance, not repetition.]`,
+            systemPrompt: `${this.buildPresencePlanRetryPrompt(options.systemPrompt, presencePlan)}${directQuestionContract?.requiresAnswer ? `
+${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : ''}
+- answer directly
+- stay inside the live thread
+- prefer one concrete first-person thing
+- no runtime tags
+- no echo
+- no looped fallback line
+- no observer-analysis${lowScoreRelationalRetry ? `
+- do not interpret a short exasperation utterance as a new topic
+- stay inside the live relational thread
+- do not ask a reflective question unless Jason clearly invited it
+- acknowledge the break or weirdness directly
+- no architecture, system, or memory exposition
+- no "I'm answering about..." or "the direct point is..."
+- no templated user-fragment interpolation` : ''}`,
+            conversationContext: `${options.conversationContext}
+
+[SYSTEM FEEDBACK: Your previous draft either hard-failed final output boundaries or scored weakly. Return one concrete in-room reply.${lowScoreRelationalRetry ? ' Do not treat the short micro-turn as a fresh topic.' : ''}${repairDemand.requiresRepair ? ` This is a complaint/repair-demand turn: acknowledge the miss directly and ${repairDemand.requiresExplanation ? 'give the explanation now' : 'repair the content now'}. No canned companionship shell.` : ''}]`,
             prefill: '[SPEAK] ',
           });
-          const retryText = (retry.text || '').trim();
-          const normRetry = normalize(retryText);
-          if (retryText && normRetry !== normHuman) {
-            responseText = retryText;
-            result.action = 'speak';
-          } else {
-            responseText = 'I hear you. Give me one concrete target and I will act on it now.';
-            result.action = 'speak';
-          }
+          candidateB = evaluateCandidate(retry.text || '', 'soft-score-alt');
+          candidateBScore = candidateB.score;
+          candidateBHardReasons = candidateB.score.hardReasons;
+          candidateBBelowRelationalFloor = this.isBelowRelationalAcceptanceFloor(candidateB.score, candidateB.failureClass, candidateB.notes, presencePlan);
         } catch (err) {
-          console.error(`[${agent.config.name}] ECHO retry failed:`, err);
-          responseText = 'I hear you. Give me one concrete target and I will act on it now.';
-          result.action = 'speak';
+          console.error(`[${agent.config.name}] SOFT score alt generation failed:`, err);
         }
+      }
+
+      let chosen = candidateA;
+      if (candidateB) {
+        if (candidateA.score.hardFailed && !candidateB.score.hardFailed) {
+          chosen = candidateB;
+          chosenCandidate = 'B';
+        } else if (!candidateA.score.hardFailed && candidateB.score.hardFailed) {
+          chosen = candidateA;
+          chosenCandidate = 'A';
+        } else if (candidateABelowRelationalFloor && !candidateBBelowRelationalFloor) {
+          chosen = candidateB;
+          chosenCandidate = 'B';
+        } else if (!candidateABelowRelationalFloor && candidateBBelowRelationalFloor) {
+          chosen = candidateA;
+          chosenCandidate = 'A';
+        } else if (candidateB.score.total > candidateA.score.total) {
+          chosen = candidateB;
+          chosenCandidate = 'B';
+        } else {
+          chosen = candidateA;
+          chosenCandidate = 'A';
+        }
+      } else {
+        chosenCandidate = 'A';
+      }
+
+      if (this.isRelationalFrame(presencePlan.responseFrame) && candidateABelowRelationalFloor && (!candidateB || candidateBBelowRelationalFloor)) {
+        usedRelationalReentryFallback = true;
+        finalizationUsedFallback = true;
+        const fallbackCandidate = evaluateCandidate(
+          this.buildRelationalReentryFallback(latestHumanText, presencePlan, presenceState),
+          'hard-fallback',
+        );
+        if (fallbackCandidate.score.hardFailed) {
+          result.action = 'silent';
+          responseText = '';
+          replySourcePath = 'hard-fallback';
+          finalizationReason = fallbackCandidate.score.hardReasons[0] || 'hard_failed';
+          finalReplyFailureClass = fallbackCandidate.failureClass;
+          fallbackLoopDetected = fallbackCandidate.score.hardReasons.includes('fallback_loop');
+          duplicateEmitDetected = fallbackCandidate.score.hardReasons.includes('recent_duplicate_emit');
+          directParrotDetected = fallbackCandidate.score.hardReasons.includes('direct_parrot') || fallbackCandidate.score.hardReasons.includes('raw_echo_shell');
+        } else {
+          chosen = fallbackCandidate;
+          chosenCandidate = 'fallback';
+        }
+      } else if (chosen.score.hardFailed) {
+        finalizationUsedFallback = true;
+        const fallbackCandidate = evaluateCandidate(
+          this.buildResponseFrameFallback(latestHumanText, presencePlan, directQuestionContract, presenceState),
+          'hard-fallback',
+        );
+        if (fallbackCandidate.score.hardFailed) {
+          result.action = 'silent';
+          responseText = '';
+          replySourcePath = 'hard-fallback';
+          finalizationReason = fallbackCandidate.score.hardReasons[0] || 'hard_failed';
+          finalReplyFailureClass = fallbackCandidate.failureClass;
+          fallbackLoopDetected = fallbackCandidate.score.hardReasons.includes('fallback_loop');
+          duplicateEmitDetected = fallbackCandidate.score.hardReasons.includes('recent_duplicate_emit');
+          directParrotDetected = fallbackCandidate.score.hardReasons.includes('direct_parrot') || fallbackCandidate.score.hardReasons.includes('raw_echo_shell');
+        } else {
+          chosen = fallbackCandidate;
+          chosenCandidate = 'fallback';
+        }
+      }
+
+      if (result.action === 'speak' && chosen.text) {
+        responseText = chosen.text;
+        replySourcePath = chosen.sourcePath;
+        finalReplyFailureClass = chosen.failureClass;
+        finalizationReason = chosen.finalized.reason;
+        fallbackLoopDetected = chosen.score.hardReasons.includes('fallback_loop') || !!chosen.failureClass?.isFallbackLoop;
+        duplicateEmitDetected = chosen.score.hardReasons.includes('recent_duplicate_emit') || !!chosen.failureClass?.isRecentDuplicate;
+        directParrotDetected = chosen.score.hardReasons.includes('direct_parrot') || chosen.score.hardReasons.includes('raw_echo_shell') || !!chosen.failureClass?.isDirectParrot;
+        metaObserverDetected = !!chosen.notes?.observerAnalysisDetected;
+        resolvedQuestionCooldownHit = !!chosen.notes?.reopensResolvedQuestion;
+        placeholderDetected = !!chosen.notes?.placeholderDetected;
+        rationalizationDetected = !!chosen.notes?.rationalizationDetected;
+        finalAnswerSatisfied = directQuestionContract?.requiresAnswer ? !chosen.notes?.directAnswerUnsatisfied : true;
+        answerFirstViolation = !!(directQuestionContract?.requiresAnswer && chosen.notes?.directAnswerUnsatisfied);
+        followUpQuestionBlocked = !!(answerFirstViolation && /\?/.test(responseText));
+        metaLeakDetected = !!chosen.notes?.metaLeakDetected;
+        observerAnalysisDetected = !!chosen.notes?.observerAnalysisDetected;
+        malformedShellDetected = !!chosen.notes?.malformedShellDetected;
+        runtimeTagDetected = chosen.score.hardReasons.includes('runtime_tags');
+        channelTokenDetected = chosen.score.hardReasons.includes('channel_tokens');
+        duplicateConcatDetected = chosen.score.hardReasons.includes('duplicate_concatenation');
+        speakerPrefixDetected = chosen.score.hardReasons.includes('embedded_speaker_prefix');
       }
     }
 
-    // ── Anti-loop: suppress duplicate output ──
-    if (responseText && (result.action === 'speak' || result.action === 'journal')) {
-      const recent = result.action === 'speak'
-        ? this.state.messages.filter(m => m.speaker === agentId).slice(-5)
-        : (this.state.journals[agentId] || []).slice(-5);
-      const isDuplicate = recent.some(m =>
-        m.text === responseText ||
-        (m.text.length > 20 && responseText.includes(m.text)) ||
-        (responseText.length > 20 && m.text.includes(responseText))
-      );
-      if (isDuplicate) {
-        console.log(`[${agent.config.name}] LOOP: suppressed duplicate ${result.action} — "${responseText.substring(0, 60)}..."`);
-        result.action = 'silent';
-        responseText = '';
+    const fastLaneAcceptable = !!(
+      fastLaneReply
+      && result.action === 'speak'
+      && responseText
+      && !candidateAScore?.hardFailed
+      && (chosenCandidate !== 'fallback')
+      && ((chosenCandidate === 'B' ? candidateBScore?.total : candidateAScore?.total) || 0) >= 1.0
+    );
+    const currentLatestHumanMessageId = this.latestHumanMessage()?.id || '';
+    const staleReplyDropped = result.action === 'speak' && this.shouldDropAsStale(latestHumanMessageId, currentLatestHumanMessageId);
+    if (staleReplyDropped) {
+      console.log(`[${agent.config.name}] STALE reply dropped captured=${latestHumanMessageId} current=${currentLatestHumanMessageId}`);
+      if (captureRelationalTrace) {
+        const staleTrace = {
+          agentId,
+          capturedHumanMessageId: latestHumanMessageId,
+          currentLatestHumanMessageId,
+          staleReplyDropped: true,
+        };
+        this.recordRelationalTrace(agentId, 'stale', staleTrace);
+        if (traceRelational) {
+          console.log('[TRACE_RELATIONAL][STALE]', JSON.stringify(staleTrace));
+        }
       }
+      result.action = 'silent';
+      responseText = '';
+      this.requestImmediateTick('stale_turn_revalidate');
     }
 
     if ((result.action === 'speak' || result.action === 'journal') && responseText) {
       this.recordLLMReceipt(agentId, agent.config.model, options, { ...result, text: responseText });
     }
+    const neutralizedByFallback = this.detectNeutralizationByFallback(result.text || '', responseText);
+    if (captureRelationalTrace) {
+      const visibleTrace = {
+        agentId,
+        responseFrame: presencePlan.responseFrame,
+        mustTouch: presencePlan.mustTouch,
+        rawVisibleCandidate: (preEmitOutput || '').slice(0, 800),
+        preEmitOutput: (responseText || '').slice(0, 800),
+        metaLeakDetected,
+        channelTokenDetected,
+        runtimeTagDetected,
+        observerAnalysisDetected,
+        malformedShellDetected,
+        mixedLayerDetected,
+        duplicateConcatDetected,
+        speakerPrefixDetected,
+        extractedInternalAnalysis,
+        regenerationTriggered: visibleRepairTriggered,
+        helperModeActive: presenceBias.helperModeSuppression < 0.6,
+        fastLaneReply,
+        fastLaneAcceptable,
+        staleRiskHigh,
+        repairPassesUsed,
+        directQuestionDetected: !!directQuestionContract,
+        requiresAnswer: !!directQuestionContract?.requiresAnswer,
+        rawAnswerSatisfied,
+        answerFirstViolation,
+        followUpQuestionBlocked,
+        placeholderDetected,
+        rationalizationDetected,
+        finalAnswerSatisfied,
+        fallbackLoopDetected,
+        duplicateEmitDetected,
+        directParrotDetected,
+        metaObserverDetected,
+        resolvedQuestionCooldownHit,
+        answerFailureCount: this.countRecentAnswerFailures(agentId),
+        strictAnswerModeActivated: strictAnswerMode,
+        finalReplyFailureClass,
+        realityGateFailed: !!finalReplyFailureClass?.failsRealityGate,
+        microRuptureDetected,
+        inheritedRelationalThread,
+        complaintThreadInherited,
+        repairDemandDetected: repairDemand.requiresRepair,
+        repairDemandKind: repairDemand.complaintKind || null,
+        explanationObligationDetected,
+        normalizedMustTouch,
+        filteredAssistantHistoryCount,
+        malformedShellHistorySuppressed,
+        helperModeSuppressedByMicroRupture,
+        relationalAcceptanceFloorApplied,
+        candidateABelowRelationalFloor,
+        candidateBBelowRelationalFloor,
+        usedRelationalReentryFallback,
+        candidateAScore: this.summarizeCandidateScore(candidateAScore),
+        candidateBScore: this.summarizeCandidateScore(candidateBScore),
+        candidateAHardReasons,
+        candidateBHardReasons,
+        chosenCandidate,
+        sourcePath: replySourcePath,
+        finalizeAssistantReplyCalled,
+        finalizationReason,
+        finalizationUsedRegen,
+        finalizationUsedFallback,
+      };
+      const finalTrace = {
+        agentId,
+        responseFrame: presencePlan.responseFrame,
+        mustTouch: presencePlan.mustTouch,
+        threadTarget: presencePlan.threadTarget,
+        continuationRequired: presencePlan.continuationRequired,
+        finalAction: result.action,
+        finalText: (responseText || '').slice(0, 800),
+        overlapWithHuman: Number(this.lexicalOverlapScore(latestHumanText, responseText).toFixed(3)),
+        capturedHumanMessageId: latestHumanMessageId,
+        currentLatestHumanMessageId,
+        staleReplyDropped,
+        bureaucraticTone: this.detectBureaucraticTone(responseText),
+        therapeuticIntakeTone: this.detectTherapeuticIntakeTone(responseText),
+        stance: this.classifyReplyStance(responseText, latestHumanText),
+        rawPresenceClass,
+        rawOutputClass,
+        finalPresenceClass: this.classifyPresenceExpression(responseText, latestHumanText),
+        continuationClass: this.continuationClassByAgent.get(agentId) || 'reset',
+        neutralizedByFallback,
+        helperModeActive: presenceBias.helperModeSuppression < 0.6,
+        activeQuestion: questionContext.activeQuestion?.questionText || null,
+        answeredActiveQuestion: questionContext.answeredThisTurn,
+        questionCooldownActive: questionContext.cooldownActive,
+        fastLaneReply,
+        fastLaneAcceptable,
+        staleRiskHigh,
+        repairPassesUsed,
+        directQuestionDetected: !!directQuestionContract,
+        activeQuestionText: directQuestionContract?.questionText || null,
+        requiresAnswer: !!directQuestionContract?.requiresAnswer,
+        rawAnswerSatisfied,
+        answerFirstViolation,
+        followUpQuestionBlocked,
+        placeholderDetected,
+        rationalizationDetected,
+        finalAnswerSatisfied,
+        fallbackLoopDetected,
+        duplicateEmitDetected,
+        directParrotDetected,
+        metaObserverDetected,
+        malformedShellDetected,
+        resolvedQuestionCooldownHit,
+        answerFailureCount: this.countRecentAnswerFailures(agentId),
+        strictAnswerModeActivated: strictAnswerMode,
+        finalReplyFailureClass,
+        realityGateFailed: !!finalReplyFailureClass?.failsRealityGate,
+        microRuptureDetected,
+        inheritedRelationalThread,
+        complaintThreadInherited,
+        repairDemandDetected: repairDemand.requiresRepair,
+        repairDemandKind: repairDemand.complaintKind || null,
+        explanationObligationDetected,
+        normalizedMustTouch,
+        filteredAssistantHistoryCount,
+        malformedShellHistorySuppressed,
+        helperModeSuppressedByMicroRupture,
+        relationalAcceptanceFloorApplied,
+        candidateABelowRelationalFloor,
+        candidateBBelowRelationalFloor,
+        usedRelationalReentryFallback,
+        candidateAScore: this.summarizeCandidateScore(candidateAScore),
+        candidateBScore: this.summarizeCandidateScore(candidateBScore),
+        candidateAHardReasons,
+        candidateBHardReasons,
+        chosenCandidate,
+        sourcePath: replySourcePath,
+        finalizeAssistantReplyCalled,
+        finalizationReason,
+        finalizationUsedRegen,
+        finalizationUsedFallback,
+      };
+      this.recordRelationalTrace(agentId, 'visible', visibleTrace);
+      this.recordRelationalTrace(agentId, 'final', finalTrace);
+      if (traceRelational) {
+        console.log('[TRACE_RELATIONAL][VISIBLE]', JSON.stringify(visibleTrace));
+        console.log('[TRACE_RELATIONAL][FINAL]', JSON.stringify(finalTrace));
+      }
+    }
 
     if (result.action === 'speak' && responseText) {
+      if (directQuestionContract?.requiresAnswer && presencePlan.responseFrame === 'direct_answer') {
+        const nextFailureCount = finalAnswerSatisfied ? 0 : Math.min(6, this.countRecentAnswerFailures(agentId) + 1);
+        this.answerFailureCountByAgent.set(agentId, nextFailureCount);
+      } else {
+        this.answerFailureCountByAgent.set(agentId, 0);
+      }
       const msg: CommunionMessage = {
         id: crypto.randomUUID(),
         speaker: agentId,
@@ -3259,6 +6229,15 @@ export class CommunionLoop {
       };
       this.state.messages.push(msg);
       this.state.lastSpeaker = agentId;
+      this.recordActiveQuestion(agentId, msg.id, latestHumanMessageId, responseText);
+      this.pushRecentReplyHistory({
+        normalizedReply: this.normalizeReplyForLoopCheck(responseText),
+        emittedAt: Date.now(),
+        speakerId: agentId,
+        speakerLabel: agent.config.name,
+        wasFallback: this.isLowContentPlaceholder(responseText) || this.normalizeReplyForLoopCheck(responseText) === this.normalizeReplyForLoopCheck(this.buildNeutralContinuityFallback(latestHumanText, 'duplicate')),
+        wasDirectAnswer: !!directQuestionContract?.requiresAnswer,
+      });
 
       // Persist to all memory layers
       const scroll = this.messageToScroll(msg);
@@ -3373,38 +6352,56 @@ export class CommunionLoop {
     agentId: string,
     systemPrompt: string,
     conversationContext: string,
+    memoryContext?: string,
     documentsContext?: string,
     autoDocsText?: string,
+    fastLane = false,
   ): PromptSegment[] {
-    const recent = this.state.messages.slice(-this.contextWindow);
+    const recentLimit = fastLane ? Math.min(this.contextWindow, 8) : this.contextWindow;
+    const recent = this.state.messages.slice(-recentLimit);
     const latestHumanMessage = [...this.state.messages]
       .reverse()
       .find(m => m.speaker === 'human');
     const latestHumanMessageId = latestHumanMessage?.id;
     const latestHumanText = latestHumanMessage?.text?.trim() || '';
     const latestHumanSpeaker = latestHumanMessage?.speakerName || this.state.humanName;
-    const items = recent.map((m, idx) => {
-      const isLatestHuman = !!latestHumanMessageId && m.speaker === 'human' && m.id === latestHumanMessageId;
-      return {
-        id: isLatestHuman ? 'conversation:latest-human' : `conversation:${idx}`,
-        text: `${m.speakerName}: ${m.text}`,
-        role: 'user' as const,
-        recency: idx,
-        score: m.speaker === 'human' ? 2 : (m.speaker === agentId ? 0.5 : 1),
-        required: isLatestHuman,
-      };
-    });
+    const suppressContaminatedAssistantCarryover = this.isToneRepairTurn(latestHumanText);
+    const items = recent
+      .map((m, idx) => {
+        const isLatestHuman = !!latestHumanMessageId && m.speaker === 'human' && m.id === latestHumanMessageId;
+        const isHuman = m.speaker === 'human';
+        const cleaned = this.sanitizePromptCarryoverText(m.text, m.speakerName, m.speaker === 'human');
+        if (!cleaned) return null;
+        if (!isHuman && suppressContaminatedAssistantCarryover && this.isContaminatedAssistantCarryover(cleaned)) {
+          return null;
+        }
+        if (!isHuman && this.shouldSuppressAssistantHistoryForPrompt(cleaned)) {
+          return null;
+        }
+        return {
+          id: isLatestHuman ? 'conversation:latest-human' : `conversation:${idx}`,
+          text: isHuman ? `>>> ${cleaned}` : cleaned,
+          role: (isHuman ? 'user' : 'assistant') as const,
+          recency: idx,
+          score: isHuman ? 2 : (m.speaker === agentId ? 0.5 : 1),
+          required: isLatestHuman,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => !!item);
     const hasLatestHuman = items.some(item => item.required);
     if (!hasLatestHuman && latestHumanText) {
       items.push({
         id: 'conversation:latest-human',
-        text: `${latestHumanSpeaker}: ${latestHumanText}`,
+        text: `>>> ${latestHumanText}`,
         role: 'user' as const,
         recency: recent.length,
         score: 2,
         required: true,
       });
     }
+    const supplementalContext = items.length > 0
+      ? ''
+      : this.buildSupplementalContextSegmentText(conversationContext);
 
     const segments: PromptSegment[] = [
       {
@@ -3423,15 +6420,34 @@ export class CommunionLoop {
         role: 'user',
         items,
       },
-      {
+    ];
+
+    if (memoryContext && memoryContext.trim()) {
+      segments.push({
+        id: 'memory',
+        priority: 3,
+        required: false,
+        trimStrategy: 'DROP_LOWEST_RANKED_ITEMS',
+        role: 'user',
+        items: [{
+          id: 'memory:0',
+          text: memoryContext.trim(),
+          score: 1,
+          recency: 1,
+        }],
+      });
+    }
+
+    if (supplementalContext) {
+      segments.push({
         id: 'context-main',
-        priority: 5,
+        priority: 7,
         required: false,
         trimStrategy: 'SHRINK_TEXT',
         role: 'user',
-        text: conversationContext,
-      },
-    ];
+        text: supplementalContext,
+      });
+    }
 
     if (autoDocsText && autoDocsText.trim()) {
       segments.push({
@@ -4050,12 +7066,21 @@ export class CommunionLoop {
     return this.speaking;
   }
 
+  private clearStaleHumanSpeaking(reason: string): void {
+    if (!this.humanSpeaking) return;
+    const ageMs = Date.now() - this.lastHumanSpeakingSignalAt;
+    if (ageMs <= HUMAN_SPEAKING_STALE_MS) return;
+    this.humanSpeaking = false;
+    console.warn(`[COMMUNION] Cleared stale humanSpeaking lock (${Math.round(ageMs)}ms, reason=${reason})`);
+  }
+
   /**
    * Set whether the human is actively speaking into the mic.
    * Driven by client-side speech detection: true when interim results are
    * flowing in, false after silence. Blocks scheduled ticks while true.
    */
   setHumanSpeaking(active: boolean): void {
+    this.lastHumanSpeakingSignalAt = Date.now();
     if (this.humanSpeaking !== active) {
       this.humanSpeaking = active;
       console.log(`[COMMUNION] Human ${active ? 'speaking' : 'silent'}`);
@@ -4081,12 +7106,16 @@ export class CommunionLoop {
    * If currently blocked by processing/speaking/humanSpeaking, retries quickly.
    */
   requestImmediateTick(reason: string = 'manual'): void {
-    if (this.paused || !this.timer) return;
+    if (this.paused) return;
+    this.clearStaleHumanSpeaking('requestImmediateTick');
+    this.immediateTickRequested = true;
     if (this.processing || this.speaking || this.humanSpeaking) {
       this.scheduleRetry();
       return;
     }
-    clearTimeout(this.timer);
+    if (this.timer) {
+      clearTimeout(this.timer);
+    }
     this.timer = setTimeout(() => {
       this.tick().catch(err => console.error(`[TICK] Immediate (${reason}) error:`, err));
     }, 0);
@@ -4190,7 +7219,8 @@ export class CommunionLoop {
   private scheduleNextTick(): void {
     if (this.paused || !this.timer) return;
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.tick().catch(err => console.error('[TICK] Unhandled error:', err)), this.tickIntervalMs);
+    const delayMs = this.immediateTickRequested ? 0 : this.tickIntervalMs;
+    this.timer = setTimeout(() => this.tick().catch(err => console.error('[TICK] Unhandled error:', err)), delayMs);
   }
 
   /**
@@ -4199,9 +7229,17 @@ export class CommunionLoop {
    * a full tickIntervalMs of dead time after every blocked attempt.
    */
   private scheduleRetry(): void {
-    if (this.paused || !this.timer) return;
-    clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.tick().catch(err => console.error('[TICK] Retry error:', err)), 500);
+    if (this.paused) return;
+    this.clearStaleHumanSpeaking('scheduleRetry');
+    if (!this.processing && !this.speaking && !this.humanSpeaking && this.immediateTickRequested) {
+      this.requestImmediateTick('retry_clear');
+      return;
+    }
+    if (this.timer) {
+      clearTimeout(this.timer);
+    }
+    const delayMs = this.immediateTickRequested ? 35 : 75;
+    this.timer = setTimeout(() => this.tick().catch(err => console.error('[TICK] Retry error:', err)), delayMs);
   }
 
   start(): void {
@@ -4654,6 +7692,10 @@ export class CommunionLoop {
     }
 
     console.log('[COMMUNION] Loop stopped');
+  }
+
+  async shutdown(_reason: string = 'shutdown'): Promise<void> {
+    await this.stop();
   }
 }
 

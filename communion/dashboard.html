@@ -1604,7 +1604,7 @@
       return false;
     }
 
-    function llmSummary(receipt) {
+    function llmSummary(receipt, trace) {
       if (!receipt) return 'No request yet.';
       const wm = receipt.clusterChars?.WM || 0;
       const sem = receipt.clusterChars?.SEM_R || 0;
@@ -1614,16 +1614,18 @@
       const chars = receipt.charCounts?.total ?? 0;
       const wmWarn = (receipt.wmMissingStreak || 0) === 1 ? ' | WM MISSING (1st tick)' : '';
       const wmTooBig = wm > 16000 ? ' | WM TOO BIG' : '';
-      return `tick ${tick}, agent ${rid}, chars ${chars}, WM ${wm}, SEM ${sem}, SOCIO ${socio}${wmWarn}${wmTooBig}`;
+      const frame = trace?.final?.responseFrame ? ` | frame ${trace.final.responseFrame}` : '';
+      return `tick ${tick}, agent ${rid}, chars ${chars}, WM ${wm}, SEM ${sem}, SOCIO ${socio}${wmWarn}${wmTooBig}${frame}`;
     }
 
-    function renderLLMReceipt(receipt) {
+    function renderLLMReceipt(receipt, trace) {
       window.lastLLMReceipt = receipt || null;
+      window.lastRelationalTrace = trace || null;
       const isBug = llmIsBug(receipt);
       llmDebugBtn.classList.remove('good', 'bad');
       if (receipt && isBug) llmDebugBtn.classList.add('bad');
 
-      llmReceiptSummary.textContent = llmSummary(receipt);
+      llmReceiptSummary.textContent = llmSummary(receipt, trace);
       const wmSnippet = receipt?.clusterSnippets?.WM || '(no WM snippet)';
       llmReceiptPre.textContent = JSON.stringify({
         tickId: receipt?.tickId,
@@ -1634,6 +1636,7 @@
         clusterCharsWire: receipt?.clusterCharsWire,
         wmMissingStreak: receipt?.wmMissingStreak,
         wmSnippet,
+        trace,
         messages: receipt?.messages,
       }, null, 2);
 
@@ -1658,12 +1661,13 @@
         if (!r.ok) return;
         const data = await r.json();
         const receipt = data && data.receipt ? data.receipt : null;
+        const trace = data && data.trace ? data.trace : null;
         if (seq < llmRenderedSeq) return;
         llmRenderedSeq = seq;
         if (receipt && receipt.requestId !== lastLLMRequestId) {
           lastLLMRequestId = receipt.requestId;
         }
-        renderLLMReceipt(receipt);
+        renderLLMReceipt(receipt, trace);
       } catch {
         // Keep panel silent if server endpoint is unavailable.
       }
@@ -2926,26 +2930,31 @@
       pushPendingHumanMessage(text);
       chatInput.value = '';
       sendBtn.disabled = true;
-      try {
-        const r = await fetch('/message', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text }),
+      fetch('/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      })
+        .then((r) => {
+          if (!r.ok) console.warn('[CHAT] /message returned', r.status);
+        })
+        .catch((err) => {
+          console.error('[CHAT] Send error (server down?):', err);
         });
-        if (!r.ok) console.warn('[CHAT] /message returned', r.status);
-      } catch (err) {
-        console.error('[CHAT] Send error (server down?):', err);
-        // Restore text so user doesn't lose their message
-        chatInput.value = text;
-      } finally {
+
+      // Do not block the input on slow network/server responses.
+      setTimeout(() => {
         sendBtn.disabled = false;
         chatInput.focus();
-      }
+      }, 150);
     }
 
     sendBtn.addEventListener('click', sendMessage);
-    chatInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') sendMessage();
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        sendMessage();
+      }
     });
 
     // Barge-in: press Escape to interrupt agent speech
@@ -3225,7 +3234,10 @@
           // Order matters: server must know human is done before message triggers tick.
           speechActive = false;
           accumulatedText = ''; // Reset for next utterance
-          await signalMicState(false);
+          await Promise.race([
+            signalMicState(false, 300),
+            new Promise(resolve => setTimeout(resolve, 300)),
+          ]);
           const text = chatInput.value.trim();
           if (text && micListening) {
             sendMessage();
@@ -3252,12 +3264,15 @@
         // For 'no-speech' errors, just let onend restart it
       };
 
-      function signalMicState(active) {
+      function signalMicState(active, timeoutMs = 300) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
         return fetch('/mic', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ active }),
-        }).catch(() => {});
+          signal: controller.signal,
+        }).catch(() => {}).finally(() => clearTimeout(timer));
       }
 
       micBtn.addEventListener('click', () => {
@@ -4741,7 +4756,7 @@
           atmosDryBus.connect(prDryBus); atmosRevBus.connect(prReverbBus);
           natureDryBus.connect(prDryBus); natureRevBus.connect(prReverbBus);
 
-          loadDrSamples(prAudioCtx);
+          if (playing || drPlaying) loadDrSamples(prAudioCtx);
           scApplyPadAtmosMacros();
           scMixApplyToAudio();
           scRunSynthParamSelfTest().catch(err => {
@@ -7277,7 +7292,7 @@
         });
 
         buildDrumTunePanel();
-        loadDrSamples(); // async — loads sample pack from data/samples/ in background
+        // Lazy-load samples on playback start. Avoid fetching the whole pack while idle.
 
         document.getElementById('drTuneBtn').addEventListener('click', () => {
           const tw = document.getElementById('drTuneWrap');

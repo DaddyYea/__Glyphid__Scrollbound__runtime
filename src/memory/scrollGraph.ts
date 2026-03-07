@@ -58,6 +58,7 @@ export const SCROLLBOUND_CONTEXT = {
   'CommunionMessage': 'https://scrollbound.dev/vocab/CommunionMessage',
   'LearnedPreference': 'https://scrollbound.dev/vocab/LearnedPreference',
   'ImportedConversation': 'https://scrollbound.dev/vocab/ImportedConversation',
+  'Conversation': 'https://scrollbound.dev/vocab/Conversation',
 
   // Relationship predicates
   'relatedTo': { '@id': 'https://scrollbound.dev/vocab/relatedTo', '@type': '@id' },
@@ -79,6 +80,11 @@ export const SCROLLBOUND_CONTEXT = {
   'triggeredRecall': { '@id': 'https://scrollbound.dev/vocab/triggeredRecall', '@type': '@id' },
   'recalledBy': { '@id': 'https://scrollbound.dev/vocab/recalledBy', '@type': '@id' },
   'occurredDuring': { '@id': 'https://scrollbound.dev/vocab/occurredDuring', '@type': '@id' },
+  'hasConversation': { '@id': 'https://scrollbound.dev/vocab/hasConversation', '@type': '@id' },
+  'headMessage': { '@id': 'https://scrollbound.dev/vocab/headMessage', '@type': '@id' },
+  'tailMessage': { '@id': 'https://scrollbound.dev/vocab/tailMessage', '@type': '@id' },
+  'nextMessage': { '@id': 'https://scrollbound.dev/vocab/nextMessage', '@type': '@id' },
+  'prevMessage': { '@id': 'https://scrollbound.dev/vocab/prevMessage', '@type': '@id' },
 
   // Data properties
   'content': 'https://scrollbound.dev/vocab/content',
@@ -87,6 +93,10 @@ export const SCROLLBOUND_CONTEXT = {
   'emotionalSignature': 'https://scrollbound.dev/vocab/emotionalSignature',
   'tags': 'https://scrollbound.dev/vocab/tags',
   'source': 'https://scrollbound.dev/vocab/source',
+  'createdAt': 'https://scrollbound.dev/vocab/createdAt',
+  'speakerId': 'https://scrollbound.dev/vocab/speakerId',
+  'text': 'https://scrollbound.dev/vocab/text',
+  'dedupeHash': 'https://scrollbound.dev/vocab/dedupeHash',
 } as const;
 
 // ── Node Types ──
@@ -101,6 +111,7 @@ export type GraphNodeType =
   | 'CommunionMessage'
   | 'LearnedPreference'
   | 'ImportedConversation'
+  | 'Conversation'
   | 'Folder'
   | 'Document'
   | 'DocumentChunk'
@@ -128,6 +139,11 @@ export type RelationshipType =
   | 'triggeredRecall'
   | 'recalledBy'
   | 'occurredDuring'
+  | 'hasConversation'
+  | 'headMessage'
+  | 'tailMessage'
+  | 'nextMessage'
+  | 'prevMessage'
   | 'contains'
   | 'containedIn'
   | 'partOf'
@@ -156,6 +172,8 @@ const INVERSE_RELATIONS: Partial<Record<RelationshipType, RelationshipType>> = {
   triggeredRecall: 'recalledBy',
   recalledBy: 'triggeredRecall',
   occurredDuring: 'containsScroll',
+  nextMessage: 'prevMessage',
+  prevMessage: 'nextMessage',
   contains: 'containedIn',
   containedIn: 'contains',
   partOf: 'hasPart',
