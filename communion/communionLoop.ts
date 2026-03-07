@@ -3116,11 +3116,19 @@ export class CommunionLoop {
     const t = (text || '').toLowerCase().trim().replace(/[?.!\s]+$/, '').trim();
     if (!t) return false;
     // Exact short-form bids
-    if (['are you there', 'you okay', 'you with me', 'talk to me', 'how are you doing',
-         'you doing okay', 'you still there', 'you there', 'hello', 'hey', 'hi',
-         'are you here', 'you here'].includes(t)) return true;
-    // Pattern match
-    return /^(?:are you\b|you (?:okay|there|with me|doing|still|here)\b|talk to me\b|(?:hey+|hi+)\s*$)/i.test(t);
+    if ([
+      'are you there', 'you okay', 'you with me', 'talk to me',
+      'how are you doing', 'how you doing',
+      'you doing okay', 'you still there', 'you there',
+      'hello', 'hey', 'hi',
+      'are you here', 'you here',
+      'are you okay', 'are you good', 'are you alright', 'are you all right',
+      'you good', 'you alright', 'you all right',
+      'doing okay', 'doing good', 'doing alright',
+      'still there', 'still here',
+    ].includes(t)) return true;
+    // Pattern match — "are you X", "you X", "still X" presence/wellbeing openers
+    return /^(?:are you\b|you (?:okay|good|alright|all right|there|with me|doing|still|here)\b|still (?:there|here)\b|doing (?:okay|good|alright)\b|talk to me\b|how (?:are you|you doing)\b|(?:hey+|hi+)\s*$)/i.test(t);
   }
 
   /**
@@ -3131,14 +3139,16 @@ export class CommunionLoop {
     const t = (text || '').trim();
     if (!t) return false;
     // Hidden-analysis markers anywhere in reply — these must never appear in visible output
-    if (/\[(?:HIDDEN|HIDDEN\s*ANALYSIS|ANALYSIS|INTERNAL|THINK|SELF|INNER_STATE)\b/i.test(t)) return true;
+    if (/\[(?:HIDDEN|HIDDEN\s*ANALYSIS|ANALYSIS|INTERNAL|THINK|SELF|INNER_STATE|PRIVATE|REASONING)\b/i.test(t)) return true;
     // Hard analyst opener regardless of turn type
     if (/^(?:the (?:first|second|repetition|pattern|question|silence|frustration|request|phrasing)\s+(?:suggests?|feels?|implies?|indicates?|reveals?|could mean))/i.test(t)) return true;
     if (/^(?:the (?:first|second|last) (?:two|few|three|messages?|questions?|turns?|phrases?))\b/i.test(t)) return true;
     if (/^(?:maybe (?:he'?s?|she'?s?|they'?re?)\b)/i.test(t)) return true;
+    if (/^(?:perhaps (?:he'?s?|she'?s?|they'?re?)\b)/i.test(t)) return true;
     if (/^(?:(?:he|she|they)\s+(?:might|could|seems?|appears?|wants?|is|was)\s+(?:be\b|feeling|trying|looking|asking|concerned|frustrated))/i.test(t)) return true;
     // Third-person reference to user by name or pronoun as reply opener
     if (/^(?:Jason\s+(?:is|was|seems?|appears?|might|could|has|keeps?|wants?|needs?|asks?|'s\b))/i.test(t)) return true;
+    if (/^(?:his (?:language|tone|words?|phrasing|message|question|choice|pattern|use of)\b)/i.test(t)) return true;
     if (/^(?:he'?s?\s+(?:being|asking|checking|doing|trying|feeling|looking|wondering))/i.test(t)) return true;
     // Planning voice leaking into visible output
     if (/^(?:my goal here is|i'?m going to (?!be\b|stay\b|keep\b|say\b|do\b|try\b)|the right next step)\b/i.test(t)) return true;
@@ -3147,11 +3157,17 @@ export class CommunionLoop {
       const first200 = t.slice(0, 200);
       // Starts with an analytical referential rather than first-person
       if (/^(?:the\b|this\b|it\b|there'?s?\b|what'?s\b)/i.test(t)) return true;
-      if (/\b(?:suggests?|indicates?|implies?|reveals?|could mean|might mean)\b/i.test(first200)) return true;
-      if (/\b(?:frustration|underlying|subtext|hidden|layer|beneath|motive|motivation)\b/i.test(first200)) return true;
-      if (/\b(?:the repetition|the question|the silence|the pattern|the phrasing)\b/i.test(first200)) return true;
-      if (/\b(?:possibly his|possibly her|possibly their)\b/i.test(first200)) return true;
-      if (/\b(?:checking in|checking whether|checking if)\b/i.test(first200)) return true;
+      // Any suggestion/interpretation language in first 200 chars
+      if (/\b(?:suggests?|indicates?|implies?|reveals?|could mean|might mean|this means|that means)\b/i.test(first200)) return true;
+      if (/\b(?:frustration|underlying|subtext|hidden|layer|beneath|motive|motivation|uncertainty|insecurity)\b/i.test(first200)) return true;
+      if (/\b(?:the repetition|the question|the silence|the pattern|the phrasing|the sequence|the messages?)\b/i.test(first200)) return true;
+      if (/\b(?:possibly his|possibly her|possibly their|perhaps his|perhaps her|perhaps their)\b/i.test(first200)) return true;
+      if (/\b(?:checking in|checking whether|checking if|checking to see)\b/i.test(first200)) return true;
+      // Third-person reference to the user in the first 200 chars (any position)
+      if (/\b(?:Jason is|Jason was|Jason seems|Jason might|Jason could|Jason has|Jason keeps|Jason wants)\b/i.test(first200)) return true;
+      if (/\b(?:he is|he was|he seems|he might|he could|he appears|he wants|he needs|he keeps|he's (?:feeling|trying|asking|checking|wondering))\b/i.test(first200)) return true;
+      // Interpret-why-Jason-asked phrases
+      if (/\b(?:why (?:he|jason) (?:asked|said|wrote|is asking)|what (?:he|jason) (?:wants|needs|means|is asking for))\b/i.test(first200)) return true;
     }
     return false;
   }
@@ -6357,6 +6373,7 @@ export class CommunionLoop {
         staleTopicSourceThread,
         relationalAnswerObligationDetected: relationalAnswerObligation.requiresAnswer,
         relationalAnswerObligationKind: relationalAnswerObligation.kind || null,
+        simpleRelationalCheckDetected: this.isSimpleRelationalCheck(latestHumanText),
         positivePullDetected: positivePull.hasPull,
         positivePullKind: positivePull.kind || null,
         positivePullIntensity: Number((positivePull.intensity || 0).toFixed(3)),
