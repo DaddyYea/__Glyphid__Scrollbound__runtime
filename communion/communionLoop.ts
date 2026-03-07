@@ -560,6 +560,20 @@ export class CommunionLoop {
   private lastHumanSpeakingSignalAt = 0;
   private speechResolve: (() => void) | null = null; // Resolves when client reports playback done
   private speechTimeout: ReturnType<typeof setTimeout> | null = null;
+  /** Single-slot deferred speech — filled when human speaks during synthesis, played after human stops */
+  private pendingSpeechPlayback: {
+    agentId: string;
+    agentConfig: AgentConfig;
+    audio: Buffer;
+    audioFormat: 'mp3';
+    durationMs: number;
+    text: string;
+    createdAt: number;
+    humanMessageIdAtCapture: string | null;
+    ttsTrace: Record<string, unknown>;
+  } | null = null;
+  private pendingSpeechDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingSpeechIsPlaying = false;
   // Timestamp of the last human message — drives time-based social pressure
   private lastHumanMessageAt: number = 0;
   // Sticky fast-lane flag so human-triggered immediate ticks are not lost during an in-flight tick.
@@ -7703,6 +7717,16 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
     };
 
     try {
+      // Supersede any pending speech that hasn't started playing yet — a new reply is arriving.
+      if (this.pendingSpeechPlayback && !this.pendingSpeechIsPlaying) {
+        console.log(`[${agentConfig.name}] VOICE: superseding deferred speech — new reply arriving`);
+        if (this.pendingSpeechDebounceTimer) {
+          clearTimeout(this.pendingSpeechDebounceTimer);
+          this.pendingSpeechDebounceTimer = null;
+        }
+        this.pendingSpeechPlayback = null;
+      }
+
       this.clearStaleHumanSpeaking('tts_start');
       const synthesisStartedAt = Date.now();
       const humanSpeakingSignalAtStart = this.lastHumanSpeakingSignalAt;
@@ -7736,15 +7760,36 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       ttsTrace.ttsResponseReceived = true;
       this.recordRelationalTrace(agentId, 'tts', ttsTrace);
 
-      // Re-check: human may have started speaking during synthesis
+      // Re-check: human may have started speaking during synthesis.
+      // Instead of dropping, store the completed audio and play it after human stops.
       const humanStartedSpeakingDuringSynthesis =
         this.humanSpeaking && this.lastHumanSpeakingSignalAt > humanSpeakingSignalAtStart;
       if (humanStartedSpeakingDuringSynthesis) {
-        console.log(`[${agentConfig.name}] VOICE: dropping audio — human started speaking during synthesis`);
+        const capturedHumanMessageId = this.latestHumanMessage()?.id ?? null;
+        console.log(`[${agentConfig.name}] VOICE: human spoke during synthesis — deferring playback (humanMsg=${capturedHumanMessageId})`);
+        // Cancel any older deferred slot.
+        if (this.pendingSpeechDebounceTimer) {
+          clearTimeout(this.pendingSpeechDebounceTimer);
+          this.pendingSpeechDebounceTimer = null;
+        }
+        this.pendingSpeechPlayback = {
+          agentId,
+          agentConfig,
+          audio: result.audio,
+          audioFormat: result.format,
+          durationMs: result.durationMs || 0,
+          text,
+          createdAt: Date.now(),
+          humanMessageIdAtCapture: capturedHumanMessageId,
+          ttsTrace: { ...ttsTrace },
+        };
+        // Release the speaking lock and signal the client that synthesis ended.
+        // We will re-emit speech-start + speech-end when the human stops talking.
         this.emit({ type: 'speech-end', agentId, durationMs: 0 });
         this.speaking = false;
-        ttsTrace.blockedAt = 'post_synthesis';
-        ttsTrace.blockReason = 'human_started_speaking_during_synthesis';
+        ttsTrace.postSynthesisInterruptedByHuman = true;
+        ttsTrace.pendingSpeechStored = true;
+        ttsTrace.pendingSpeechMessageId = capturedHumanMessageId;
         this.recordRelationalTrace(agentId, 'tts', ttsTrace);
         return;
       }
@@ -8079,6 +8124,97 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
     }
   }
 
+  /**
+   * Play a previously synthesized reply that was deferred because the human
+   * started speaking during synthesis. Called after human speech ends.
+   *
+   * Staleness rules (any one drops the pending slot):
+   *   - age > 30s
+   *   - ≥2 new human messages arrived since capture (conversation clearly moved on)
+   *   - already playing or speaking lock is held by something else
+   *   - slot was superseded (pendingSpeechPlayback replaced or cleared)
+   */
+  private async playPendingSpeech(): Promise<void> {
+    const pending = this.pendingSpeechPlayback;
+    if (!pending || this.pendingSpeechIsPlaying) return;
+
+    const ageMs = Date.now() - pending.createdAt;
+    const staleByAge = ageMs > 30000;
+    const newHumanTurnsSinceCapture = this.pendingHumanTurnsSinceLastAgent(pending.agentId);
+    const staleByContext = newHumanTurnsSinceCapture >= 2;
+
+    if (staleByAge || staleByContext) {
+      this.pendingSpeechPlayback = null;
+      const reason = staleByAge ? `age=${Math.round(ageMs / 1000)}s` : `newHumanTurns=${newHumanTurnsSinceCapture}`;
+      console.log(`[VOICE] Pending speech dropped as stale (${reason})`);
+      this.recordRelationalTrace(pending.agentId, 'tts', {
+        ...pending.ttsTrace,
+        pendingSpeechDroppedAsStale: true,
+        pendingSpeechAgeMs: ageMs,
+        pendingSpeechDropReason: reason,
+      });
+      return;
+    }
+
+    // Bail if speaking lock is held (another agent is mid-speech or a new reply is playing).
+    if (this.speaking) {
+      console.log('[VOICE] Pending speech skipped — speaking lock already held');
+      this.pendingSpeechPlayback = null;
+      return;
+    }
+
+    // Acquire lock and mark as playing before any async work.
+    this.pendingSpeechPlayback = null;
+    this.pendingSpeechIsPlaying = true;
+    this.speaking = true;
+
+    console.log(`[VOICE] Playing deferred speech for ${pending.agentId} (age=${Math.round(ageMs)}ms, ${Math.round(pending.durationMs / 1000)}s audio)`);
+
+    try {
+      this.emit({ type: 'speech-start', agentId: pending.agentId, durationMs: 0 });
+      this.emit({
+        type: 'speech-end',
+        agentId: pending.agentId,
+        audioBase64: pending.audio.toString('base64'),
+        audioFormat: pending.audioFormat,
+        durationMs: pending.durationMs,
+      });
+
+      const safetyMs = (pending.durationMs || 3000) + 5000;
+      if (this.speechTimeout) clearTimeout(this.speechTimeout);
+      this.speechResolve = () => {
+        if (this.speechTimeout) clearTimeout(this.speechTimeout);
+        this.speechTimeout = null;
+        this.speechResolve = null;
+        this.speaking = false;
+        this.pendingSpeechIsPlaying = false;
+        console.log(`[VOICE] Deferred speech playback complete (${pending.agentId})`);
+      };
+      this.speechTimeout = setTimeout(() => {
+        this.speechResolve = null;
+        this.speechTimeout = null;
+        this.speaking = false;
+        this.pendingSpeechIsPlaying = false;
+        console.log(`[VOICE] Deferred speech safety timeout (${Math.round(safetyMs / 1000)}s)`);
+      }, safetyMs);
+
+      this.recordRelationalTrace(pending.agentId, 'tts', {
+        ...pending.ttsTrace,
+        pendingSpeechPlayedAfterHumanFinished: true,
+        pendingSpeechReusedSynthesizedAudio: true,
+        pendingSpeechAgeMs: ageMs,
+        pendingSpeechDebounceMs: 500,
+        pendingSpeechMessageId: pending.humanMessageIdAtCapture,
+        playbackQueued: true,
+        durationMs: pending.durationMs,
+      });
+    } catch (err) {
+      console.error('[VOICE] Deferred speech emit error:', err);
+      this.speaking = false;
+      this.pendingSpeechIsPlaying = false;
+    }
+  }
+
   reportSpeechStatus(agentId: string | null, status: 'queued' | 'started' | 'finished' | 'failed', error?: string): void {
     if (!agentId) return;
     const current = this.getRelationalTrace(agentId);
@@ -8117,14 +8253,24 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       this.humanSpeaking = active;
       console.log(`[COMMUNION] Human ${active ? 'speaking' : 'silent'}`);
 
-      // When human stops speaking, trigger a tick so agents can respond promptly.
-      // Without this, the next response waits for the interval timer.
-      if (!active && !this.processing && !this.speaking && !this.paused) {
-        console.log('[COMMUNION] Human stopped speaking — triggering tick');
-        if (this.timer) {
-          clearTimeout(this.timer);
+      // When human stops speaking:
+      // 1. Schedule deferred speech playback (if any) with a short debounce.
+      // 2. Trigger a tick so agents can respond promptly.
+      if (!active) {
+        if (this.pendingSpeechPlayback && !this.pendingSpeechIsPlaying) {
+          if (this.pendingSpeechDebounceTimer) clearTimeout(this.pendingSpeechDebounceTimer);
+          this.pendingSpeechDebounceTimer = setTimeout(() => {
+            this.pendingSpeechDebounceTimer = null;
+            this.playPendingSpeech().catch(err => console.error('[VOICE] Pending speech playback error:', err));
+          }, 500);
         }
-        this.tick().catch(err => console.error('[COMMUNION] Post-silence tick error:', err));
+        if (!this.processing && !this.speaking && !this.paused) {
+          console.log('[COMMUNION] Human stopped speaking — triggering tick');
+          if (this.timer) {
+            clearTimeout(this.timer);
+          }
+          this.tick().catch(err => console.error('[COMMUNION] Post-silence tick error:', err));
+        }
       }
     }
   }
