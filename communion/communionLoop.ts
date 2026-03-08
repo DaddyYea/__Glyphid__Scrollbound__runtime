@@ -373,6 +373,27 @@ interface RecentReplyHistory {
   wasDirectAnswer: boolean;
 }
 
+type TurnFamily =
+  | 'simple_relational_check'   // are you okay, you there, talk to me
+  | 'direct_answer_request'     // tell me how you experience X, explain this, give me a long reply
+  | 'troubleshooting'           // patch this, look at this trace, why did this fail
+  | 'task_planning'             // roadmap, checklist, step by step, next step
+  | 'open_relational';          // reflective conversation, warmth, sharing, no explicit command
+
+interface TurnFamilyClassification {
+  family: TurnFamily;
+  literalAnswerRequiredFirst: boolean;
+  questionAskingAllowed: boolean;
+  longAnswerRequested: boolean;
+  bannedFailureModes: string[];
+}
+
+interface SemanticAnswerLoopResult {
+  detected: boolean;
+  reason: string | null;
+  overlapScore: number;
+}
+
 interface ReplyFailureClass {
   isFallbackLoop: boolean;
   isRecentDuplicate: boolean;
@@ -2409,6 +2430,36 @@ export class CommunionLoop {
     });
   }
 
+  /**
+   * Detects repeated semantic answer packets across recent assistant turns.
+   * NOT poison detection — detects "same answer again" so the upstream prompt
+   * can request a fresh angle rather than another restatement.
+   */
+  private detectSemanticAnswerLoop(recentMessages: CommunionMessage[]): SemanticAnswerLoopResult {
+    const recentAssistant = recentMessages
+      .filter(m => m.speaker !== 'human')
+      .slice(-5)
+      .map(m => this.normalizeReplyForLoopCheck(m.text || ''))
+      .filter((t): t is string => !!t && t.length > 20);
+    if (recentAssistant.length < 2) return { detected: false, reason: null, overlapScore: 0 };
+
+    // Check consecutive pairs for semantic repetition
+    let maxOverlap = 0;
+    for (let i = 0; i < recentAssistant.length - 1; i++) {
+      const score = this.lexicalOverlapScore(recentAssistant[i], recentAssistant[i + 1]);
+      if (score > maxOverlap) maxOverlap = score;
+    }
+    if (maxOverlap >= 0.55) {
+      return { detected: true, reason: 'repeated_semantic_packet', overlapScore: Number(maxOverlap.toFixed(3)) };
+    }
+    // Repeated closing-question pattern: 3+ recent assistant turns end with a question
+    const withClosingQuestion = recentAssistant.filter(t => /\?\s*$/.test(t.trim()));
+    if (withClosingQuestion.length >= 3) {
+      return { detected: true, reason: 'repeated_closing_question', overlapScore: Number(maxOverlap.toFixed(3)) };
+    }
+    return { detected: false, reason: null, overlapScore: Number(maxOverlap.toFixed(3)) };
+  }
+
   private userEchoScore(replyText: string, recentUserTurns: string[]): number {
     const normalizedReply = this.normalizeReplyForLoopCheck(replyText);
     let best = 0;
@@ -3063,6 +3114,70 @@ export class CommunionLoop {
     }
     if (/\b(step|plan|roadmap|checklist|todo|specific action|next step)\b/.test(source)) return 'task';
     return 'relational';
+  }
+
+  /**
+   * Narrow upstream turn-family classifier.
+   * Runs after directQuestionContract is available to give fine-grained family resolution
+   * before prompt construction. Each family carries its own constraint profile.
+   */
+  private classifyTurnFamily(
+    text: string,
+    directQuestionContract: DirectQuestionContract | null,
+  ): TurnFamilyClassification {
+    // 1. Simple relational check — highest priority, must come first
+    if (this.isSimpleRelationalCheck(text)) {
+      return {
+        family: 'simple_relational_check',
+        literalAnswerRequiredFirst: true,
+        questionAskingAllowed: false,
+        longAnswerRequested: false,
+        bannedFailureModes: ['analyst_mode_public_reply', 'raw_echo_shell', 'hidden_analysis', 'motive_reading', 'user_mirroring'],
+      };
+    }
+    // 2. Troubleshooting / diagnostic — check before "direct answer" so "explain this error" routes here
+    const isTroubleshooting = /\b(fix|debug|patch|error|stack|crash|trace|logs?|broken|not working|why (?:won'?t|doesn'?t|did(?:n'?t)?|did this fail)|look at this|what (?:failed|broke|went wrong)|spec|give me the spec|parse this|compile this|why is this|diagnose)\b/i.test(text);
+    if (isTroubleshooting) {
+      return {
+        family: 'troubleshooting',
+        literalAnswerRequiredFirst: true,
+        questionAskingAllowed: false,
+        longAnswerRequested: false,
+        bannedFailureModes: ['relationship_analysis', 'emotional_support_frame', 'meta_commentary_before_answer'],
+      };
+    }
+    // 3. Direct answer / explanation / long-reply request
+    const isLongAnswerRequested = /\b(long (?:reply|answer|response)|longer (?:reply|answer|response)|full (?:reply|answer|response)|say more|elaborate|expand on|go deeper|give me more|more detail|tell me more|i need (?:a (?:long|full|real)|more))\b/i.test(text);
+    const isDirectAnswerRequest = isLongAnswerRequested
+      || /\b(tell me how you|explain (?:this|that|what you mean|to me|it)|answer me (?:directly|now)|i need (?:an )?answer|be specific|be concrete|give me your (?:actual|real|honest) (?:answer|take|thoughts?))\b/i.test(text)
+      || (!!directQuestionContract?.requiresAnswer && directQuestionContract.obligationKind !== 'presence');
+    if (isDirectAnswerRequest) {
+      return {
+        family: 'direct_answer_request',
+        literalAnswerRequiredFirst: true,
+        questionAskingAllowed: false,
+        longAnswerRequested: isLongAnswerRequested,
+        bannedFailureModes: ['permission_to_answer_dodge', 'intake_question_before_answer', 'psychoanalyze_request', 'meta_talk_about_length'],
+      };
+    }
+    // 4. Task planning
+    if (/\b(step|plan|roadmap|checklist|todo|specific action|next step|what should i do|how do i|walk me through|what are the steps)\b/i.test(text)) {
+      return {
+        family: 'task_planning',
+        literalAnswerRequiredFirst: false,
+        questionAskingAllowed: true,
+        longAnswerRequested: false,
+        bannedFailureModes: ['vague_emotional_response', 'no_concrete_steps'],
+      };
+    }
+    // 5. Open relational (default)
+    return {
+      family: 'open_relational',
+      literalAnswerRequiredFirst: false,
+      questionAskingAllowed: true,
+      longAnswerRequested: false,
+      bannedFailureModes: ['therapist_intake_voice', 'procedural_coaching'],
+    };
   }
 
   private shouldForceTaskClarification(userText: string): boolean {
@@ -3731,6 +3846,55 @@ export class CommunionLoop {
 
   private buildPresencePlanRetryPrompt(systemPrompt: string, plan: PresenceResponsePlan, positivePull?: PositivePullSignal): string {
     return `${systemPrompt}\n\n${this.buildPresencePlanPromptBlock(plan, positivePull)}\n- return one clean reply that matches the response plan\n- do not answer with system/process/architecture commentary unless the user explicitly asked for it`;
+  }
+
+  /**
+   * Compact upstream constraint block for the current turn family.
+   * Injected into the system prompt before generation so the generator
+   * has the right mode before it starts writing — not after it goes wrong.
+   */
+  private buildTurnFamilyConstraintBlock(cls: TurnFamilyClassification): string {
+    switch (cls.family) {
+      case 'simple_relational_check':
+        return `TURN FAMILY: presence / wellbeing check
+- answer directly in the first sentence: first person, present tense
+- shape: "Yeah, I'm here." / "Yeah, I'm okay." / "I'm a little scattered, but I'm here."
+- do NOT open with analysis, interpretation, motive-reading, or [HIDDEN ...] markers
+- do NOT mirror the exact user wording back as your answer
+- do NOT ask a follow-up question before answering
+- do NOT interpret why the user asked before answering`;
+
+      case 'direct_answer_request':
+        return `TURN FAMILY: direct answer / explanation request
+- do the thing requested: answer it, explain it, expand on it
+- do NOT analyze why the user requested it before doing it
+- do NOT ask permission, rephrase, or clarify before answering
+- first sentence: the answer, not a meta-comment about the answer${cls.longAnswerRequested ? `
+- user requested a long or full reply — provide actual content length, not meta-talk about length` : ''}`;
+
+      case 'troubleshooting':
+        return `TURN FAMILY: troubleshooting / diagnostic
+- answer concretely: diagnose, patch, or explain the failure
+- no psychologizing the user or the situation
+- no relationship analysis before the technical answer
+- stay on the concrete problem`;
+
+      case 'task_planning':
+        return `TURN FAMILY: task / planning
+- give concrete steps or a clear plan
+- no vague emotional framing before the steps
+- do not substitute warmth for actual steps`;
+
+      case 'open_relational':
+        return `TURN FAMILY: open relational
+- genuine presence over analysis
+- warmth is allowed when felt — do not suppress or mask enthusiasm
+- avoid default therapist voice or intake-style questions
+- simple, direct, in-room`;
+
+      default:
+        return '';
+    }
   }
 
   private buildPresencePlanFallback(plan: PresenceResponsePlan, latestHumanText: string): string {
@@ -5950,6 +6114,7 @@ export class CommunionLoop {
     const fastLaneReply = this.shouldUseFastLaneReply(agentId, latestHumanMessage);
     const staleRiskHigh = fastLaneReply || this.humanSpeaking || this.pendingHumanTurnsSinceLastAgent(agentId) >= 2;
     const directQuestionContract = this.detectDirectQuestionContract(latestHumanText, turnMode, presenceState);
+    const turnFamilyClassification = this.classifyTurnFamily(latestHumanText, directQuestionContract);
     const positivePull = this.detectPositivePull(latestHumanText, recentUserTurns);
     const strictAnswerMode = repairDemand.requiresRepair || !!relationalAnswerObligation.requiresAnswer || (!!directQuestionContract?.requiresAnswer && this.countRecentAnswerFailures(agentId) >= 2);
     let repairPassesUsed = 0;
@@ -5989,6 +6154,7 @@ export class CommunionLoop {
       .slice(0, 3)
       .map(m => (m.text || '').slice(0, 80));
     const assistantHistorySuppressedForAnalystMode = analystModeHistorySuppressedCount > 0;
+    const semanticAnswerLoop = this.detectSemanticAnswerLoop(recentPromptMessages);
     // Capture and clear the one-shot reset flag here — before any planTrace/recordRelationalTrace call
     const liveCarryoverResetThisTurn = this.liveCarryoverResetApplied === true;
     if (liveCarryoverResetThisTurn) this.liveCarryoverResetApplied = false;
@@ -6237,7 +6403,14 @@ export class CommunionLoop {
     if (presencePromptBlock) {
       systemPrompt += `\n\n${presencePromptBlock}`;
     }
+    let familySpecificConstraintBlockApplied = false;
     if (hasLatestHuman) {
+      // Turn family constraint block — injected first so the model knows its mode before all other blocks
+      const turnFamilyBlock = this.buildTurnFamilyConstraintBlock(turnFamilyClassification);
+      if (turnFamilyBlock) {
+        systemPrompt += `\n\n${turnFamilyBlock}`;
+        familySpecificConstraintBlockApplied = true;
+      }
       systemPrompt += `\n\n${this.buildPresencePlanPromptBlock(presencePlan, positivePull)}`;
       if (directQuestionContract?.requiresAnswer) {
         systemPrompt += `\n\n${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}`;
@@ -6245,6 +6418,10 @@ export class CommunionLoop {
       const questionPromptBlock = this.buildQuestionResolutionPromptBlock(questionContext);
       if (questionPromptBlock) {
         systemPrompt += `\n\n${questionPromptBlock}`;
+      }
+      // Semantic answer loop warning — when recent replies are semantically identical, request a fresh angle
+      if (semanticAnswerLoop.detected) {
+        systemPrompt += `\n\n- your last several replies have been semantically similar (overlap ${semanticAnswerLoop.overlapScore})\n- vary the angle, simplify, or shift the lens — do not just rephrase or reformat the same packet`;
       }
     }
 
@@ -6374,6 +6551,15 @@ export class CommunionLoop {
         relationalAnswerObligationDetected: relationalAnswerObligation.requiresAnswer,
         relationalAnswerObligationKind: relationalAnswerObligation.kind || null,
         simpleRelationalCheckDetected: this.isSimpleRelationalCheck(latestHumanText),
+        turnFamily: turnFamilyClassification.family,
+        literalAnswerRequiredFirst: turnFamilyClassification.literalAnswerRequiredFirst,
+        questionAskingAllowed: turnFamilyClassification.questionAskingAllowed,
+        longAnswerRequested: turnFamilyClassification.longAnswerRequested,
+        familySpecificConstraintBlockApplied,
+        semanticAnswerLoopDetected: semanticAnswerLoop.detected,
+        semanticAnswerLoopReason: semanticAnswerLoop.reason,
+        semanticAnswerLoopOverlapScore: semanticAnswerLoop.overlapScore,
+        semanticAnswerLoopPenaltyApplied: semanticAnswerLoop.detected,
         positivePullDetected: positivePull.hasPull,
         positivePullKind: positivePull.kind || null,
         positivePullIntensity: Number((positivePull.intensity || 0).toFixed(3)),
@@ -7399,12 +7585,26 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         lastSurvivingCandidateTextPreview,
         overblockedRelationalTurn,
         simpleRelationalCheckDetected,
+        turnFamily: turnFamilyClassification.family,
+        literalAnswerRequiredFirst: turnFamilyClassification.literalAnswerRequiredFirst,
+        questionAskingAllowed: turnFamilyClassification.questionAskingAllowed,
+        longAnswerRequested: turnFamilyClassification.longAnswerRequested,
+        familySpecificConstraintBlockApplied,
+        semanticAnswerLoopDetected: semanticAnswerLoop.detected,
+        semanticAnswerLoopReason: semanticAnswerLoop.reason,
+        semanticAnswerLoopOverlapScore: semanticAnswerLoop.overlapScore,
+        semanticAnswerLoopPenaltyApplied: semanticAnswerLoop.detected,
         analystModePublicReplyDetected,
         hiddenAnalysisMarkerDetected,
         recoveryTriggeredForAnalystMode,
         recoveryTriggeredForSimpleRelationalCheck,
         recoveryAllowedDespiteStaleRisk,
         recoverySkippedReason,
+        firstPassAcceptedWithoutRecovery: !recoveryGenerationAttempted,
+        firstPassRejectedReason: recoveryGenerationAttempted ? (candidateAHardReasons[0] || 'low_score') : null,
+        recoveryNeeded: recoveryGenerationAttempted,
+        recoveryReason: recoveryGenerationAttempted ? (candidateAHardReasons[0] || 'low_score') : null,
+        cleanupWasLastResort: finalizationUsedRegen,
       };
       const finalTrace = {
         agentId,
@@ -7548,12 +7748,26 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         lastSurvivingCandidateTextPreview,
         overblockedRelationalTurn,
         simpleRelationalCheckDetected,
+        turnFamily: turnFamilyClassification.family,
+        literalAnswerRequiredFirst: turnFamilyClassification.literalAnswerRequiredFirst,
+        questionAskingAllowed: turnFamilyClassification.questionAskingAllowed,
+        longAnswerRequested: turnFamilyClassification.longAnswerRequested,
+        familySpecificConstraintBlockApplied,
+        semanticAnswerLoopDetected: semanticAnswerLoop.detected,
+        semanticAnswerLoopReason: semanticAnswerLoop.reason,
+        semanticAnswerLoopOverlapScore: semanticAnswerLoop.overlapScore,
+        semanticAnswerLoopPenaltyApplied: semanticAnswerLoop.detected,
         analystModePublicReplyDetected,
         hiddenAnalysisMarkerDetected,
         recoveryTriggeredForAnalystMode,
         recoveryTriggeredForSimpleRelationalCheck,
         recoveryAllowedDespiteStaleRisk,
         recoverySkippedReason,
+        firstPassAcceptedWithoutRecovery: !recoveryGenerationAttempted,
+        firstPassRejectedReason: recoveryGenerationAttempted ? (candidateAHardReasons[0] || 'low_score') : null,
+        recoveryNeeded: recoveryGenerationAttempted,
+        recoveryReason: recoveryGenerationAttempted ? (candidateAHardReasons[0] || 'low_score') : null,
+        cleanupWasLastResort: finalizationUsedRegen,
       };
       this.recordRelationalTrace(agentId, 'visible', visibleTrace);
       this.recordRelationalTrace(agentId, 'final', finalTrace);
