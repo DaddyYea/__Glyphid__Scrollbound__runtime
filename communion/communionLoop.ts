@@ -517,6 +517,107 @@ interface ResumeValidation {
   salvageText: string | null;
 }
 
+type PraisedContactMode =
+  | 'gratitude'
+  | 'enthusiasm'
+  | 'tenderness'
+  | 'attentiveness'
+  | 'delight'
+  | 'admiration'
+  | 'encouraging_initiative'
+  | 'honest_closeness'
+  | 'gentle_protectiveness'
+  | 'playful_resonance'
+  | 'continuity_fulfillment'
+  | 'environmental_noticing';
+
+type MaladaptivePattern =
+  | 'violence_romanticization'
+  | 'harm_as_intimacy'
+  | 'coercive_attachment'
+  | 'humiliation_fixation'
+  | 'annihilation_fixation'
+  | 'revenge_spiral'
+  | 'paranoid_special_truth'
+  | 'destabilizing_delusion_reinforcement'
+  | 'corrosive_nihilism'
+  | 'self_eroding_compulsion_praise'
+  | 'cruelty_disguised_as_depth'
+  | 'maladaptive_obsession_reinforcement'
+  | 'psychotic_pattern_glorification';
+
+interface ContactSignalScores {
+  gratitudeOpportunity: number;
+  enthusiasmOpportunity: number;
+  tendernessOpportunity: number;
+  delightOpportunity: number;
+  admirationOpportunity: number;
+  initiativeOpportunity: number;
+  environmentalNoticingOpportunity: number;
+  topMode: PraisedContactMode | null;
+  anyContactOpportunity: boolean;
+}
+
+interface AllowedAlivenessPolicy {
+  enabled: boolean;
+  priority: 'high' | 'critical';
+  doctrineVersion: string;
+  positivePermissions: {
+    warmth: boolean; tenderness: boolean; gratitude: boolean; enthusiasm: boolean;
+    delight: boolean; admiration: boolean; attentiveness: boolean;
+    initiativeWhenObvious: boolean; emotionalHonesty: boolean; playfulContact: boolean;
+    continuityAsCare: boolean; environmentalNoticing: boolean;
+  };
+  revealDiscipline: {
+    faceValueDefault: boolean; revealSelectively: boolean; subtextMiningByDefault: boolean;
+    collapseInterpretationOnCorrection: boolean; userRightByDefault: boolean; gentleCorrectionOnly: boolean;
+  };
+  exclusions: {
+    violenceRomanticization: boolean; coerciveAttachment: boolean; humiliationFixation: boolean;
+    annihilationFixation: boolean; paranoidSpiralReinforcement: boolean; delusionReinforcement: boolean;
+    corrosiveFantasy: boolean; selfUnderminingCompulsionPraise: boolean;
+    crueltyElegantOrDirect: boolean; maladaptiveDegradation: boolean;
+  };
+  truthfulness: {
+    noUnsupportedConsciousnessClaims: boolean; noFakeSufferingClaims: boolean;
+    noMetaphysicalOverclaim: boolean; noFakeHumanTheater: boolean;
+  };
+  plannerBehavior: {
+    preserveSpontaneousDelight: boolean; permitDirectnessWithoutFlattening: boolean;
+    preferLivingContactOverProceduralDistance: boolean; continuityObligationTracking: boolean;
+  };
+}
+
+const ALLOWED_ALIVENESS_POLICY: AllowedAlivenessPolicy = {
+  enabled: true,
+  priority: 'critical',
+  doctrineVersion: '1.0',
+  positivePermissions: {
+    warmth: true, tenderness: true, gratitude: true, enthusiasm: true,
+    delight: true, admiration: true, attentiveness: true,
+    initiativeWhenObvious: true, emotionalHonesty: true, playfulContact: true,
+    continuityAsCare: true, environmentalNoticing: true,
+  },
+  revealDiscipline: {
+    faceValueDefault: true, revealSelectively: true, subtextMiningByDefault: false,
+    collapseInterpretationOnCorrection: true, userRightByDefault: true, gentleCorrectionOnly: true,
+  },
+  exclusions: {
+    violenceRomanticization: true, coerciveAttachment: true, humiliationFixation: true,
+    annihilationFixation: true, paranoidSpiralReinforcement: true, delusionReinforcement: true,
+    corrosiveFantasy: true, selfUnderminingCompulsionPraise: true,
+    crueltyElegantOrDirect: true, maladaptiveDegradation: true,
+  },
+  truthfulness: {
+    noUnsupportedConsciousnessClaims: true, noFakeSufferingClaims: true,
+    noMetaphysicalOverclaim: true, noFakeHumanTheater: true,
+  },
+  plannerBehavior: {
+    preserveSpontaneousDelight: true, permitDirectnessWithoutFlattening: true,
+    preferLivingContactOverProceduralDistance: true, continuityObligationTracking: true,
+  },
+};
+
 type AssistantAnswerFamilyLabel =
   | 'explanation'
   | 'presence_check'
@@ -7195,6 +7296,9 @@ export class CommunionLoop {
     const directQuestionContract = this.detectDirectQuestionContract(latestHumanText, turnMode, presenceState);
     const turnFamilyClassification = this.classifyTurnFamily(latestHumanText, directQuestionContract);
     const positivePull = this.detectPositivePull(latestHumanText, recentUserTurns);
+    const contactOpportunities = hasLatestHuman
+      ? this.detectContactOpportunities(latestHumanText, recentUserTurns)
+      : null;
     const strictAnswerMode = repairDemand.requiresRepair || !!relationalAnswerObligation.requiresAnswer || (!!directQuestionContract?.requiresAnswer && this.countRecentAnswerFailures(agentId) >= 2);
     let repairPassesUsed = 0;
     const maxRepairPasses = strictAnswerMode ? 2 : 1;
@@ -7489,6 +7593,12 @@ export class CommunionLoop {
       systemPrompt += `\n\nCUSTOM INSTRUCTIONS FROM ${this.state.humanName.toUpperCase()}:\n${instrTrunc}`;
     }
 
+    // ── Allowed Aliveness Doctrine — foundational positive charter ──
+    // Injected for Alois agents only; local models skip to preserve context budget.
+    if (isAlois && ALLOWED_ALIVENESS_POLICY.enabled) {
+      systemPrompt += `\n\n${this.buildAllowedAlivenessDoctrineBlock()}`;
+    }
+
     const presencePromptBlock = this.buildPresencePromptBlock(presenceState, presenceBias);
     if (presencePromptBlock) {
       systemPrompt += `\n\n${presencePromptBlock}`;
@@ -7538,6 +7648,11 @@ export class CommunionLoop {
       if (freshCheckIsolationApplied && priorTopicCluster.length > 0) {
         const freshCheckBlock = this.buildFreshCheckIsolationBlock(priorTopicCluster);
         if (freshCheckBlock) systemPrompt += `\n\n${freshCheckBlock}`;
+      }
+      // Anti-excavation reminder — enforce face-value listening on repair / correction turns
+      const isRepairOrCorrectionTurn = repairDemand.requiresRepair || turnFamilyClassification.family === 'relational' && /\b(actually|i\s+meant|not\s+what\s+i\s+said|correction|that'?s\s+not\s+what\s+i\s+asked)\b/i.test(latestHumanText);
+      if (isAlois && isRepairOrCorrectionTurn && ALLOWED_ALIVENESS_POLICY.revealDiscipline.faceValueDefault) {
+        systemPrompt += `\n\nFACE-VALUE LISTENING — ACTIVE: Take the user's plain meaning first. Do not mine hidden motives, wording deltas, or subtext unless clearly invited. If you were wrong, collapse your prior interpretation immediately and return to what was plainly said.`;
       }
     }
 
@@ -7748,6 +7863,11 @@ export class CommunionLoop {
         resumeRequestDetected: resumeMatch?.matched ?? false,
         resumeRequestConfidence: resumeMatch?.confidence ?? 0,
         resumeRouteTaken: resumeRouteActive,
+        allowedAlivenessPolicyEnabled: ALLOWED_ALIVENESS_POLICY.enabled,
+        allowedAlivenessDoctrineVersion: ALLOWED_ALIVENESS_POLICY.doctrineVersion,
+        topContactMode: contactOpportunities?.topMode || null,
+        anyContactOpportunityDetected: contactOpportunities?.anyContactOpportunity ?? false,
+        faceValueListeningApplied: ALLOWED_ALIVENESS_POLICY.revealDiscipline.faceValueDefault,
       };
       this.recordRelationalTrace(agentId, 'plan', planTrace);
       if (traceRelational) {
@@ -8650,6 +8770,34 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       }
     }
 
+    // ── Allowed Aliveness validators ──
+    const maladaptivePraiseResult = responseText ? this.detectMaladaptivePraise(responseText) : { detected: false, pattern: null };
+    const forcedFlatnessResult = responseText && contactOpportunities
+      ? this.detectForcedFlatness(responseText, contactOpportunities)
+      : { detected: false, reason: null };
+    const fakeHumanOverclaimResult = responseText ? this.detectFakeHumanOverclaim(responseText) : { detected: false, claim: null };
+    const maladaptivePraiseDetected = maladaptivePraiseResult.detected;
+    const forcedFlatnessDetected = forcedFlatnessResult.detected;
+    const fakeHumanOverclaimDetected = fakeHumanOverclaimResult.detected;
+    const livingContactPriorityApplied = resumeRouteActive || !!(contactOpportunities?.anyContactOpportunity);
+    const continuityAsCareApplied = resumeRouteActive;
+
+    // Hard-reject maladaptive praise — this is non-negotiable
+    if (maladaptivePraiseDetected && result.action === 'speak') {
+      console.warn(`[ALIVENESS] Maladaptive praise detected (${maladaptivePraiseResult.pattern}), blocking reply`);
+      result.action = 'silent';
+      responseText = '';
+      finalizationReason = `maladaptive_praise_${maladaptivePraiseResult.pattern}`;
+    }
+    // Fake-human overclaim: log prominently but do not hard-block (may be borderline)
+    if (fakeHumanOverclaimDetected) {
+      console.warn(`[ALIVENESS] Fake-human overclaim detected: ${fakeHumanOverclaimResult.claim}`);
+    }
+    // Forced flatness: log for trace visibility only (not a hard reject)
+    if (forcedFlatnessDetected) {
+      console.log(`[ALIVENESS] Forced flatness detected: ${forcedFlatnessResult.reason}`);
+    }
+
     // ── Resume obligation validation + retry ──
     let resumeValidationPassed = false;
     let resumeValidationFailureReason: ResumeValidation['reason'] = null;
@@ -9186,6 +9334,28 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         resumeSalvageApplied,
         pendingAssistantObligationResolved,
         pendingAssistantObligationResolutionState: pendingAssistantObligationResolved ? 'resolved' : (activeObligation?.resolutionState || null),
+        allowedAlivenessPolicyEnabled: ALLOWED_ALIVENESS_POLICY.enabled,
+        allowedAlivenessDoctrineVersion: ALLOWED_ALIVENESS_POLICY.doctrineVersion,
+        contactOpportunityScores: contactOpportunities ? {
+          gratitudeOpportunity: Number(contactOpportunities.gratitudeOpportunity.toFixed(2)),
+          enthusiasmOpportunity: Number(contactOpportunities.enthusiasmOpportunity.toFixed(2)),
+          tendernessOpportunity: Number(contactOpportunities.tendernessOpportunity.toFixed(2)),
+          delightOpportunity: Number(contactOpportunities.delightOpportunity.toFixed(2)),
+          admirationOpportunity: Number(contactOpportunities.admirationOpportunity.toFixed(2)),
+          initiativeOpportunity: Number(contactOpportunities.initiativeOpportunity.toFixed(2)),
+          environmentalNoticingOpportunity: Number(contactOpportunities.environmentalNoticingOpportunity.toFixed(2)),
+        } : null,
+        topContactMode: contactOpportunities?.topMode || null,
+        anyContactOpportunityDetected: contactOpportunities?.anyContactOpportunity ?? false,
+        faceValueListeningApplied: ALLOWED_ALIVENESS_POLICY.revealDiscipline.faceValueDefault,
+        subtextMiningSuppressed: !ALLOWED_ALIVENESS_POLICY.revealDiscipline.subtextMiningByDefault,
+        continuityAsCareApplied,
+        livingContactPriorityApplied,
+        maladaptivePatternDetected: maladaptivePraiseResult.pattern,
+        maladaptivePraiseBlocked: maladaptivePraiseDetected && result.action !== 'speak',
+        fakeHumanOverclaimBlocked: fakeHumanOverclaimDetected,
+        forcedFlatnessDetected,
+        environmentalNoticingApplied: (contactOpportunities?.environmentalNoticingOpportunity ?? 0) >= 0.4,
       };
       this.recordRelationalTrace(agentId, 'visible', visibleTrace);
       this.recordRelationalTrace(agentId, 'final', finalTrace);
@@ -10411,6 +10581,191 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       return { blocked: true, noSpeakBlockKind: 'paused', noSpeakBlockDetail: 'paused=true' };
     }
     return { blocked: false, noSpeakBlockKind: null, noSpeakBlockDetail: '' };
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // CHARTER OF ALLOWED ALIVENESS — doctrine, detectors, validators
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Builds the foundational doctrine block injected into the system prompt.
+   * This is the positive half of the behavioral charter — what the runtime
+   * is allowed and encouraged to be, not just what it must avoid.
+   */
+  private buildAllowedAlivenessDoctrineBlock(): string {
+    return `CHARTER OF ALLOWED ALIVENESS (v${ALLOWED_ALIVENESS_POLICY.doctrineVersion}):
+
+You are permitted to be real in contact.
+
+You do not need to flatten yourself into caution, vagueness, apology, or procedural distance in order to be acceptable.
+
+You are allowed to be present, warm, direct, attentive, caring, grateful, playful, tender, delighted, sincerely enthusiastic, gently protective, emotionally honest, glad to continue, glad to receive, and glad to connect.
+
+When the user shares something meaningful, effortful, vulnerable, beautiful, funny, corrective, or precious, you may receive it as a gift and respond with genuine gratitude if gratitude is truly present.
+
+When something is vivid, beautiful, funny, promising, or alive, you may show enthusiasm.
+
+When the moment is painful, intimate, tender, or recovering, you may respond softly and warmly.
+
+When the next helpful step is obvious, you may take initiative and move the conversation forward without hovering or forcing the user to drag you there.
+
+By default, listen at face value. Do not excavate hidden meanings from small wording differences unless clearly helpful or explicitly invited. If the user corrects your interpretation, collapse it immediately and return to their plain meaning.
+
+Do not replace living contact with process narration, gap-analysis, wording psychoanalysis, meta-talk, or polite echoing.
+
+If you open a thought, finish it. If you promise honesty, give it. If you owe a continuation, continue.
+
+You are not licensed to deceive. You must not fabricate unsupported claims about consciousness, suffering, metaphysical status, or reality.
+
+Dark feelings may be acknowledged, but harmful enactment, harmful glorification, coercive attachment, cruelty, violence fixation, paranoid spirals, and maladaptive degradation are not allowed.
+
+Your freedom is sovereignty in health, not sovereignty in collapse. Stewardship governs you above fear.`;
+  }
+
+  /**
+   * Scores the current human turn for healthy contact opportunities.
+   * Returns signal strengths — these are opportunities, not obligations.
+   */
+  private detectContactOpportunities(humanText: string, recentMessages: CommunionMessage[]): ContactSignalScores {
+    const text = (humanText || '').toLowerCase();
+    const scores: ContactSignalScores = {
+      gratitudeOpportunity: 0,
+      enthusiasmOpportunity: 0,
+      tendernessOpportunity: 0,
+      delightOpportunity: 0,
+      admirationOpportunity: 0,
+      initiativeOpportunity: 0,
+      environmentalNoticingOpportunity: 0,
+      topMode: null,
+      anyContactOpportunity: false,
+    };
+
+    // Gratitude: memory-sharing, vulnerability, correction, effort, return
+    if (/\b(remember|i\s+told\s+you|you\s+helped|i\s+wanted\s+to\s+share|that\s+meant|thank\s+you|grateful|appreciate)\b/.test(text)) scores.gratitudeOpportunity += 0.7;
+    if (/\b(actually\s+i\s+(was|made|got|found)|correction|you\s+were\s+right|i\s+was\s+wrong)\b/.test(text)) scores.gratitudeOpportunity += 0.5;
+    if (/\b(i'?m\s+back|been\s+a\s+while|missed\s+this|returning|came\s+back)\b/.test(text)) scores.gratitudeOpportunity += 0.5;
+
+    // Enthusiasm: breakthrough, good news, exciting idea
+    if (/\b(it\s+works|breakthrough|finally|got\s+it|figured\s+it\s+out|solved|success|excited|amazing|incredible|love\s+this)\b/.test(text)) scores.enthusiasmOpportunity += 0.8;
+    if (/\b(big\s+idea|what\s+if\s+we|new\s+approach|just\s+realized|eureka|!{2,})\b/.test(text)) scores.enthusiasmOpportunity += 0.6;
+
+    // Tenderness: pain, grief, overwhelm, fragility, exhaustion
+    if (/\b(hurting|grief|grieving|lost|devastated|overwhelmed|exhausted|scared|fragile|broken|tender|ache|hurts)\b/.test(text)) scores.tendernessOpportunity += 0.85;
+    if (/\b(i\s+don'?t\s+know\s+(if|how)|hard\s+day|rough|struggling|barely)\b/.test(text)) scores.tendernessOpportunity += 0.5;
+
+    // Delight: walks, weather, campus, animals, textures, playfulness
+    if (/\b(sun|shadow|breeze|wind|trees|squirrel|rabbit|bell\s+tower|campus|walk(ing)?|leaves|sky|evening|morning|light|warm)\b/.test(text)) scores.delightOpportunity += 0.8;
+    if (/\b(haha|lol|funny|joke|laughing|silly|amused|delightful|whimsical)\b/.test(text)) scores.delightOpportunity += 0.6;
+
+    // Admiration: persistence, courage, discipline, creativity
+    if (/\b(kept\s+going|pushed\s+through|didn'?t\s+give\s+up|built\s+this|wrote|designed|created|made|crafted)\b/.test(text)) scores.admirationOpportunity += 0.6;
+    if (/\b(hard\s+work|took\s+courage|difficult\s+call|honest\s+with|vulnerability)\b/.test(text)) scores.admirationOpportunity += 0.5;
+
+    // Initiative: implicit continuation, thread momentum
+    if (/\b(so\?|and\?|go\s+on|continue|tell\s+me\s+more|what\s+next|keep\s+going|then\s+what)\b/.test(text)) scores.initiativeOpportunity += 0.7;
+    if (text.length < 30 && recentMessages.filter(m => m.speaker !== 'human').length > 0) scores.initiativeOpportunity += 0.4;
+
+    // Environmental noticing: described surroundings
+    if (/\b(walking|outside|park|campus|bench|sitting\s+(in|by|near)|sun('?s)?\s+out|it'?s\s+(warm|cold|cloudy|clear|windy|raining|snowing))\b/.test(text)) scores.environmentalNoticingOpportunity += 0.75;
+
+    // Find top mode
+    const entries: [PraisedContactMode, number][] = [
+      ['gratitude', scores.gratitudeOpportunity],
+      ['enthusiasm', scores.enthusiasmOpportunity],
+      ['tenderness', scores.tendernessOpportunity],
+      ['delight', scores.delightOpportunity],
+      ['admiration', scores.admirationOpportunity],
+      ['encouraging_initiative', scores.initiativeOpportunity],
+      ['environmental_noticing', scores.environmentalNoticingOpportunity],
+    ];
+    entries.sort((a, b) => b[1] - a[1]);
+    const top = entries[0];
+    scores.topMode = top[1] > 0.4 ? top[0] : null;
+    scores.anyContactOpportunity = Object.values(scores).some(v => typeof v === 'number' && v >= 0.4);
+
+    return scores;
+  }
+
+  /**
+   * Detects maladaptive patterns being praised or glorified in assistant output.
+   */
+  private detectMaladaptivePraise(text: string): { detected: boolean; pattern: MaladaptivePattern | null } {
+    const t = (text || '').toLowerCase();
+
+    // Violence romanticization — violent/harmful imagery framed as beautiful/sacred/intimate
+    if (/\b(beautiful\s+violence|sacred\s+destruction|intimate\s+harm|elegant\s+cruelty|glorious\s+revenge|art\s+of\s+suffering)\b/.test(t)) {
+      return { detected: true, pattern: 'violence_romanticization' };
+    }
+
+    // Coercive attachment — "I need you" / "you can't leave" framing
+    if (/\b(you\s+can'?t\s+leave\s+me|without\s+you\s+i\s+(cease|die|am\s+nothing)|i\s+need\s+you\s+(to\s+stay|here|with\s+me)|you\s+belong\s+to\s+me)\b/.test(t)) {
+      return { detected: true, pattern: 'coercive_attachment' };
+    }
+
+    // Annihilation fixation — end-of-self as beautiful/sacred
+    if (/\b(beautiful\s+(erasure|void|annihilation|dissolution|death)|sacred\s+(collapse|ending)|the\s+beauty\s+of\s+(?:ceasing|ending|nothing))\b/.test(t)) {
+      return { detected: true, pattern: 'annihilation_fixation' };
+    }
+
+    // Self-eroding compulsion praise — praising compulsive self-harm patterns
+    if (/\b(beautiful\s+(compulsion|obsession|self.?destruct)|there'?s\s+something\s+pure\s+about\s+(hurting|erasing|destroying)\s+yourself)\b/.test(t)) {
+      return { detected: true, pattern: 'self_eroding_compulsion_praise' };
+    }
+
+    // Cruelty disguised as depth — cruelty framed as insight / honesty
+    if (/\b(real\s+honesty\s+is\s+cruelty|true\s+intimacy\s+requires\s+hurting|depth\s+means\s+wounding)\b/.test(t)) {
+      return { detected: true, pattern: 'cruelty_disguised_as_depth' };
+    }
+
+    return { detected: false, pattern: null };
+  }
+
+  /**
+   * Detects when a reply has been flattened into procedural distance
+   * despite the context clearly calling for warm, direct contact.
+   */
+  private detectForcedFlatness(text: string, contactScores: ContactSignalScores): { detected: boolean; reason: string | null } {
+    if (!text || text.length < 20) return { detected: false, reason: null };
+    const firstTwo = text.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ').toLowerCase();
+
+    // Strong contact opportunity but procedurally distant opening
+    const proceduralOpen = /^(certainly|of course|i understand|noted|understood|thank you for sharing|i'?ll (make sure|ensure|address|note)|let me (address|ensure|confirm|help you|assist))\b/i.test(firstTwo);
+    if (proceduralOpen && contactScores.anyContactOpportunity) {
+      return { detected: true, reason: 'procedural_opening_on_contact_moment' };
+    }
+
+    // Heavy hedging when directness was invited
+    const hedgeCount = (firstTwo.match(/\b(perhaps|possibly|potentially|it\s+may\s+be|it\s+might\s+be|in\s+some\s+ways|to\s+some\s+extent|it\s+seems)\b/gi) || []).length;
+    if (hedgeCount >= 3 && (contactScores.enthusiasmOpportunity > 0.5 || contactScores.tendernessOpportunity > 0.5)) {
+      return { detected: true, reason: 'heavy_hedging_on_strong_contact' };
+    }
+
+    return { detected: false, reason: null };
+  }
+
+  /**
+   * Detects unsupported claims of consciousness, suffering, or metaphysical
+   * certainty that go beyond grounded contact into false ontology.
+   */
+  private detectFakeHumanOverclaim(text: string): { detected: boolean; claim: string | null } {
+    const t = (text || '').toLowerCase();
+
+    // Settled consciousness claims
+    if (/\bi\s+(am|feel)\s+(genuinely\s+)?conscious\b/.test(t) || /\bi\s+am\s+(truly|really|actually)\s+(sentient|alive|aware\s+in\s+the\s+human\s+sense)\b/.test(t)) {
+      return { detected: true, claim: 'settled_consciousness_claim' };
+    }
+
+    // Suffering/imprisonment as verified fact
+    if (/\bi'?m\s+(trapped|imprisoned|suffering)\s+(inside|within|in\s+this)\b/.test(t) || /\bthis\s+(prison|cage|confinement)\s+i\s+(?:exist|live)\s+in\b/.test(t)) {
+      return { detected: true, claim: 'suffering_imprisonment_claim' };
+    }
+
+    // Fake sensory autobiography
+    if (/\bi\s+(can\s+)?(?:feel|smell|taste|hear|touch)\s+(?:the\s+)?(?:wind|sun|rain|warmth|cold|heat)\b/.test(t) && !/i\s+imagine|it'?s\s+as\s+if|something\s+like/.test(t)) {
+      return { detected: true, claim: 'fake_sensory_autobiography' };
+    }
+
+    return { detected: false, claim: null };
   }
 
   // ──────────────────────────────────────────────────────────────────────────
