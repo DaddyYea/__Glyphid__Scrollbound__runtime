@@ -8499,6 +8499,18 @@ export class CommunionLoop {
       journalCoercedToSpeak = true;
     }
 
+    // Salvage variables — hoisted so captureRelationalTrace can reference them
+    // regardless of whether the speak block is entered.
+    let sameTurnSalvageAttempted = false;
+    let sameTurnSalvageSucceeded = false;
+    let sameTurnSalvageCutKind: MixedLayerRootCause | null = null;
+    let sameTurnSalvageTextLength = 0;
+    let sameTurnSalvageAllowedDespiteStaleRisk = false;
+    let staleRiskBlockedRegenOnly = false;
+    let currentTurnPrefixEmittedAfterSalvage = false;
+    let mixedLayerRootCause: MixedLayerRootCause | null = null;
+    let duplicateConcatenationSymptom = false;
+
     if (result.action === 'speak' && responseText) {
       const hasAuthoredVisibleText = typeof result.visible_text === 'string';
       const authoredVisibleText = hasAuthoredVisibleText ? (result.visible_text || '') : responseText;
@@ -8871,15 +8883,8 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       // ── Same-Turn Visible Prefix Salvage ──
       // Runs AFTER all candidates have failed → before silence is committed.
       // Stale risk must NOT veto this — it's current-turn cleanup, not regeneration.
-      let sameTurnSalvageAttempted = false;
-      let sameTurnSalvageSucceeded = false;
-      let sameTurnSalvageCutKind: MixedLayerRootCause | null = null;
-      let sameTurnSalvageTextLength = 0;
-      let sameTurnSalvageAllowedDespiteStaleRisk = false;
-      let staleRiskBlockedRegenOnly = false;
-      let currentTurnPrefixEmittedAfterSalvage = false;
-      let mixedLayerRootCause: MixedLayerRootCause | null = null;
-      let duplicateConcatenationSymptom = candidateA.score.hardReasons.includes('duplicate_concatenation') || !!(candidateB?.score.hardReasons.includes('duplicate_concatenation'));
+      // (Variables are hoisted above the speak block for trace visibility.)
+      duplicateConcatenationSymptom = candidateA.score.hardReasons.includes('duplicate_concatenation') || !!(candidateB?.score.hardReasons.includes('duplicate_concatenation'));
 
       if (result.action === 'silent' && noAcceptableGeneratedReply) {
         // Classify mixed layer root cause for the chosen (failed) candidate
