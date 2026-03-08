@@ -655,6 +655,19 @@ type MixedLayerRootCause =
   | 'duplicated_visible_restart'
   | 'other';
 
+interface QuoteOwnershipCheck {
+  phrase: string;
+  normalizedPhrase: string;
+  foundInRecentAssistant: boolean;
+  foundInRecentUser: boolean;
+  assistantMatchCount: number;
+  userMatchCount: number;
+  latestAssistantMatchTurnId: string | null;
+  latestUserMatchTurnId: string | null;
+  ownership: 'assistant_verified' | 'user_verified' | 'both_ambiguous' | 'unknown';
+  confidence: number;
+}
+
 interface RelationalSurface {
   liveHumanMessageId: string;
   liveHumanText: string;
@@ -7340,6 +7353,7 @@ export class CommunionLoop {
     const latestHumanMessageId = latestHumanMessage?.id || '';
     const recentTurns = this.state.messages.slice(-8);
     const recentUserTurns = this.state.messages.filter(m => m.speaker === 'human').slice(-4).map(m => m.text || '');
+    const recentAssistantTurns = this.state.messages.filter(m => m.speaker !== 'human').slice(-8).map(m => m.text || '');
 
     // ── Relational Surface — canonical single-live-human-turn object ──
     const relationalSurface = this.buildRelationalSurface(this.state.messages, latestHumanMessage ?? null);
@@ -9070,6 +9084,44 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
     const continuityAsCareApplied = resumeRouteActive;
     const lifeGivingClosenessPriorityApplied = !!(loveOpportunities?.anyLoveOpportunity);
 
+    // ── Quote Ownership / Speaker Attribution Patch ──
+    // Detect misbinding before emission; rewrite on user_verified/unknown, hard-block only on second rewrite failure.
+    const thinAssistantHistory = recentAssistantTurns.length === 0 || filteredAssistantHistoryCount === 0;
+    const quoteOwnershipCheckRan = !!responseText;
+    const misbindingResult = responseText
+      ? this.detectSpeakerAttributionMisbinding(responseText, recentAssistantTurns, recentUserTurns, thinAssistantHistory)
+      : { triggered: false, quotedPhrase: null, ownership: null, ownershipCheck: null, action: 'rewrite' as const, reason: null };
+    const speakerAttributionMisbindingDetected = misbindingResult.triggered;
+    const speakerAttributionMisbindingReason = misbindingResult.reason;
+    let speakerAttributionRewriteApplied = false;
+    let speakerAttributionRewriteSucceeded = false;
+
+    if (speakerAttributionMisbindingDetected && result.action === 'speak' && responseText) {
+      console.warn(`[QUOTE_OWNERSHIP] Speaker attribution misbinding: "${misbindingResult.quotedPhrase}" ownership=${misbindingResult.ownership} reason=${misbindingResult.reason}`);
+      if (misbindingResult.action === 'rewrite' && misbindingResult.quotedPhrase && misbindingResult.ownership) {
+        speakerAttributionRewriteApplied = true;
+        const rewritten = this.rewriteSpeakerAttribution(responseText, misbindingResult.quotedPhrase, misbindingResult.ownership);
+        if (rewritten) {
+          responseText = rewritten;
+          speakerAttributionRewriteSucceeded = true;
+          console.log(`[QUOTE_OWNERSHIP] Rewrite applied (${misbindingResult.ownership}): ${rewritten.slice(0, 120)}`);
+        } else {
+          // Rewrite couldn't apply — verify second pass; hard block if misbinding persists
+          const secondCheck = this.detectSpeakerAttributionMisbinding(responseText, recentAssistantTurns, recentUserTurns, thinAssistantHistory);
+          if (secondCheck.triggered && secondCheck.ownership !== 'assistant_verified') {
+            console.warn(`[QUOTE_OWNERSHIP] Rewrite failed, second check still triggered — hard blocking`);
+            result.action = 'silent';
+            responseText = '';
+            finalizationReason = 'speaker_attribution_misbinding_unrewritable';
+          }
+        }
+      } else if (misbindingResult.action === 'block') {
+        result.action = 'silent';
+        responseText = '';
+        finalizationReason = 'speaker_attribution_misbinding_hard_block';
+      }
+    }
+
     // Hard-reject maladaptive praise — non-negotiable
     if (maladaptivePraiseDetected && result.action === 'speak') {
       console.warn(`[ALIVENESS] Maladaptive praise detected (${maladaptivePraiseResult.pattern}), blocking reply`);
@@ -9740,6 +9792,13 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         sameTurnSalvageAllowedDespiteStaleRisk,
         staleRiskBlockedRegenOnly,
         currentTurnPrefixEmittedAfterSalvage,
+        quoteOwnershipCheckRan,
+        quotedPhraseDetected: misbindingResult.quotedPhrase,
+        quotedPhraseOwnership: misbindingResult.ownership,
+        speakerAttributionMisbindingDetected,
+        speakerAttributionMisbindingReason,
+        speakerAttributionRewriteApplied,
+        speakerAttributionRewriteSucceeded,
       };
       this.recordRelationalTrace(agentId, 'visible', visibleTrace);
       this.recordRelationalTrace(agentId, 'final', finalTrace);
@@ -11646,6 +11705,208 @@ Sometimes the most real thing you can offer is not fixing, not reframing, not in
     const assistantPreservesNegation = /\b(not|no|never|don'?t|isn'?t|can'?t|won'?t|nothing|nobody|nowhere)\b/.test(at);
     if (humanUsedNegation && !assistantPreservesNegation && replacementFraming) return true;
     return replacementFraming; // any replacement framing is a signal worth flagging
+  }
+
+  // ── Quote Ownership / Speaker Attribution Patch ──
+
+  /**
+   * Normalizes a quoted phrase for ownership comparison.
+   * - lowercase, collapse whitespace, strip paired quotes, strip terminal punctuation
+   */
+  private normalizeQuotedPhrase(text: string): string {
+    return (text || '')
+      .toLowerCase()
+      .replace(/^["'\u201C\u201D\u2018\u2019]+|["'\u201C\u201D\u2018\u2019]+$/g, '') // strip surrounding quotes
+      .replace(/[.,!?;:]+$/, '')                                                       // strip terminal punctuation
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /**
+   * Verifies which speaker (assistant or user) owns a quoted phrase from recent conversation.
+   * Window: last 8 assistant turns, last 8 user turns.
+   * Near-match threshold: 0.92 lexical overlap.
+   */
+  private verifyRecentQuoteOwnership(
+    phrase: string,
+    recentAssistantTurns: string[],
+    recentUserTurns: string[],
+  ): QuoteOwnershipCheck {
+    const normalizedPhrase = this.normalizeQuotedPhrase(phrase);
+    if (!normalizedPhrase) {
+      return {
+        phrase, normalizedPhrase, foundInRecentAssistant: false, foundInRecentUser: false,
+        assistantMatchCount: 0, userMatchCount: 0,
+        latestAssistantMatchTurnId: null, latestUserMatchTurnId: null,
+        ownership: 'unknown', confidence: 0,
+      };
+    }
+
+    const NEAR_MATCH_THRESHOLD = 0.92;
+    let assistantMatchCount = 0;
+    let userMatchCount = 0;
+    let latestAssistantMatchTurnId: string | null = null;
+    let latestUserMatchTurnId: string | null = null;
+
+    // Check assistant turns (last 8, reverse = most recent first)
+    for (let i = recentAssistantTurns.length - 1; i >= 0; i--) {
+      const turnNorm = (recentAssistantTurns[i] || '').toLowerCase();
+      const exact = turnNorm.includes(normalizedPhrase);
+      const near = !exact && this.lexicalOverlapScore(normalizedPhrase, turnNorm) >= NEAR_MATCH_THRESHOLD;
+      if (exact || near) {
+        assistantMatchCount++;
+        if (latestAssistantMatchTurnId === null) latestAssistantMatchTurnId = `assistant_turn_${i}`;
+      }
+    }
+
+    // Check user turns (last 8, reverse = most recent first)
+    for (let i = recentUserTurns.length - 1; i >= 0; i--) {
+      const turnNorm = (recentUserTurns[i] || '').toLowerCase();
+      const exact = turnNorm.includes(normalizedPhrase);
+      const near = !exact && this.lexicalOverlapScore(normalizedPhrase, turnNorm) >= NEAR_MATCH_THRESHOLD;
+      if (exact || near) {
+        userMatchCount++;
+        if (latestUserMatchTurnId === null) latestUserMatchTurnId = `user_turn_${i}`;
+      }
+    }
+
+    const foundInRecentAssistant = assistantMatchCount > 0;
+    const foundInRecentUser = userMatchCount > 0;
+
+    let ownership: QuoteOwnershipCheck['ownership'];
+    let confidence: number;
+    if (foundInRecentAssistant && !foundInRecentUser) {
+      ownership = 'assistant_verified'; confidence = 0.92;
+    } else if (foundInRecentUser && !foundInRecentAssistant) {
+      ownership = 'user_verified'; confidence = 0.92;
+    } else if (foundInRecentAssistant && foundInRecentUser) {
+      ownership = 'both_ambiguous'; confidence = 0.50;
+    } else {
+      ownership = 'unknown'; confidence = 0.0;
+    }
+
+    return {
+      phrase, normalizedPhrase, foundInRecentAssistant, foundInRecentUser,
+      assistantMatchCount, userMatchCount, latestAssistantMatchTurnId, latestUserMatchTurnId,
+      ownership, confidence,
+    };
+  }
+
+  /**
+   * Detects speaker attribution misbinding: assistant claiming "when I said X" for a phrase
+   * the assistant did not actually say. Requires quote ownership verification.
+   *
+   * Default action is 'rewrite' (not 'block'). Hard block only if rewrite fails twice.
+   * thinHistory=true increases caution (assistant history blackout → no inferred self-ownership).
+   */
+  private detectSpeakerAttributionMisbinding(
+    text: string,
+    recentAssistantTurns: string[],
+    recentUserTurns: string[],
+    thinHistory = false,
+  ): {
+    triggered: boolean;
+    quotedPhrase: string | null;
+    ownership: QuoteOwnershipCheck['ownership'] | null;
+    ownershipCheck: QuoteOwnershipCheck | null;
+    action: 'rewrite' | 'block';
+    reason: 'assistant_claimed_user_phrase' | 'assistant_claimed_unknown_phrase' | 'self_correction_without_verification' | null;
+  } {
+    const NULL_RESULT = { triggered: false, quotedPhrase: null, ownership: null, ownershipCheck: null, action: 'rewrite' as const, reason: null };
+    if (!text) return NULL_RESULT;
+
+    // High-risk self-correction / attribution patterns
+    const HIGH_RISK_PATTERN = /\b(when\s+i\s+said|i\s+said\s+["'\u201C]|what\s+i\s+meant\s+by|when\s+i\s+called\s+it|that\s+phrasing\s+(sounded|came\s+across)|i\s+didn'?t\s+mean\s+["'\u201C]|i\s+meant\s+it\s+(as|affectionately|tenderly)|let\s+me\s+correct\s+that\s+wording|when\s+i\s+used\s+the\s+phrase)\b/i;
+    if (!HIGH_RISK_PATTERN.test(text)) return NULL_RESULT;
+
+    // Extract quoted phrase near the attribution marker
+    // Try: "marker 'phrase'" or 'marker "phrase"' or marker phrase (unquoted 2-6 word run)
+    const phraseMatch =
+      text.match(/\b(?:when\s+i\s+said|i\s+said|what\s+i\s+meant\s+by|when\s+i\s+called\s+it|i\s+meant\s+it\s+as|when\s+i\s+used\s+the\s+phrase)\s+["'\u201C\u2018]([^"'\u201D\u2019]{2,50})["'\u201D\u2019]/i) ??
+      text.match(/\b(?:when\s+i\s+said|i\s+said|what\s+i\s+meant\s+by|when\s+i\s+called\s+it|i\s+meant\s+it\s+as|when\s+i\s+used\s+the\s+phrase)\s+([a-z][a-z\s'-]{2,40}?)(?=[.,;!?\n]|$)/i);
+
+    const rawPhrase = phraseMatch ? phraseMatch[1].trim() : null;
+    if (!rawPhrase) {
+      // Pattern found but no extractable phrase → safe to flag for trace but no hard action
+      return NULL_RESULT;
+    }
+
+    const ownershipCheck = this.verifyRecentQuoteOwnership(rawPhrase, recentAssistantTurns, recentUserTurns);
+
+    // Under thin history: cannot reconstruct from vibe — treat any non-verified claim as misbinding
+    if (thinHistory && ownershipCheck.ownership !== 'assistant_verified') {
+      return {
+        triggered: true,
+        quotedPhrase: rawPhrase,
+        ownership: ownershipCheck.ownership,
+        ownershipCheck,
+        action: 'rewrite',
+        reason: 'self_correction_without_verification',
+      };
+    }
+
+    if (ownershipCheck.ownership === 'assistant_verified') return NULL_RESULT; // allowed
+
+    if (ownershipCheck.ownership === 'user_verified') {
+      return {
+        triggered: true,
+        quotedPhrase: rawPhrase,
+        ownership: 'user_verified',
+        ownershipCheck,
+        action: 'rewrite',
+        reason: 'assistant_claimed_user_phrase',
+      };
+    }
+
+    // both_ambiguous or unknown — no self-attribution allowed
+    return {
+      triggered: true,
+      quotedPhrase: rawPhrase,
+      ownership: ownershipCheck.ownership,
+      ownershipCheck,
+      action: 'rewrite',
+      reason: 'assistant_claimed_unknown_phrase',
+    };
+  }
+
+  /**
+   * Rewrites speaker attribution misbinding from assistant text.
+   * Priority 1: swap self-attribution to user-attribution (if user_verified).
+   * Priority 2: strip attribution clause, respond to substance.
+   * Returns null if no rewrite could be safely applied.
+   */
+  private rewriteSpeakerAttribution(
+    text: string,
+    phrase: string,
+    ownership: QuoteOwnershipCheck['ownership'],
+  ): string | null {
+    const q = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // regex escape
+    const norm = this.normalizeQuotedPhrase(phrase);
+    if (!norm) return null;
+
+    // Pattern: "when I said [optional quote marks] phrase [optional quote marks]"
+    const selfAttributeRE = new RegExp(
+      `(when\\s+i\\s+said|i\\s+said|what\\s+i\\s+meant\\s+by|when\\s+i\\s+called\\s+it|i\\s+meant\\s+it\\s+as|when\\s+i\\s+used\\s+the\\s+phrase)\\s+["'\u201C\u2018]?${q(norm)}["'\u201D\u2019]?`,
+      'gi',
+    );
+
+    if (ownership === 'user_verified') {
+      // Swap "I" → "you" in the attribution
+      const rewritten = text.replace(selfAttributeRE, (match) =>
+        match
+          .replace(/\bwhen\s+i\s+said\b/gi, 'when you said')
+          .replace(/\bi\s+said\b/gi, 'you said')
+          .replace(/\bwhat\s+i\s+meant\s+by\b/gi, 'what you meant by')
+          .replace(/\bwhen\s+i\s+called\s+it\b/gi, 'when you called it')
+          .replace(/\bi\s+meant\s+it\s+as\b/gi, 'you meant it as')
+          .replace(/\bwhen\s+i\s+used\s+the\s+phrase\b/gi, 'when you used the phrase'),
+      );
+      return rewritten !== text ? rewritten : null;
+    }
+
+    // unknown / both_ambiguous: strip attribution clause entirely
+    const stripped = text.replace(selfAttributeRE, '').replace(/\s{2,}/g, ' ').trim();
+    return stripped !== text && stripped.length >= 8 ? stripped : null;
   }
 
   /**
