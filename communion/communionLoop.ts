@@ -2643,6 +2643,42 @@ export class CommunionLoop {
     const normalizedIncoming = this.normalizeHumanTurnText(incomingText);
     const messages = this.state.messages;
 
+    // ── Tier 0: Post-response STT replay ──
+    // The turn was already consumed by an assistant response. The STT mic restarted
+    // after TTS and replayed the last recognized phrase. No time window needed —
+    // if the most recent human turn matches and there's an agent turn after it, it's a replay.
+    //
+    // Find the most recent human turn, then check whether an agent turn follows it.
+    let mostRecentHumanIdx = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].speaker === 'human') { mostRecentHumanIdx = i; break; }
+    }
+    if (mostRecentHumanIdx >= 0) {
+      const priorHuman = messages[mostRecentHumanIdx];
+      const priorAt = new Date(priorHuman.timestamp).getTime();
+      const ageMs = now - priorAt;
+      // Only apply Tier 0 within a generous window (3 minutes) so we don't suppress
+      // genuinely repeated messages in long sessions
+      if (ageMs <= 180_000) {
+        const normalizedPrior = this.normalizeHumanTurnText(priorHuman.text);
+        const sim = this.lexicalOverlapScore(normalizedIncoming, normalizedPrior);
+        // Check if an agent message exists AFTER this human turn
+        const hasAgentResponseAfter = messages.slice(mostRecentHumanIdx + 1).some(m => m.speaker !== 'human');
+        if (hasAgentResponseAfter && (normalizedIncoming === normalizedPrior || sim >= HUMAN_TURN_NEAR_DEDUP_SIM)) {
+          console.log(`[DEDUP] Tier 0 post-response STT replay suppressed (sim=${sim.toFixed(2)}, age=${Math.round(ageMs / 1000)}s): "${incomingText.slice(0, 60)}"`);
+          return {
+            isDuplicate: true,
+            duplicateKind: 'exact_normalized',
+            similarity: sim,
+            matchedMessageId: priorHuman.id,
+            shouldReplacePrior: false,
+            priorMessageIndex: mostRecentHumanIdx,
+          };
+        }
+      }
+    }
+
+    // ── Tiers 1–3: Time-window dedup (no intervening agent response) ──
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
       if (msg.speaker !== 'human') continue;
@@ -2665,7 +2701,7 @@ export class CommunionLoop {
         };
       }
 
-      // Tier 2/3 — similarity-based
+      // Tiers 2/3 — similarity-based
       if (sim >= HUMAN_TURN_NEAR_DEDUP_SIM) {
         // Within 2s → partial/final STT replacement
         if (ageMsAtCheck <= HUMAN_TURN_REPLACE_WINDOW_MS) {
