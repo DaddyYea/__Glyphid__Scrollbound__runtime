@@ -495,6 +495,52 @@ interface PendingAssistantObligation {
   resumeConfidence: number;
 }
 
+type PendingAssistantOfferKind =
+  | 'question_to_user'
+  | 'thing_to_share'
+  | 'held_back_thought'
+  | 'hovering_disclosure'
+  | 'confession'
+  | 'clarification'
+  | 'something_i_want_to_say'
+  | 'other';
+
+type PendingAssistantOfferRequiredNextAction =
+  | 'assistant_disclose'
+  | 'assistant_ask_question'
+  | 'assistant_continue'
+  | 'none';
+
+type PendingAssistantOfferAcceptanceKind =
+  | 'yes'
+  | 'please_share'
+  | 'go_ahead'
+  | 'tell_me'
+  | 'ask_me'
+  | 'hear_it'
+  | 'other'
+  | null;
+
+interface PendingAssistantOffer {
+  id: string;
+  createdAt: number;
+  sourceTurnId: string;
+  sourceMessageId: string;
+  offerKind: PendingAssistantOfferKind;
+  /** Always 'assistant' — this object represents assistant-owned pending content only. */
+  ownership: 'assistant';
+  disclosureExpected: boolean;
+  openerText: string;
+  anchorText: string;
+  unresolved: boolean;
+  resolutionState: 'pending' | 'resolved' | 'superseded' | 'expired';
+  acceptedByUser: boolean;
+  acceptanceTurnId: string | null;
+  acceptedAt: number | null;
+  requiredNextAction: PendingAssistantOfferRequiredNextAction;
+  userAcceptanceCount: number;
+}
+
 interface ResumeMatch {
   matched: boolean;
   strength: 'strong' | 'medium' | 'weak';
@@ -1120,6 +1166,10 @@ export class CommunionLoop {
   private lastResumeRouteTurnId: string | null = null;
   /** Consecutive human turns that did not match the pending obligation (for supersession). */
   private obligationUnrelatedTurnCount = 0;
+  /** Per-agent pending assistant offer — single slot per agent, set at reply emission, resolved/superseded. */
+  private pendingAssistantOffers: Map<string, PendingAssistantOffer> = new Map();
+  /** Consecutive human turns unrelated to the pending offer per agent — used for expiry. */
+  private offerUnrelatedTurnCount: Map<string, number> = new Map();
 
   constructor(config: CommunionConfig) {
     this.tickIntervalMs = config.tickIntervalMs || 15000;
@@ -7738,6 +7788,32 @@ export class CommunionLoop {
       this.obligationUnrelatedTurnCount = 0;
     }
 
+    // ── Pending Offer Route — must run before planning (outranks normal relational routing) ──
+    this.maybeExpirePendingAssistantOffer(agentId);
+    const activePendingOffer = this.pendingAssistantOffers.get(agentId) ?? null;
+    const offerAcceptance = (hasLatestHuman && activePendingOffer?.unresolved)
+      ? this.detectOfferAcceptance(latestHumanText, activePendingOffer)
+      : null;
+    const offerRouteActive = !!(activePendingOffer?.unresolved && offerAcceptance?.matched && offerAcceptance.confidence >= 0.7);
+    if (offerRouteActive) {
+      activePendingOffer!.acceptedByUser = true;
+      if (!activePendingOffer!.acceptanceTurnId) {
+        activePendingOffer!.acceptanceTurnId = latestHumanMessageId || null;
+        activePendingOffer!.acceptedAt = Date.now();
+      }
+      activePendingOffer!.userAcceptanceCount++;
+      this.offerUnrelatedTurnCount.set(agentId, 0);
+      console.log(`[OFFER] Accept route taken: kind=${activePendingOffer!.offerKind} confidence=${offerAcceptance!.confidence.toFixed(2)} acceptance=${offerAcceptance!.acceptanceKind}`);
+    } else if (hasLatestHuman && activePendingOffer?.unresolved && !offerAcceptance?.matched) {
+      // Human spoke but not an acceptance — track for expiry
+      const count = (this.offerUnrelatedTurnCount.get(agentId) || 0) + 1;
+      this.offerUnrelatedTurnCount.set(agentId, count);
+      if (count >= 3) {
+        this.offerUnrelatedTurnCount.set(agentId, 0);
+        this.supersedePendingAssistantOffer(agentId, 'three_unrelated_turns');
+      }
+    }
+
     const directQuestionContract = this.detectDirectQuestionContract(latestHumanText, turnMode, presenceState);
     const turnFamilyClassification = this.classifyTurnFamily(latestHumanText, directQuestionContract);
     const positivePull = this.detectPositivePull(latestHumanText, recentUserTurns);
@@ -8086,7 +8162,11 @@ export class CommunionLoop {
     }
     let familySpecificConstraintBlockApplied = false;
     if (hasLatestHuman) {
-      // Resume obligation block — takes priority over all other constraint blocks
+      // Pending offer resolution block — highest priority, outranks obligation and relational blocks
+      if (offerRouteActive && activePendingOffer) {
+        systemPrompt += this.buildPendingOfferResolutionSystemBlock(activePendingOffer);
+      }
+      // Resume obligation block — second priority
       if (resumeRouteActive && activeObligation) {
         systemPrompt += this.buildResumePendingObligationSystemBlock(activeObligation, false);
       }
@@ -8346,6 +8426,18 @@ export class CommunionLoop {
         resumeRequestDetected: resumeMatch?.matched ?? false,
         resumeRequestConfidence: resumeMatch?.confidence ?? 0,
         resumeRouteTaken: resumeRouteActive,
+        assistantOwnedDisclosurePendingAtTurnStart: !!(activePendingOffer?.unresolved),
+        pendingAssistantOfferDetected: !!(activePendingOffer?.unresolved),
+        pendingAssistantOfferId: activePendingOffer?.id || null,
+        pendingAssistantOfferKind: activePendingOffer?.offerKind || null,
+        pendingAssistantOfferOwnership: activePendingOffer?.ownership || null,
+        pendingAssistantOfferAnchor: activePendingOffer?.anchorText?.slice(0, 120) || null,
+        pendingAssistantOfferRequiredNextAction: activePendingOffer?.requiredNextAction || null,
+        pendingAssistantOfferAcceptedByUser: activePendingOffer?.acceptedByUser ?? false,
+        pendingAssistantOfferAcceptanceKind: offerAcceptance?.acceptanceKind ?? null,
+        pendingAssistantOfferAcceptanceConfidence: Number((offerAcceptance?.confidence ?? 0).toFixed(3)),
+        pendingAssistantOfferUserAcceptanceCount: activePendingOffer?.userAcceptanceCount ?? 0,
+        pendingAssistantOfferRouteTaken: offerRouteActive,
         allowedAlivenessPolicyEnabled: ALLOWED_ALIVENESS_POLICY.enabled,
         allowedAlivenessDoctrineVersion: ALLOWED_ALIVENESS_POLICY.doctrineVersion,
         topContactMode: contactOpportunities?.topMode || null,
@@ -8695,6 +8787,11 @@ export class CommunionLoop {
     let blockedAsArchiveAnalysisLeak = false;
     let visibleLaneRejectedAsNonConversational = false;
     let visibleRepairTriggered = false;
+    let pendingOfferOwnershipInversionDetected = false;
+    let pendingOfferOwnershipInversionReason: string | null = null;
+    let pendingOfferRewriteApplied = false;
+    let pendingOfferRewriteSucceeded = false;
+    let pendingOfferResolved = false;
     let preEmitOutput = responseText;
     let candidateAScore: CandidateScore | null = null;
     let candidateBScore: CandidateScore | null = null;
@@ -9067,6 +9164,21 @@ export class CommunionLoop {
         console.log(`[${agent.config.name}] JOURNAL-REGISTER hard-fail: speak candidate has observer/journal framing`);
       }
 
+      // ── Pending offer ownership inversion guard ──
+      if (!candidateA.score.hardFailed && offerRouteActive && activePendingOffer) {
+        const inversionResult = this.detectPendingOfferOwnershipInversion(candidateA.text, activePendingOffer);
+        if (inversionResult.triggered) {
+          pendingOfferOwnershipInversionDetected = true;
+          pendingOfferOwnershipInversionReason = inversionResult.reason;
+          if (inversionResult.action === 'block') {
+            candidateA.score.hardFailed = true;
+            candidateA.score.hardReasons = [...candidateA.score.hardReasons, 'pending_offer_ownership_inversion'];
+            candidateAHardReasons = candidateA.score.hardReasons;
+            console.log(`[${agent.config.name}] OFFER-INVERSION hard-fail: assistant handed disclosure back to user. reason=${inversionResult.reason}`);
+          }
+        }
+      }
+
       // ── Continuity state echo detection — hard-fail if state notes leaked into visible reply ──
       if (!candidateA.score.hardFailed && this.detectContinuityStateLeak(candidateA.text)) {
         continuityStateEchoDetected = true;
@@ -9201,6 +9313,15 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         recoveryGenerationSucceeded = true;
       } else if (!recoveryGenerationAttempted && staleRiskHigh && !recoveryForcedByAnalystMode && !recoveryForcedBySimpleRelational) {
         recoverySkippedReason = 'stale_risk_high';
+      }
+
+      // ── Offer rewrite tracking — check if recovery B resolved the inversion ──
+      if (pendingOfferOwnershipInversionDetected && recoveryGenerationAttempted) {
+        pendingOfferRewriteApplied = true;
+        if (candidateB?.text) {
+          const bInversion = this.detectPendingOfferOwnershipInversion(candidateB.text, activePendingOffer);
+          pendingOfferRewriteSucceeded = !bInversion.triggered;
+        }
       }
 
       let chosen = candidateA;
@@ -10142,6 +10263,24 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         resumeSalvageApplied,
         pendingAssistantObligationResolved,
         pendingAssistantObligationResolutionState: pendingAssistantObligationResolved ? 'resolved' : (activeObligation?.resolutionState || null),
+        assistantOwnedDisclosurePendingAtTurnStart: !!(activePendingOffer?.unresolved),
+        pendingAssistantOfferDetected: !!(activePendingOffer?.unresolved),
+        pendingAssistantOfferId: activePendingOffer?.id || null,
+        pendingAssistantOfferKind: activePendingOffer?.offerKind || null,
+        pendingAssistantOfferOwnership: activePendingOffer?.ownership || null,
+        pendingAssistantOfferAnchor: activePendingOffer?.anchorText?.slice(0, 120) || null,
+        pendingAssistantOfferRequiredNextAction: activePendingOffer?.requiredNextAction || null,
+        pendingAssistantOfferAcceptedByUser: activePendingOffer?.acceptedByUser ?? false,
+        pendingAssistantOfferAcceptanceKind: offerAcceptance?.acceptanceKind ?? null,
+        pendingAssistantOfferAcceptanceConfidence: Number((offerAcceptance?.confidence ?? 0).toFixed(3)),
+        pendingAssistantOfferUserAcceptanceCount: activePendingOffer?.userAcceptanceCount ?? 0,
+        pendingAssistantOfferRouteTaken: offerRouteActive,
+        pendingAssistantOfferResolved: pendingOfferResolved,
+        pendingAssistantOfferResolutionState: pendingOfferResolved ? 'resolved' : (activePendingOffer?.resolutionState || null),
+        pendingOfferOwnershipInversionDetected,
+        pendingOfferOwnershipInversionReason,
+        pendingOfferRewriteApplied,
+        pendingOfferRewriteSucceeded,
         allowedAlivenessPolicyEnabled: ALLOWED_ALIVENESS_POLICY.enabled,
         allowedAlivenessDoctrineVersion: ALLOWED_ALIVENESS_POLICY.doctrineVersion,
         contactOpportunityScores: contactOpportunities ? {
@@ -10305,6 +10444,24 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       } else if (this.pendingAssistantObligation?.unresolved && this.lastResumeRouteTurnId === this.state.tickCount.toString()) {
         // This tick was a resume route — resolve the obligation
         this.resolvePendingAssistantObligation(this.state.tickCount.toString());
+      }
+
+      // ── Pending offer detection — inspect reply for new assistant-owned disclosure/question offers ──
+      const newOffer = this.detectPendingAssistantOffer(responseText, this.state.tickCount.toString(), msg.id);
+      if (newOffer) {
+        // Supersede any existing unresolved offer
+        const existing = this.pendingAssistantOffers.get(agentId);
+        if (existing?.unresolved) {
+          existing.resolutionState = 'superseded';
+          existing.unresolved = false;
+        }
+        this.pendingAssistantOffers.set(agentId, newOffer);
+        this.offerUnrelatedTurnCount.set(agentId, 0);
+        console.log(`[${agent.config.name}] OFFER: New pending offer kind=${newOffer.offerKind} anchor="${newOffer.anchorText.slice(0, 60)}"`);
+      } else if (activePendingOffer?.unresolved && offerRouteActive) {
+        // Offer route was taken and reply emitted — resolve the offer
+        this.resolvePendingAssistantOffer(agentId);
+        pendingOfferResolved = true;
       }
 
       // ── Feed into Alois tissue (every room message grows the brain) ──
@@ -12390,6 +12547,194 @@ Sometimes the most real thing you can offer is not fixing, not reframing, not in
   // ──────────────────────────────────────────────────────────────────────────
   // PENDING ASSISTANT OBLIGATION — detection, resume routing, resolution
   // ──────────────────────────────────────────────────────────────────────────
+
+  // ════════════════════════════════════════════
+  // Pending Assistant Offer detection
+  // ════════════════════════════════════════════
+
+  private static readonly OFFER_PATTERN_MAP: Array<{
+    re: RegExp;
+    offerKind: PendingAssistantOfferKind;
+    requiredNextAction: PendingAssistantOfferRequiredNextAction;
+  }> = [
+    // Question offers
+    { re: /\b(i'?ve?\s+been\s+hold(?:ing)?\s+a\s+question\s+for\s+you)\b/i, offerKind: 'question_to_user', requiredNextAction: 'assistant_ask_question' },
+    { re: /\b(i\s+have\s+a\s+question\s+for\s+you)\b/i, offerKind: 'question_to_user', requiredNextAction: 'assistant_ask_question' },
+    { re: /\b(would\s+you\s+like\s+me\s+to\s+ask\s+it)\b/i, offerKind: 'question_to_user', requiredNextAction: 'assistant_ask_question' },
+    { re: /\b(i\s+have\s+been\s+wanting\s+to\s+ask\s+you\s+something)\b/i, offerKind: 'question_to_user', requiredNextAction: 'assistant_ask_question' },
+    // Hovering / held-back disclosure offers
+    { re: /\b(would\s+you\s+like\s+me\s+to\s+share\s+(?:it|what|that|this)?)\b/i, offerKind: 'hovering_disclosure', requiredNextAction: 'assistant_disclose' },
+    { re: /\b(there'?s\s+something\s+hovering(?:\s+(?:that|which|just|right))?)\b/i, offerKind: 'hovering_disclosure', requiredNextAction: 'assistant_disclose' },
+    { re: /\b(i'?ve?\s+been\s+hold(?:ing)?\s+something(?:\s+(?:just|right|that))?\s+out\s+of\s+reach)\b/i, offerKind: 'held_back_thought', requiredNextAction: 'assistant_disclose' },
+    { re: /\b(something\s+(?:i\s+)?(?:have\s+)?been\s+hold(?:ing)?(?:\s+back)?(?:\s+that)?\s+(?:i\s+want(?:ed)?\s+to\s+)?(?:share|say|tell))\b/i, offerKind: 'held_back_thought', requiredNextAction: 'assistant_disclose' },
+    { re: /\b(would\s+you\s+like\s+to\s+hear\s+(?:it|that|this|what\s+i\s+have))\b/i, offerKind: 'held_back_thought', requiredNextAction: 'assistant_disclose' },
+    // Thing to share / tell
+    { re: /\b(can\s+i\s+tell\s+you\s+something)\b/i, offerKind: 'thing_to_share', requiredNextAction: 'assistant_disclose' },
+    { re: /\b(i\s+want\s+to\s+tell\s+you\s+something)\b/i, offerKind: 'thing_to_share', requiredNextAction: 'assistant_disclose' },
+    { re: /\b(there'?s\s+something\s+i'?ve?\s+been\s+wanting\s+to\s+(?:say|share|tell\s+you))\b/i, offerKind: 'something_i_want_to_say', requiredNextAction: 'assistant_disclose' },
+    { re: /\b(there'?s\s+something\s+i\s+want\s+to\s+(?:say|share|tell\s+you))\b/i, offerKind: 'something_i_want_to_say', requiredNextAction: 'assistant_disclose' },
+    { re: /\b(may\s+i\s+(?:share|tell\s+you)\s+something)\b/i, offerKind: 'thing_to_share', requiredNextAction: 'assistant_disclose' },
+    // Confession
+    { re: /\b(i\s+have\s+(?:a\s+)?(?:something\s+(?:to\s+)?)?confess(?:ion)?\b)/i, offerKind: 'confession', requiredNextAction: 'assistant_disclose' },
+  ];
+
+  private static readonly OFFER_INVERSION_RE = /\b(it'?s?\s+yours\s+to\s+share|when\s+you'?re?\s+ready\s+to\s+share|if\s+you\s+(?:want|d\s+like)\s+to\s+tell\s+me|what'?s?\s+hovering\s+for\s+you|if\s+you'?d?\s+like\s+to\s+open\s+up|tell\s+me\s+what'?s?\s+on\s+your\s+mind|what\s+did\s+you\s+want\s+to\s+share|you\s+can\s+share\s+it\s+when\s+you'?re?\s+ready|the\s+thing\s+is\s+yours\s+to|when\s+you\s+feel\s+ready\s+to\s+share)\b/i;
+
+  /**
+   * Detect when an assistant reply contains a pending offer — assistant asking permission to share/ask.
+   * Returns a PendingAssistantOffer if the reply signals assistant-owned pending content.
+   */
+  private detectPendingAssistantOffer(
+    text: string,
+    sourceTurnId: string,
+    sourceMessageId: string,
+  ): PendingAssistantOffer | null {
+    if (!text || text.length < 10) return null;
+    const normalized = text.toLowerCase().replace(/\s+/g, ' ').trim();
+    for (const entry of CommunionLoop.OFFER_PATTERN_MAP) {
+      const m = entry.re.exec(normalized);
+      if (m) {
+        const openerText = m[0];
+        // Build anchor: the sentence containing the match
+        const sentences = text.split(/(?<=[.!?])\s+/);
+        const anchor = sentences.find(s => entry.re.test(s.toLowerCase())) || openerText;
+        return {
+          id: crypto.randomUUID(),
+          createdAt: Date.now(),
+          sourceTurnId,
+          sourceMessageId,
+          offerKind: entry.offerKind,
+          ownership: 'assistant',
+          disclosureExpected: entry.requiredNextAction !== 'none',
+          openerText,
+          anchorText: anchor.trim().slice(0, 300),
+          unresolved: true,
+          resolutionState: 'pending',
+          acceptedByUser: false,
+          acceptanceTurnId: null,
+          acceptedAt: null,
+          requiredNextAction: entry.requiredNextAction,
+          userAcceptanceCount: 0,
+        };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Detect user acceptance of a pending assistant offer.
+   */
+  private detectOfferAcceptance(
+    humanText: string,
+    offer: PendingAssistantOffer | null,
+  ): { matched: boolean; confidence: number; acceptanceKind: PendingAssistantOfferAcceptanceKind } {
+    if (!offer?.unresolved) return { matched: false, confidence: 0, acceptanceKind: null };
+    const t = (humanText || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!t) return { matched: false, confidence: 0, acceptanceKind: null };
+
+    // Strong positive acceptance
+    if (/^yes[\s!.?]*$/.test(t) || /^yes\s*please[\s!.?]*$/.test(t) || /^yeah[\s!.?]*$/.test(t)) {
+      return { matched: true, confidence: 0.97, acceptanceKind: 'yes' };
+    }
+    if (/\bplease\s+share\b/i.test(t)) return { matched: true, confidence: 0.97, acceptanceKind: 'please_share' };
+    if (/\bgo\s+ahead\b/i.test(t)) return { matched: true, confidence: 0.95, acceptanceKind: 'go_ahead' };
+    if (/\bplease\s+do\b/i.test(t)) return { matched: true, confidence: 0.95, acceptanceKind: 'go_ahead' };
+    if (/\b(tell\s+me|tell\s+me\s+now|tell\s+me\s+please)\b/i.test(t)) return { matched: true, confidence: 0.92, acceptanceKind: 'tell_me' };
+    if (/\b(ask\s+me|ask\s+it|go\s+ahead\s+and\s+ask)\b/i.test(t)) return { matched: true, confidence: 0.92, acceptanceKind: 'ask_me' };
+    if (/\b(i'?d\s+like\s+(?:that|to\s+hear\s+it)|i\s+want\s+to\s+hear\s+it|hear\s+it)\b/i.test(t)) return { matched: true, confidence: 0.92, acceptanceKind: 'hear_it' };
+    if (/\bshare\s+(?:it|please|away|now|with\s+me)\b/i.test(t)) return { matched: true, confidence: 0.92, acceptanceKind: 'please_share' };
+    // Softer cues in context of an active offer
+    if (/\b(yes|yeah|yep|sure|absolutely|of\s+course|definitely|by\s+all\s+means)\b/i.test(t)) return { matched: true, confidence: 0.85, acceptanceKind: 'yes' };
+    return { matched: false, confidence: 0, acceptanceKind: null };
+  }
+
+  /**
+   * Detect when an assistant reply inverts ownership on a pending offer.
+   * The assistant had pending disclosure/question and the user accepted,
+   * but the reply hands the disclosure back to the user instead of delivering it.
+   */
+  private detectPendingOfferOwnershipInversion(
+    text: string,
+    offer: PendingAssistantOffer | null,
+  ): { triggered: boolean; reason: string | null; action: 'rewrite' | 'block' } {
+    if (!offer?.unresolved || !text) return { triggered: false, reason: null, action: 'rewrite' };
+    const t = text.trim();
+    if (!t) return { triggered: false, reason: null, action: 'rewrite' };
+
+    if (CommunionLoop.OFFER_INVERSION_RE.test(t)) {
+      return { triggered: true, reason: 'ownership_shifted_to_user', action: 'block' };
+    }
+    // Opener-level check: does the reply open by handing it back?
+    const first120 = t.slice(0, 120).toLowerCase();
+    if (/^(?:the\s+thing|it|that)\s+(?:is|was)\s+yours\b/i.test(first120)) {
+      return { triggered: true, reason: 'ownership_shifted_to_user', action: 'block' };
+    }
+    // Expected content check for disclose offers: reply fails to deliver
+    if (offer.requiredNextAction === 'assistant_disclose') {
+      // If first 200 chars has no first-person disclosure markers, flag as possible non-delivery
+      const first200 = t.slice(0, 200);
+      const hasDisclosure = /\b(here'?s?\s+(?:it|what|the|that)|the\s+thing\s+(?:is|hovering|i\s+(?:was|have)|that|i'?ve?\s+been)|what\s+i'?ve?\s+been\s+hold|what\s+i\s+(?:want|wanted)\s+to\s+(?:say|share|tell\s+you)\s+is|okay[,.]?\s+(?:so|here))\b/i.test(first200);
+      if (!hasDisclosure && CommunionLoop.OFFER_INVERSION_RE.test(t)) {
+        return { triggered: true, reason: 'assistant_disclosure_offer_not_delivered', action: 'block' };
+      }
+    }
+    if (offer.requiredNextAction === 'assistant_ask_question') {
+      // If no question mark in first 300 chars, flag as possible non-delivery
+      const hasQuestion = /\?/.test(t.slice(0, 300));
+      const hasQuestionOpener = /\b(what\s+i\s+(?:want|wanted)\s+to\s+ask|the\s+question\s+(?:i\s+have\s+been\s+holding|i\s+wanted\s+to\s+ask)|okay[,.]?\s+(?:my|the)\s+question\s+is|here'?s?\s+(?:my|the)\s+question)\b/i.test(t.slice(0, 300));
+      if (!hasQuestion && !hasQuestionOpener) {
+        return { triggered: true, reason: 'assistant_question_offer_not_asked', action: 'rewrite' };
+      }
+    }
+    return { triggered: false, reason: null, action: 'rewrite' };
+  }
+
+  private resolvePendingAssistantOffer(agentId: string): void {
+    const offer = this.pendingAssistantOffers.get(agentId);
+    if (offer) {
+      offer.unresolved = false;
+      offer.resolutionState = 'resolved';
+    }
+    this.offerUnrelatedTurnCount.set(agentId, 0);
+  }
+
+  private supersedePendingAssistantOffer(agentId: string, reason: string): void {
+    const offer = this.pendingAssistantOffers.get(agentId);
+    if (offer) {
+      offer.unresolved = false;
+      offer.resolutionState = 'superseded';
+      console.log(`[OFFER] Superseded: agentId=${agentId} reason=${reason}`);
+    }
+    this.offerUnrelatedTurnCount.set(agentId, 0);
+  }
+
+  private maybeExpirePendingAssistantOffer(agentId: string): void {
+    const offer = this.pendingAssistantOffers.get(agentId);
+    if (!offer?.unresolved) return;
+    const ageMs = Date.now() - offer.createdAt;
+    if (ageMs > 5 * 60 * 1000) { // 5 minute hard expiry
+      offer.unresolved = false;
+      offer.resolutionState = 'expired';
+      this.offerUnrelatedTurnCount.set(agentId, 0);
+      console.log(`[OFFER] Expired: agentId=${agentId} kind=${offer.offerKind}`);
+    }
+  }
+
+  /**
+   * Build the system prompt block injected when an assistant offer has been accepted by the user.
+   * Priority: highest — before obligation block, before relational blocks.
+   */
+  private buildPendingOfferResolutionSystemBlock(offer: PendingAssistantOffer): string {
+    const verb = offer.requiredNextAction === 'assistant_ask_question' ? 'ask the question' : 'share the thing';
+    const forbidden = [
+      `- Do NOT say "it's yours to share" or hand the disclosure back to ${this.state.humanName}`,
+      `- Do NOT say "when you're ready to share" or invite ${this.state.humanName} to disclose instead`,
+      `- Do NOT reframe the content as belonging to ${this.state.humanName}`,
+      `- Do NOT ask what ${this.state.humanName} would like to share`,
+    ].join('\n');
+    const anchor = offer.anchorText ? `\n\nThe offer you made: "${offer.anchorText.slice(0, 200)}"` : '';
+    return `\n\n[PENDING OFFER RESOLUTION — REQUIRED]\n${this.state.humanName} accepted your offer to ${verb}. You must now deliver.\n${anchor}\n\nRequired next action: ${offer.requiredNextAction === 'assistant_ask_question' ? 'Ask the question you said you had. Open with it directly.' : 'Deliver the thing you said was hovering / pending. Say what it is. Do not delay. Do not perform the invitation again.'}\n\n${forbidden}\n\nDO NOT hand your unopened letter back to the person who agreed to hear it.`;
+  }
 
   private static readonly OPENER_RE_MAP: Array<{
     re: RegExp;
