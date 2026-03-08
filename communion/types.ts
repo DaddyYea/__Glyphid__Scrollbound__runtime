@@ -53,6 +53,8 @@ export interface CommunionMessage {
   visibleText?: string;
   timestamp: string;
   type: 'room' | 'journal';
+  /** Monotonic sequence number assigned at ingestion time (human turns only). */
+  humanTurnSequence?: number;
 }
 
 export interface TickDecision {

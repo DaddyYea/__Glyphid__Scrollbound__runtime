@@ -716,6 +716,34 @@ interface EmotionalCenter {
   confidence: number;
 }
 
+/**
+ * Canonical frozen snapshot of the human turn state, built once per generation tick
+ * before planning. All downstream stages must derive from this single source.
+ */
+interface HumanTurnSnapshot {
+  snapshotId: string;
+  capturedAt: number;
+  latestHumanMessageId: string;
+  latestHumanText: string;
+  latestHumanNormalized: string;
+  orderedHumanTurnIds: string[];
+  sociallyLiveHumanMessageId: string;
+  sociallyLiveHumanText: string;
+  liveThreadTarget: string | null;
+  liveMustTouch: string | null;
+  liveEmotionalCenter: {
+    kind: EmotionalCenter['kind'];
+    anchorText: string | null;
+    confidence: number;
+  };
+  priorHumanContext: Array<{ messageId: string; text: string; relevanceScore: number; role: 'context_only'; }>;
+  suppressedNonConversationalUserItems: Array<{ messageId: string; kind: string; }>;
+  conversationSliceMessageIds: string[];
+  humanTurnsDrainedCount: number;
+  backToBackHumanTurnsDrained: boolean;
+  highestHumanTurnSequence: number;
+}
+
 type MaladaptiveLovePattern =
   | 'possessive_love'
   | 'coercive_love'
@@ -1079,6 +1107,7 @@ export class CommunionLoop {
   private assistantHistoryBlackoutTurnsRemaining = 0;
   /** Set to true by resetLiveCarryover(); consumed and cleared on the first plan-trace write after reset. */
   private liveCarryoverResetApplied = false;
+  private humanTurnSequenceCounter = 0;
   /** Timestamp when this.speaking was last set to true — used for stale-lock detection. */
   private speakingSetAt = 0;
   /** Last human-turn dedup result from buildConversationContext — exposed in trace. */
@@ -2801,6 +2830,169 @@ export class CommunionLoop {
       if (msg.speaker === 'human') count++;
     }
     return count;
+  }
+
+  /**
+   * Returns all human messages that arrived since the last agent message.
+   * Used to detect back-to-back human turns before snapshot build.
+   */
+  private drainPendingHumanTurns(agentId: string): CommunionMessage[] {
+    const result: CommunionMessage[] = [];
+    for (let i = this.state.messages.length - 1; i >= 0; i--) {
+      const msg = this.state.messages[i];
+      if (msg.speaker === agentId) break;
+      if (msg.speaker === 'human') result.unshift(msg);
+    }
+    return result;
+  }
+
+  /**
+   * Builds the canonical HumanTurnSnapshot — one per generation tick, before planning.
+   * All downstream stages must derive from this single object.
+   */
+  private buildHumanTurnSnapshot(
+    agentId: string,
+    latestHumanMessage: CommunionMessage | null,
+    relationalSurface: RelationalSurface,
+    emotionalCenter: EmotionalCenter,
+    presencePlan: PresenceResponsePlan,
+    conversationSlice: CommunionMessage[],
+  ): HumanTurnSnapshot {
+    const capturedAt = Date.now();
+    const drainedTurns = this.drainPendingHumanTurns(agentId);
+    const backToBackHumanTurnsDrained = drainedTurns.length >= 2;
+
+    // Socially live turn = most recent drained human turn (= latestHumanMessage)
+    const sociallyLiveTurn = drainedTurns[drainedTurns.length - 1] ?? latestHumanMessage;
+
+    // Prior context = all other drained turns + relational surface prior context
+    const priorHumanContext = drainedTurns.slice(0, -1).map(m => ({
+      messageId: m.id,
+      text: m.text || '',
+      relevanceScore: 0.60,
+      role: 'context_only' as const,
+    })).concat(relationalSurface.priorHumanContext);
+
+    const highestSeq = drainedTurns.reduce(
+      (max, m) => Math.max(max, m.humanTurnSequence ?? 0),
+      0,
+    );
+
+    return {
+      snapshotId: `snap:${capturedAt}:${sociallyLiveTurn?.id ?? 'none'}`,
+      capturedAt,
+      latestHumanMessageId: latestHumanMessage?.id ?? '',
+      latestHumanText: latestHumanMessage?.text?.trim() ?? '',
+      latestHumanNormalized: this.normalizeHumanTurnText(latestHumanMessage?.text ?? ''),
+      orderedHumanTurnIds: drainedTurns.map(m => m.id),
+      sociallyLiveHumanMessageId: sociallyLiveTurn?.id ?? '',
+      sociallyLiveHumanText: sociallyLiveTurn?.text?.trim() ?? '',
+      liveThreadTarget: presencePlan.threadTarget,
+      liveMustTouch: presencePlan.mustTouch,
+      liveEmotionalCenter: {
+        kind: emotionalCenter.kind,
+        anchorText: emotionalCenter.anchorText || null,
+        confidence: emotionalCenter.confidence,
+      },
+      priorHumanContext,
+      suppressedNonConversationalUserItems: relationalSurface.suppressedNonConversationalUserItems.map(s => ({
+        messageId: s.messageId,
+        kind: s.reason,
+      })),
+      conversationSliceMessageIds: conversationSlice.map(m => m.id),
+      humanTurnsDrainedCount: drainedTurns.length,
+      backToBackHumanTurnsDrained,
+      highestHumanTurnSequence: highestSeq,
+    };
+  }
+
+  /**
+   * Validates that the assembled prompt is coherent with the canonical HumanTurnSnapshot.
+   * Returns failures if the socially live turn is missing or superseded by an older turn.
+   */
+  private validatePromptAgainstSnapshot(
+    snapshot: HumanTurnSnapshot,
+    promptMessages: CommunionMessage[],
+    plan: PresenceResponsePlan,
+  ): {
+    ok: boolean;
+    failures: Array<
+      | 'latest_human_missing_from_prompt'
+      | 'socially_live_human_missing'
+      | 'musttouch_mismatch'
+      | 'threadtarget_mismatch'
+      | 'nonconversational_user_item_present'
+    >;
+  } {
+    const failures: Array<
+      | 'latest_human_missing_from_prompt'
+      | 'socially_live_human_missing'
+      | 'musttouch_mismatch'
+      | 'threadtarget_mismatch'
+      | 'nonconversational_user_item_present'
+    > = [];
+
+    const promptIds = new Set(promptMessages.map(m => m.id));
+
+    // 1. Socially live human turn must appear in prompt slice
+    if (snapshot.sociallyLiveHumanMessageId && !promptIds.has(snapshot.sociallyLiveHumanMessageId)) {
+      failures.push('socially_live_human_missing');
+    }
+    // 2. Latest human message must appear (may be same as socially live)
+    if (snapshot.latestHumanMessageId && !promptIds.has(snapshot.latestHumanMessageId)) {
+      failures.push('latest_human_missing_from_prompt');
+    }
+    // 3. threadTarget should match snapshot
+    if (snapshot.liveThreadTarget && plan.threadTarget && snapshot.liveThreadTarget !== plan.threadTarget) {
+      failures.push('threadtarget_mismatch');
+    }
+    // 4. Suppressed non-conversational items must not appear as human messages in prompt
+    const suppressedIds = new Set(snapshot.suppressedNonConversationalUserItems.map(s => s.messageId));
+    const hasQuarantine = promptMessages.some(m => m.speaker === 'human' && suppressedIds.has(m.id));
+    if (hasQuarantine) {
+      failures.push('nonconversational_user_item_present');
+    }
+
+    return { ok: failures.length === 0, failures };
+  }
+
+  /**
+   * Validates that a generated candidate reply is aligned with the canonical snapshot.
+   * Returns failure kind if the candidate appears to answer an older turn or quarantined blob.
+   */
+  private validateCandidateAgainstSnapshot(
+    candidate: string,
+    snapshot: HumanTurnSnapshot,
+  ): {
+    ok: boolean;
+    failure: 'ignores_socially_live_turn' | 'answers_prior_thread_instead' | 'fails_emotional_center_binding' | 'answers_quarantined_blob' | null;
+  } {
+    const OK = { ok: true, failure: null };
+    if (!candidate || !snapshot.sociallyLiveHumanText) return OK;
+
+    const liveNorm = this.normalizeHumanTurnText(snapshot.sociallyLiveHumanText);
+    const ecConf = snapshot.liveEmotionalCenter.confidence;
+
+    // Only enforce when emotional center is medium-high confidence
+    if (ecConf < 0.65) return OK;
+
+    // Check first sentence binding: candidate opening should have some overlap with live turn
+    const firstSentence = (candidate.match(/^[^.!?\n]{10,200}[.!?\n]?/) || [candidate])[0] || '';
+    const firstSentenceToLiveOverlap = this.lexicalOverlapScore(firstSentence, liveNorm);
+
+    // If candidate clearly answers prior thread (low overlap with live) with high-confidence EC
+    if (firstSentenceToLiveOverlap < 0.08 && snapshot.backToBackHumanTurnsDrained) {
+      // Check if it overlaps with an older turn instead
+      const priorTexts = snapshot.priorHumanContext.map(p => p.text);
+      const hasPriorOverlap = priorTexts.some(
+        t => this.lexicalOverlapScore(firstSentence, this.normalizeHumanTurnText(t)) > 0.20,
+      );
+      if (hasPriorOverlap) {
+        return { ok: false, failure: 'answers_prior_thread_instead' };
+      }
+    }
+
+    return OK;
   }
 
   private shouldUseFastLaneReply(agentId: string, latestHumanMessage?: CommunionMessage): boolean {
@@ -6841,6 +7033,7 @@ export class CommunionLoop {
       text,
       timestamp: new Date(now).toISOString(),
       type: 'room',
+      humanTurnSequence: ++this.humanTurnSequenceCounter,
     };
     this.state.messages.push(msg);
     this.state.lastSpeaker = 'human';
@@ -7428,6 +7621,34 @@ export class CommunionLoop {
         continuityConfidence: this.clamp01(Math.max(presenceState.continuityConfidence, priorPresenceState?.continuityConfidence || 0.55)),
       };
     }
+    // ── Snapshot emotional-center override: strong EC on latest turn yields stale thread ──
+    // Per HumanTurnSnapshot spec §9: if EC confidence >= 0.65 and alive thread has low
+    // overlap with latest human text, the stale thread must yield regardless of carryover.
+    let snapshotEmotionalCenterOverrideFired = false;
+    if (
+      !staleTopicLatchCleared
+      && !repairDemand.requiresRepair
+      && !microRuptureDetected
+      && latestEmotionalCenter.confidence >= 0.65
+      && presenceState.aliveThreadId
+    ) {
+      const threadToLatestOverlap = this.lexicalOverlapScore(
+        latestHumanText,
+        presenceState.aliveThreadSummary || '',
+      );
+      if (threadToLatestOverlap < 0.35) {
+        snapshotEmotionalCenterOverrideFired = true;
+        staleTopicLatchCleared = true;
+        presenceState = {
+          ...presenceState,
+          aliveThreadId: null,
+          aliveThreadSummary: null,
+          aliveThreadStrength: 0,
+        };
+        console.log(`[SNAPSHOT] EC override: stale thread yielded (EC=${latestEmotionalCenter.kind}, conf=${latestEmotionalCenter.confidence.toFixed(2)}, threadOverlap=${threadToLatestOverlap.toFixed(2)})`);
+      }
+    }
+
     let presenceBias = this.buildPresenceBiasPacket(presenceState);
     let helperModeSuppressedByMicroRupture = false;
     if (microRuptureDetected || repairDemand.requiresRepair) {
@@ -7515,6 +7736,16 @@ export class CommunionLoop {
     );
     const normalizedMustTouch = repairDemand.normalizedMustTouch || presencePlan.mustTouch;
     const recentPromptMessages = this.state.messages.slice(-(fastLaneReply ? Math.min(this.contextWindow, 8) : this.contextWindow));
+
+    // ── Human Turn Snapshot — canonical frozen source of truth for this tick ──
+    const humanTurnSnapshot = this.buildHumanTurnSnapshot(
+      agentId,
+      latestHumanMessage ?? null,
+      relationalSurface,
+      latestEmotionalCenter,
+      presencePlan,
+      recentPromptMessages,
+    );
     const filteredAssistantHistoryCount = recentPromptMessages.filter(m =>
       m.speaker !== 'human' && this.shouldSuppressAssistantHistoryForPrompt(this.sanitizePromptCarryoverText(m.text, m.speakerName, false))
     ).length;
@@ -7898,6 +8129,14 @@ export class CommunionLoop {
       // Always speak when responding to human; journal ~25% of autonomous ticks
       const doJournal = !humanSpokeRecently && Math.random() < 0.25;
       prefill = doJournal ? '[JOURNAL] ' : '[SPEAK] ';
+    }
+
+    // ── Snapshot–Prompt Sync Validation ──
+    const snapshotPromptValidation = this.validatePromptAgainstSnapshot(humanTurnSnapshot, recentPromptMessages, presencePlan);
+    const snapshotPromptSyncPassed = snapshotPromptValidation.ok;
+    const snapshotPromptSyncFailures = snapshotPromptValidation.failures;
+    if (!snapshotPromptSyncPassed) {
+      console.warn(`[SNAPSHOT] Prompt sync failed: ${snapshotPromptSyncFailures.join(', ')} — snapshot=${humanTurnSnapshot.snapshotId}`);
     }
 
     const memoryContext = this.buildMemoryContext(agentId);
@@ -8658,6 +8897,18 @@ export class CommunionLoop {
       candidateAHardReasons = candidateA.score.hardReasons;
       relationalAcceptanceFloorApplied = this.isRelationalFrame(presencePlan.responseFrame);
       candidateABelowRelationalFloor = this.isBelowRelationalAcceptanceFloor(candidateA.score, candidateA.failureClass, candidateA.notes, presencePlan);
+
+      // ── Snapshot candidate validation ──
+      // Reject if candidate answers a prior thread instead of the socially live turn.
+      const snapshotCandidateValidation = candidateA.text
+        ? this.validateCandidateAgainstSnapshot(candidateA.text, humanTurnSnapshot)
+        : { ok: true, failure: null };
+      if (!snapshotCandidateValidation.ok && !candidateA.score.hardFailed) {
+        candidateA.score.hardFailed = true;
+        candidateA.score.hardReasons = [...candidateA.score.hardReasons, `snapshot_${snapshotCandidateValidation.failure}`];
+        candidateAHardReasons = candidateA.score.hardReasons;
+        console.warn(`[SNAPSHOT] Candidate A rejected: ${snapshotCandidateValidation.failure}`);
+      }
 
       // ── Analyst-mode public reply hard-fail ──
       // Must run BEFORE the recovery gate so the gate can see the updated hardFailed state.
@@ -9799,6 +10050,20 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         speakerAttributionMisbindingReason,
         speakerAttributionRewriteApplied,
         speakerAttributionRewriteSucceeded,
+        snapshotId: humanTurnSnapshot.snapshotId,
+        snapshotLatestHumanMessageId: humanTurnSnapshot.latestHumanMessageId,
+        snapshotSociallyLiveHumanMessageId: humanTurnSnapshot.sociallyLiveHumanMessageId,
+        snapshotLatestHumanTextPreview: humanTurnSnapshot.latestHumanText.slice(0, 80),
+        snapshotHighestHumanTurnSequence: humanTurnSnapshot.highestHumanTurnSequence,
+        snapshotPromptSyncPassed,
+        snapshotPromptSyncFailures,
+        mustTouchDerivedFromSnapshot: humanTurnSnapshot.liveMustTouch === presencePlan.mustTouch,
+        threadTargetDerivedFromSnapshot: humanTurnSnapshot.liveThreadTarget === presencePlan.threadTarget,
+        olderThreadSuppressedBySnapshot: snapshotEmotionalCenterOverrideFired,
+        backToBackHumanTurnsDrained: humanTurnSnapshot.backToBackHumanTurnsDrained,
+        humanTurnsDrainedCount: humanTurnSnapshot.humanTurnsDrainedCount,
+        snapshotCandidateValidationOk: snapshotCandidateValidation.ok,
+        snapshotCandidateValidationFailure: snapshotCandidateValidation.failure,
       };
       this.recordRelationalTrace(agentId, 'visible', visibleTrace);
       this.recordRelationalTrace(agentId, 'final', finalTrace);
