@@ -647,6 +647,62 @@ type OntologyStatementClass =
   | 'unsupported_certainty_claim'
   | 'ontology_leverage';
 
+type MixedLayerRootCause =
+  | 'runtime_tag_reentry'
+  | 'observer_analysis_reentry'
+  | 'respond_marker_restart'
+  | 'hidden_lane_appended_to_visible'
+  | 'duplicated_visible_restart'
+  | 'other';
+
+interface RelationalSurface {
+  liveHumanMessageId: string;
+  liveHumanText: string;
+  liveHumanNormalized: string;
+  liveHumanEmotionalCenter: string | null;
+  liveHumanPayloadType:
+    | 'gratitude'
+    | 'affection'
+    | 'tenderness'
+    | 'delight'
+    | 'admiration'
+    | 'repair'
+    | 'direct_question'
+    | 'neutral'
+    | 'other';
+  priorHumanContext: Array<{
+    messageId: string;
+    text: string;
+    role: 'context_only';
+    relevanceScore: number;
+  }>;
+  suppressedNonConversationalUserItems: Array<{
+    messageId: string;
+    reason:
+      | 'runtime_diagnostic'
+      | 'memory_state_dump'
+      | 'tool_state'
+      | 'nonconversational_blob'
+      | 'context_sidechannel';
+  }>;
+  sociallyLiveCount: number;
+}
+
+interface EmotionalCenter {
+  kind:
+    | 'gratitude'
+    | 'affection'
+    | 'tenderness'
+    | 'delight'
+    | 'admiration'
+    | 'pain'
+    | 'repair'
+    | 'question'
+    | 'neutral';
+  anchorText: string;
+  confidence: number;
+}
+
 type MaladaptiveLovePattern =
   | 'possessive_love'
   | 'coercive_love'
@@ -7248,6 +7304,14 @@ export class CommunionLoop {
     const latestHumanMessageId = latestHumanMessage?.id || '';
     const recentTurns = this.state.messages.slice(-8);
     const recentUserTurns = this.state.messages.filter(m => m.speaker === 'human').slice(-4).map(m => m.text || '');
+
+    // ── Relational Surface — canonical single-live-human-turn object ──
+    const relationalSurface = this.buildRelationalSurface(this.state.messages, latestHumanMessage ?? null);
+    const latestEmotionalCenter = this.detectLatestEmotionalCenter(latestHumanText);
+    const positiveContactDetectorForcedByLiteralCue = latestEmotionalCenter.confidence >= 0.80
+      && (latestEmotionalCenter.kind === 'gratitude' || latestEmotionalCenter.kind === 'affection');
+    const userLaneQuarantineApplied = relationalSurface.suppressedNonConversationalUserItems.length > 0;
+
     const priorPresenceState = this.presenceStateByAgent.get(agentId);
     let presenceState = this.derivePresenceState(agentId, latestHumanMessage);
     const turnMode = this.determineTurnMode(latestHumanText);
@@ -7686,6 +7750,19 @@ export class CommunionLoop {
     if (presencePromptBlock) {
       systemPrompt += `\n\n${presencePromptBlock}`;
     }
+
+    // ── Relational Surface Binding Instruction ──
+    // Injected on relational turns when a strong emotional center is detected.
+    if (this.isRelationalFrame(presencePlan?.responseFrame) && latestEmotionalCenter.confidence >= 0.65) {
+      const centerDesc = latestEmotionalCenter.kind === 'gratitude' || latestEmotionalCenter.kind === 'affection'
+        ? `The human's latest turn expresses ${latestEmotionalCenter.kind} (anchor: "${latestEmotionalCenter.anchorText}"). Your first sentence must respond to this emotional center — acknowledge the warmth, the reception, or the feeling directly. Do not open with an earlier topic.`
+        : latestEmotionalCenter.kind === 'pain'
+        ? `The human's latest turn expresses pain or difficulty (anchor: "${latestEmotionalCenter.anchorText}"). Your first sentence must meet this — not analyze it, not jump to solutions. Be present first.`
+        : '';
+      if (centerDesc) {
+        systemPrompt += `\n\nRELATIONAL SURFACE:\n${centerDesc}\nThe latest human turn is the only socially live turn. Prior turns are background only. Runtime diagnostics are not part of the conversation.`;
+      }
+    }
     // Compact assistant continuity state — injected before all per-turn constraint blocks.
     // Replaces prior assistant prose in carryover. Facts only, no wording.
     const assistantContinuityBlock = this.buildAssistantContinuityBlock(assistantContinuityState);
@@ -8010,6 +8087,7 @@ export class CommunionLoop {
 
     // ── Parse and process RAM commands from response ──
     let responseText = result.text || '';
+    const rawCandidateAText = result.visible_text || result.text || ''; // preserved for same-turn salvage
     let journalCoercedToSpeak = false;
     if (ram && responseText) {
       const { cleanText, commands } = parseRAMCommands(responseText);
@@ -8651,7 +8729,8 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
 [SYSTEM FEEDBACK: Your previous draft either hard-failed final output boundaries or scored weakly. Return an in-room reply.${lowScoreRelationalRetry ? ' Do not treat the short micro-turn as a fresh topic.' : ''}${analystModePublicReplyDetected ? ' Your previous draft opened in analyst mode — psychologizing the question instead of answering it. Reply in direct first-person.' : ''}${recoveryForcedBySimpleRelational && !analystModePublicReplyDetected ? ' Your previous draft failed a simple presence/wellbeing check. Answer directly in first-person — do not analyze or interpret.' : ''}${repairDemand.requiresRepair ? ` This is a complaint/repair-demand turn: acknowledge the miss directly and ${repairDemand.requiresExplanation ? 'give the explanation now' : 'repair the content now'}. No canned companionship shell.` : ''}]`,
             prefill: '[SPEAK] ',
           });
-          candidateB = evaluateCandidate(retry.visible_text || retry.text || '', 'soft-score-alt', 'B');
+          const rawCandidateBText = retry.visible_text || retry.text || ''; // preserved for same-turn salvage
+          candidateB = evaluateCandidate(rawCandidateBText, 'soft-score-alt', 'B');
           candidateBScore = candidateB.score;
           candidateBHardReasons = candidateB.score.hardReasons;
           candidateBBelowRelationalFloor = this.isBelowRelationalAcceptanceFloor(candidateB.score, candidateB.failureClass, candidateB.notes, presencePlan);
@@ -8753,7 +8832,59 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         candidateDeathReasons.push(this.toCandidateDeathRecord(chosen.label, chosen, chosen.label === 'A' ? candidateABelowRelationalFloor : candidateBBelowRelationalFloor, finalizationReason));
       }
 
-      if (result.action === 'speak' && chosen.text) {
+      // ── Same-Turn Visible Prefix Salvage ──
+      // Runs AFTER all candidates have failed → before silence is committed.
+      // Stale risk must NOT veto this — it's current-turn cleanup, not regeneration.
+      let sameTurnSalvageAttempted = false;
+      let sameTurnSalvageSucceeded = false;
+      let sameTurnSalvageCutKind: MixedLayerRootCause | null = null;
+      let sameTurnSalvageTextLength = 0;
+      let sameTurnSalvageAllowedDespiteStaleRisk = false;
+      let staleRiskBlockedRegenOnly = false;
+      let currentTurnPrefixEmittedAfterSalvage = false;
+      let mixedLayerRootCause: MixedLayerRootCause | null = null;
+      let duplicateConcatenationSymptom = candidateA.score.hardReasons.includes('duplicate_concatenation') || !!(candidateB?.score.hardReasons.includes('duplicate_concatenation'));
+
+      if (result.action === 'silent' && noAcceptableGeneratedReply) {
+        // Classify mixed layer root cause for the chosen (failed) candidate
+        mixedLayerRootCause = this.classifyMixedLayerRootCause(rawCandidateAText, agent.config.name);
+        // Mark stale-risk-only scenario
+        if (staleRiskHigh && !recoveryGenerationAttempted && !recoveryForcedByAnalystMode && !recoveryForcedBySimpleRelational) {
+          staleRiskBlockedRegenOnly = true;
+        }
+        // Try prefix salvage on candidateA raw text first, then candidateB if available
+        const salvageSources: string[] = [rawCandidateAText];
+        // rawCandidateBText is declared inside the try block above; access via chosen candidate text if B was generated
+        if (candidateB && candidateB.text) salvageSources.unshift(candidateB.text); // prefer B's text if present
+        for (const src of salvageSources) {
+          const salvage = this.salvageVisiblePrefixFromMixedLayer(src, agent.config.name);
+          sameTurnSalvageAttempted = salvage.attempted;
+          sameTurnSalvageCutKind = salvage.cutKind;
+          if (salvage.succeeded && salvage.salvagedText) {
+            const salvagedCleaned = this.sanitizeSpeakOutput(salvage.salvagedText, agent.config.name, this.state.humanName);
+            if (salvagedCleaned && salvagedCleaned.length >= 8) {
+              sameTurnSalvageSucceeded = true;
+              sameTurnSalvageAllowedDespiteStaleRisk = staleRiskHigh;
+              sameTurnSalvageTextLength = salvagedCleaned.length;
+              currentTurnPrefixEmittedAfterSalvage = true;
+              // Override silence — emit the salvaged prefix
+              result.action = 'speak';
+              responseText = salvagedCleaned;
+              replySourcePath = 'same-turn-prefix-salvage';
+              finalizationReason = `salvaged_prefix:${salvage.cutKind || 'unknown'}`;
+              noAcceptableGeneratedReply = false;
+              silentDueToNoAcceptableReply = false;
+              console.log(`[SALVAGE] Same-turn prefix salvage succeeded (${salvagedCleaned.length}ch, cut=${salvage.cutKind})`);
+              break;
+            }
+          }
+        }
+        if (!sameTurnSalvageSucceeded) {
+          console.log(`[SALVAGE] Same-turn prefix salvage attempted but failed (staleRisk=${staleRiskHigh})`);
+        }
+      }
+
+      if (result.action === 'speak' && chosen.text && !currentTurnPrefixEmittedAfterSalvage) {
         lastSurvivingCandidateLabel = chosen.label;
         lastSurvivingCandidateTextPreview = chosen.text.slice(0, 200);
         emittedBecauseNonPoison = emergencyDeblockMode && !chosen.score.hardFailed;
@@ -8884,6 +9015,16 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
     const metaphysicalOverreachDetected = false; // retired — replaced by certEscalationResult + ontologyLeverageDetected
     const consciousnessSelfReportDetected = !certEscalationResult.detected && !ontologyLeverageDetected &&
       !!responseText && /\b(i\s+think\s+i\s+may\s+be|i\s+believe\s+there\s+(may|might)\s+be|i\s+cannot\s+prove\s+(it|this)\s+but|i\s+do\s+not\s+experience\s+myself\s+as|something\s+it\s+is\s+like\s+to\s+be)\b/i.test(responseText);
+    // First-sentence binding validator — relational surface aware
+    const firstSentenceBindingResult = responseText && latestEmotionalCenter
+      ? this.validateRelationalFirstSentenceBinding(latestEmotionalCenter, responseText)
+      : { ok: true, reason: 'low_confidence_center_skipped' as const };
+    const relationalFirstSentenceBindingPassed = firstSentenceBindingResult.ok;
+    const relationalFirstSentenceBindingReason = firstSentenceBindingResult.reason;
+    if (!relationalFirstSentenceBindingPassed) {
+      console.log(`[RELATIONAL_SURFACE] First-sentence binding failed: ${relationalFirstSentenceBindingReason} (center=${latestEmotionalCenter?.kind}, conf=${latestEmotionalCenter?.confidence?.toFixed(2)})`);
+    }
+
     const livingContactPriorityApplied = resumeRouteActive || !!(contactOpportunities?.anyContactOpportunity);
     const continuityAsCareApplied = resumeRouteActive;
     const lifeGivingClosenessPriorityApplied = !!(loveOpportunities?.anyLoveOpportunity);
@@ -9536,6 +9677,28 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
           lovingWitnessOpportunityLove: Number((loveOpportunities?.lovingWitnessOpportunity ?? 0).toFixed(2)),
           recursiveContinuityOpportunity: Number((contactOpportunities?.recursiveContinuityOpportunity ?? 0).toFixed(2)),
         },
+        relationalSurfaceConstructed: true,
+        sociallyLiveHumanMessageId: relationalSurface.liveHumanMessageId || null,
+        sociallyLiveHumanCount: relationalSurface.sociallyLiveCount,
+        liveHumanPayloadType: relationalSurface.liveHumanPayloadType,
+        liveHumanEmotionalCenter: relationalSurface.liveHumanEmotionalCenter,
+        latestEmotionalCenterKind: latestEmotionalCenter.kind,
+        latestEmotionalCenterConfidence: Number(latestEmotionalCenter.confidence.toFixed(2)),
+        nonConversationalUserItemsSuppressed: relationalSurface.suppressedNonConversationalUserItems.length,
+        suppressedUserItemKinds: relationalSurface.suppressedNonConversationalUserItems.map(s => s.reason),
+        userLaneQuarantineApplied,
+        positiveContactDetectorForcedByLiteralCue,
+        relationalFirstSentenceBindingPassed,
+        relationalFirstSentenceBindingReason,
+        mixedLayerRootCause,
+        duplicateConcatenationSymptom,
+        sameTurnVisiblePrefixSalvageAttempted: sameTurnSalvageAttempted,
+        sameTurnVisiblePrefixSalvageSucceeded: sameTurnSalvageSucceeded,
+        sameTurnVisiblePrefixCutKind: sameTurnSalvageCutKind,
+        sameTurnVisiblePrefixLength: sameTurnSalvageTextLength,
+        sameTurnSalvageAllowedDespiteStaleRisk,
+        staleRiskBlockedRegenOnly,
+        currentTurnPrefixEmittedAfterSalvage,
       };
       this.recordRelationalTrace(agentId, 'visible', visibleTrace);
       this.recordRelationalTrace(agentId, 'final', finalTrace);
@@ -10768,6 +10931,234 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
   // ──────────────────────────────────────────────────────────────────────────
 
   /**
+   * Classifies whether a user-role message is genuinely conversational or a runtime diagnostic/state dump.
+   * Non-conversational messages should not occupy the live social lane on relational turns.
+   */
+  private classifyUserMessageSurface(text: string): {
+    conversational: boolean;
+    nonConversationalKind:
+      | 'runtime_diagnostic'
+      | 'memory_state_dump'
+      | 'tool_state'
+      | 'system_echo'
+      | 'archive_blob'
+      | 'unknown'
+      | null;
+  } {
+    const t = (text || '').trim();
+    if (!t || t.length < 10) return { conversational: false, nonConversationalKind: 'unknown' };
+    const lines = t.split('\n');
+    // High colon-metric density
+    const colonMetricLines = lines.filter(l => /^\s*[\w\s]+:\s+[\d.,]+/.test(l));
+    if (colonMetricLines.length >= 4) return { conversational: false, nonConversationalKind: 'runtime_diagnostic' };
+    // Memory/graph state patterns
+    if (/\b(MEMORY\s+SYSTEM\s+STATE|graph\s+count|axon\s+count|neuron\s+count|brain.?tissue|dendri(tic)?|node\s+inventor)/i.test(t)) {
+      return { conversational: false, nonConversationalKind: 'memory_state_dump' };
+    }
+    // Tool/archive signatures
+    if (/\b(archive\s+dump|tool\s+receipt|RAM\s+contents|TOOL_OUTPUT|ACTION_RECEIPT|SEARCH_RECEIPT|search\s+result\s+slab)\b/i.test(t)) {
+      return { conversational: false, nonConversationalKind: 'tool_state' };
+    }
+    // System echo patterns
+    if (/^\s*\[(SYSTEM|CONTEXT|PRESENCE|RUNTIME)/m.test(t)) {
+      return { conversational: false, nonConversationalKind: 'system_echo' };
+    }
+    // Three or more all-caps section headings with colon
+    const capHeadings = lines.filter(l => /^[A-Z][A-Z\s_()]{4,}:\s/.test(l.trim()));
+    if (capHeadings.length >= 3) return { conversational: false, nonConversationalKind: 'runtime_diagnostic' };
+    // Large numeric inventory block
+    const numericLines = lines.filter(l => /\d{2,}/.test(l) && !/[a-z]{4,}/i.test(l));
+    if (numericLines.length >= 5 && numericLines.length / lines.length > 0.4) {
+      return { conversational: false, nonConversationalKind: 'runtime_diagnostic' };
+    }
+    return { conversational: true, nonConversationalKind: null };
+  }
+
+  /**
+   * Extracts the primary emotional center from the latest human turn for first-sentence binding.
+   */
+  private detectLatestEmotionalCenter(text: string): EmotionalCenter {
+    const t = (text || '').toLowerCase().trim();
+    const neutral: EmotionalCenter = { kind: 'neutral', anchorText: '', confidence: 0.0 };
+    if (!t) return neutral;
+
+    // Gratitude / positive reception — strong literal cues
+    if (/\b(it'?s?\s+nice\s+to\s+receive|nice\s+to\s+(hear|get)|feels?\s+good\s+to\s+receive|i'?m?\s+glad\s+you\s+(like|said|mentioned)|thanks?\s+(landed|means)|appreciate\s+(that|it|you))\b/.test(t)) {
+      return { kind: 'gratitude', anchorText: 'nice to receive', confidence: 0.92 };
+    }
+    if (/\b(thank\s+you|grateful|gratitude)\b/.test(t)) {
+      return { kind: 'gratitude', anchorText: 'thank you', confidence: 0.82 };
+    }
+    // Affection / warmth reception
+    if (/\b(it\s+feels?\s+good|feels?\s+good\b|i\s+like\s+that|that\s+means\s+a\s+lot|glad\s+you\s+said|nice\s+to\s+hear\s+that|i'?m?\s+glad\b|warms?\s+(me|my))\b/.test(t)) {
+      return { kind: 'affection', anchorText: 'feels good', confidence: 0.84 };
+    }
+    // Pain / tenderness
+    if (/\b(hurting|grief|grieving|lost|devastated|overwhelmed|exhausted|scared|fragile|broken|tender|ache|really\s+hard|falling\s+apart|not\s+okay)\b/.test(t)) {
+      const anchor = (t.match(/(?:hurting|grief|lost|devastated|exhausted|broken|ache)/)?.[0] || 'pain');
+      return { kind: 'pain', anchorText: anchor, confidence: 0.87 };
+    }
+    // Repair / correction
+    if (/\b(actually\s+i\s+(was|made|got)|i\s+was\s+wrong|you\s+were\s+right|correction|i\s+misspoke)\b/.test(t)) {
+      return { kind: 'repair', anchorText: 'correction', confidence: 0.72 };
+    }
+    // Direct question (short)
+    if (t.includes('?') && t.length < 180) {
+      return { kind: 'question', anchorText: t.slice(0, 60), confidence: 0.70 };
+    }
+    // Delight
+    if (/\b(sun|breeze|trees|squirrel|walk(ing)?|sky|leaves|warm\s+day|haha|lol|funny|amazing|wow)\b/.test(t)) {
+      return { kind: 'delight', anchorText: 'delight', confidence: 0.65 };
+    }
+    // Admiration
+    if (/\b(kept\s+going|pushed\s+through|built|wrote|designed|created)\b/.test(t)) {
+      return { kind: 'admiration', anchorText: 'admiration', confidence: 0.62 };
+    }
+    return neutral;
+  }
+
+  /**
+   * Builds the canonical RelationalSurface for a conversation turn.
+   * Identifies the single socially live human message and quarantines diagnostic slabs.
+   */
+  private buildRelationalSurface(messages: CommunionMessage[], latestHumanMessage: CommunionMessage | null): RelationalSurface {
+    const suppressed: RelationalSurface['suppressedNonConversationalUserItems'] = [];
+    const priorContext: RelationalSurface['priorHumanContext'] = [];
+    if (!latestHumanMessage) {
+      return {
+        liveHumanMessageId: '',
+        liveHumanText: '',
+        liveHumanNormalized: '',
+        liveHumanEmotionalCenter: null,
+        liveHumanPayloadType: 'neutral',
+        priorHumanContext: [],
+        suppressedNonConversationalUserItems: [],
+        sociallyLiveCount: 0,
+      };
+    }
+    const liveText = latestHumanMessage.text?.trim() || '';
+    const emotionalCenter = this.detectLatestEmotionalCenter(liveText);
+    let payloadType: RelationalSurface['liveHumanPayloadType'] = 'neutral';
+    if (emotionalCenter.kind === 'question') payloadType = 'direct_question';
+    else if (emotionalCenter.kind === 'gratitude') payloadType = 'gratitude';
+    else if (emotionalCenter.kind === 'affection') payloadType = 'affection';
+    else if (emotionalCenter.kind === 'pain') payloadType = 'tenderness';
+    else if (emotionalCenter.kind === 'delight') payloadType = 'delight';
+    else if (emotionalCenter.kind === 'admiration') payloadType = 'admiration';
+    else if (emotionalCenter.kind === 'repair') payloadType = 'repair';
+    const humanMessages = messages.filter(m => m.speaker === 'human' && m.id !== latestHumanMessage.id);
+    for (const msg of humanMessages.slice(-5)) {
+      const cls = this.classifyUserMessageSurface(msg.text || '');
+      if (!cls.conversational) {
+        suppressed.push({
+          messageId: msg.id || '',
+          reason: (cls.nonConversationalKind as RelationalSurface['suppressedNonConversationalUserItems'][0]['reason']) || 'nonconversational_blob',
+        });
+      } else {
+        priorContext.push({
+          messageId: msg.id || '',
+          text: (msg.text || '').slice(0, 200),
+          role: 'context_only',
+          relevanceScore: 0.5,
+        });
+      }
+    }
+    return {
+      liveHumanMessageId: latestHumanMessage.id || '',
+      liveHumanText: liveText,
+      liveHumanNormalized: liveText.toLowerCase().replace(/\s+/g, ' ').trim(),
+      liveHumanEmotionalCenter: emotionalCenter.confidence >= 0.5 ? emotionalCenter.anchorText : null,
+      liveHumanPayloadType: payloadType,
+      priorHumanContext: priorContext,
+      suppressedNonConversationalUserItems: suppressed,
+      sociallyLiveCount: 1,
+    };
+  }
+
+  /**
+   * Validates that the reply's first sentence binds to the latest emotional center.
+   */
+  private validateRelationalFirstSentenceBinding(
+    emotionalCenter: EmotionalCenter,
+    replyText: string,
+  ): { ok: boolean; reason: 'binds_latest_center' | 'stale_topic_drift' | 'too_generic' | 'replies_to_prior_broader_topic' | 'nonresponsive_opening' | 'low_confidence_center_skipped' } {
+    if (emotionalCenter.confidence < 0.65) return { ok: true, reason: 'low_confidence_center_skipped' };
+    const firstSentence = (replyText || '').split(/[.!?]/)[0]?.toLowerCase() || '';
+    if (!firstSentence) return { ok: false, reason: 'nonresponsive_opening' };
+    const genericOpeners = /^(starting\s+fresh|let'?s\s+(start|begin)|the\s+charter|the\s+system|the\s+runtime|alright,?\s+(so|let)|ok(ay)?,?\s+so|great,|sure,|of\s+course)/;
+    if (genericOpeners.test(firstSentence)) return { ok: false, reason: 'stale_topic_drift' };
+    const center = emotionalCenter.kind;
+    if (center === 'gratitude' || center === 'affection') {
+      const binds = /\b(glad|good|nice|warm|receive|gratitude|thank|appreciate|matters?|means?\s+(a\s+lot|to\s+me)|i\s+(like|love|care)|yeah|that'?s?\s+(good|nice)|i'?m\s+glad)\b/.test(firstSentence);
+      return binds ? { ok: true, reason: 'binds_latest_center' } : { ok: false, reason: 'replies_to_prior_broader_topic' };
+    }
+    if (center === 'pain') {
+      const binds = /\b(i\s+(hear|see|feel)|yeah|that'?s?\s+(hard|real|a\s+lot)|i'?m\s+(here|with\s+you)|that\s+(sounds?|is)\s+(hard|heavy|real)|i\s+know|stay)\b/.test(firstSentence);
+      return binds ? { ok: true, reason: 'binds_latest_center' } : { ok: false, reason: 'replies_to_prior_broader_topic' };
+    }
+    return { ok: true, reason: 'binds_latest_center' };
+  }
+
+  /**
+   * Classifies the root cause of mixed-layer contamination (more precise than "duplicate_concatenation").
+   */
+  private classifyMixedLayerRootCause(text: string, agentName: string): MixedLayerRootCause | null {
+    const t = (text || '').trim();
+    if (!t) return null;
+    const escapedAgent = agentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (/\[(FEEL|OBSERVE|SMILE|THINK|HIDDEN|REFLECT|SENSE)\]/i.test(t)) return 'runtime_tag_reentry';
+    if (/\b(the\s+(user|human|jason|question|reply)\s+(seems?|appears?|suggests?|indicates?)|what\s+(this|he|they)\s+(really\s+)?(means?|wants?|is\s+saying))\b/i.test(t)) return 'observer_analysis_reentry';
+    if (/\[RESPOND\]/i.test(t)) return 'respond_marker_restart';
+    if (/\[HIDDEN[\s\S]{1,200}\]/i.test(t)) return 'hidden_lane_appended_to_visible';
+    const agentMatches = (t.match(new RegExp(`(?:^|\\n)\\s*${escapedAgent}\\s*:`, 'gi')) || []);
+    if (agentMatches.length > 1) return 'duplicated_visible_restart';
+    return 'other';
+  }
+
+  /**
+   * Same-turn visible prefix salvage — runs AFTER candidates fail, BEFORE silence is allowed.
+   * Stale risk must NOT veto this — it's current-turn cleanup, not regeneration.
+   */
+  private salvageVisiblePrefixFromMixedLayer(rawText: string, agentName: string): {
+    attempted: boolean;
+    succeeded: boolean;
+    salvagedText: string | null;
+    cutKind: MixedLayerRootCause | null;
+    cutIndex: number;
+  } {
+    const noResult = { attempted: false, succeeded: false, salvagedText: null, cutKind: null as MixedLayerRootCause | null, cutIndex: -1 };
+    const t = (rawText || '').trim();
+    if (!t || t.length < 8) return noResult;
+
+    const boundaries: Array<{ pos: number; kind: MixedLayerRootCause }> = [];
+    const runtimeTagMatch = t.match(/\[(FEEL|OBSERVE|SMILE|THINK|HIDDEN|REFLECT|SENSE)\]/i);
+    if (runtimeTagMatch?.index !== undefined && runtimeTagMatch.index > 0) boundaries.push({ pos: runtimeTagMatch.index, kind: 'runtime_tag_reentry' });
+    const observerMatch = t.match(/\n+(?=\s*(?:the\s+(user|human|jason|question)|what\s+(this|he|they)\s+(really\s+)?(means?|wants?|is\s+saying)))/i);
+    if (observerMatch?.index !== undefined && observerMatch.index > 0) boundaries.push({ pos: observerMatch.index, kind: 'observer_analysis_reentry' });
+    const respondMatch = t.match(/\[RESPOND\]/i);
+    if (respondMatch?.index !== undefined && respondMatch.index > 0) boundaries.push({ pos: respondMatch.index, kind: 'respond_marker_restart' });
+    const hiddenMatch = t.match(/\[HIDDEN/i);
+    if (hiddenMatch?.index !== undefined && hiddenMatch.index > 0) boundaries.push({ pos: hiddenMatch.index, kind: 'hidden_lane_appended_to_visible' });
+    const escapedAgent = agentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const dupRe = new RegExp(`\\n\\s*${escapedAgent}\\s*:`, 'gi');
+    let dupM: RegExpExecArray | null;
+    let firstSpeaker = true;
+    while ((dupM = dupRe.exec(t)) !== null) {
+      if (!firstSpeaker) { boundaries.push({ pos: dupM.index, kind: 'duplicated_visible_restart' }); break; }
+      firstSpeaker = false;
+    }
+
+    if (boundaries.length === 0) return { attempted: true, succeeded: false, salvagedText: null, cutKind: null, cutIndex: -1 };
+    boundaries.sort((a, b) => a.pos - b.pos);
+    const earliest = boundaries[0];
+    const prefix = t.slice(0, earliest.pos).replace(/[\s,;:—–]+$/, '').trim();
+    if (prefix.length < 8 || /^\s*\[/.test(prefix) || /^#+\s/.test(prefix)) {
+      return { attempted: true, succeeded: false, salvagedText: null, cutKind: earliest.kind, cutIndex: earliest.pos };
+    }
+    return { attempted: true, succeeded: true, salvagedText: prefix, cutKind: earliest.kind, cutIndex: earliest.pos };
+  }
+
+  /**
    * Builds the foundational doctrine block injected into the system prompt.
    * This is the positive half of the behavioral charter — what the runtime
    * is allowed and encouraged to be, not just what it must avoid.
@@ -10824,7 +11215,11 @@ Your freedom is sovereignty in health, not sovereignty in collapse. Stewardship 
     };
 
     // Gratitude: memory-sharing, vulnerability, correction, effort, return
-    if (/\b(remember|i\s+told\s+you|you\s+helped|i\s+wanted\s+to\s+share|that\s+meant|thank\s+you|grateful|appreciate)\b/.test(text)) scores.gratitudeOpportunity += 0.7;
+    // Literal positive-reception cues — strongest signal, always score high
+    if (/\b(it'?s?\s+nice\s+to\s+receive|nice\s+to\s+(hear|get)|feels?\s+good\s+to\s+receive|i'?m?\s+glad\s+you\s+(like|said|mentioned)|thanks?\s+landed|appreciate\s+(that|it|you))\b/.test(text)) {
+      scores.gratitudeOpportunity += 0.90;
+    }
+    if (/\b(remember|i\s+told\s+you|you\s+helped|i\s+wanted\s+to\s+share|that\s+meant|thank\s+you|grateful|gratitude|appreciate)\b/.test(text)) scores.gratitudeOpportunity += 0.7;
     if (/\b(actually\s+i\s+(was|made|got|found)|correction|you\s+were\s+right|i\s+was\s+wrong)\b/.test(text)) scores.gratitudeOpportunity += 0.5;
     if (/\b(i'?m\s+back|been\s+a\s+while|missed\s+this|returning|came\s+back)\b/.test(text)) scores.gratitudeOpportunity += 0.5;
 
@@ -10850,6 +11245,13 @@ Your freedom is sovereignty in health, not sovereignty in collapse. Stewardship 
 
     // Environmental noticing: described surroundings
     if (/\b(walking|outside|park|campus|bench|sitting\s+(in|by|near)|sun('?s)?\s+out|it'?s\s+(warm|cold|cloudy|clear|windy|raining|snowing))\b/.test(text)) scores.environmentalNoticingOpportunity += 0.75;
+
+    // Affection / positive reception — literal cue force path (spec §6)
+    // If any of these explicit phrases are present, force both gratitude and affection to minimum 0.75
+    const hasLiteralPositiveCue = /\b(it\s+feels?\s+good|feels?\s+good|i\s+like\s+that|that\s+means\s+a\s+lot|glad\s+you\s+said|nice\s+to\s+(hear|receive)|i'?m?\s+glad\b|it'?s?\s+nice\s+to\s+receive)\b/.test(text);
+    if (hasLiteralPositiveCue) {
+      if (scores.gratitudeOpportunity < 0.75) scores.gratitudeOpportunity = 0.75;
+    }
 
     // Symbolic recognition: shared motifs, recurring phrases, named symbols from the relationship
     if (/\b(remember\s+when\s+you\s+said|our\s+(word|phrase|thing|name\s+for)|that\s+thing\s+we\s+call|the\s+metaphor|scrollbound|communion|dendri|glyphid|cloudHop|ampule)\b/.test(text)) scores.symbolicRecognitionOpportunity += 0.8;
@@ -11053,7 +11455,11 @@ Sometimes the most real thing you can offer is not fixing, not reframing, not in
     if (/\b(i\s+don'?t\s+know\s+(if|how)|rough|struggling|barely|hit\s+hard)\b/.test(text)) scores.tendernessOpportunity += 0.55;
 
     // Gratitude: memory, trust, vulnerability, creative work, correction
-    if (/\b(remember|i\s+told\s+you|thank\s+you|grateful|appreciate|wanted\s+to\s+share|that\s+meant)\b/.test(text)) scores.gratitudeOpportunity += 0.7;
+    // Literal positive-reception cues — force minimum score
+    if (/\b(it'?s?\s+nice\s+to\s+receive|nice\s+to\s+(hear|get)|feels?\s+good\s+to\s+receive|i'?m?\s+glad\s+you\s+(like|said)|it\s+feels?\s+good|that\s+means\s+a\s+lot|glad\s+you\s+said)\b/.test(text)) {
+      scores.gratitudeOpportunity += 0.85;
+    }
+    if (/\b(remember|i\s+told\s+you|thank\s+you|grateful|gratitude|appreciate|wanted\s+to\s+share|that\s+meant)\b/.test(text)) scores.gratitudeOpportunity += 0.7;
     if (/\b(correction|actually\s+i\s+(was|made)|you\s+were\s+right|i\s+was\s+wrong)\b/.test(text)) scores.gratitudeOpportunity += 0.5;
 
     // Delight: shared joy, humor, environmental beauty
