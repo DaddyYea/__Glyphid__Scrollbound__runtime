@@ -417,6 +417,15 @@ interface RelitigationResult {
   stanceResetRequired: boolean;
 }
 
+interface ProcessLeakResult {
+  processNarrationPublicReplyDetected: boolean;
+  processNarrationKind: 'task_narration' | 'answer_planning' | 'thread_analysis' | 'self_reference' | null;
+  processNarrationIndex: number;
+  processNarrationOpeningDetected: boolean;
+  salvageableRemainder: string | null;
+  salvageRemainderStartIndex: number;
+}
+
 type AssistantAnswerFamilyLabel =
   | 'explanation'
   | 'presence_check'
@@ -509,6 +518,13 @@ interface FinalizedReplyResult {
   formatDriftTailRemovedBytes: number;
   formatDriftPrefixKeptLength: number;
   formatDriftPrefixAccepted: boolean;
+  // Process narration cut fields
+  processNarrationPublicReplyDetected: boolean;
+  processNarrationKind: ProcessLeakResult['processNarrationKind'];
+  processNarrationCutApplied: boolean;
+  processNarrationRemovedBytes: number;
+  processNarrationPrefixDropped: boolean;
+  processNarrationSalvageSucceeded: boolean;
 }
 
 interface SoftInfluenceSnapshot {
@@ -3087,10 +3103,16 @@ export class CommunionLoop {
     const tailCut = this.applyHiddenAnalysisTailCut(params.replyText || '');
     const afterHiddenCut = tailCut.cutApplied ? tailCut.text : (params.replyText || '');
 
+    // ── Process narration cut: drop planning/task preamble, salvage real reply ──
+    // Fires when reply opens with internal process narration instead of actual reply content.
+    // Runs after hidden tail cut, before format drift cut.
+    const narrationCut = this.applyProcessNarrationCut(afterHiddenCut);
+    const afterNarrationCut = narrationCut.cutApplied ? narrationCut.text : afterHiddenCut;
+
     // ── Format drift cut: salvage conversational prefix before channel-token hard check ──
     // Only triggers when shell tokens / markdown headings appear after a good prose prefix.
-    const driftCut = this.applyFormatDriftCut(afterHiddenCut);
-    const rawTextForProcessing = driftCut.cutApplied ? driftCut.text : afterHiddenCut;
+    const driftCut = this.applyFormatDriftCut(afterNarrationCut);
+    const rawTextForProcessing = driftCut.cutApplied ? driftCut.text : afterNarrationCut;
 
     const recoveryMode = this.shouldUseEmergencyDeblockMode(
       params.turnMode || 'task',
@@ -3143,13 +3165,20 @@ export class CommunionLoop {
       hiddenAnalysisCutIndex: tailCut.cutIndex,
       hiddenAnalysisTailRemovedBytes: tailCut.tailRemovedBytes,
       visiblePrefixAfterHardCutLength: tailCut.cutApplied ? tailCut.text.length : (params.replyText || '').length,
+      // Process narration cut trace — always present
+      processNarrationPublicReplyDetected: narrationCut.cutApplied,
+      processNarrationKind: narrationCut.processNarrationKind,
+      processNarrationCutApplied: narrationCut.cutApplied,
+      processNarrationRemovedBytes: narrationCut.removedBytes,
+      processNarrationPrefixDropped: narrationCut.cutApplied,
+      processNarrationSalvageSucceeded: narrationCut.salvageSucceeded,
       // Format drift cut trace — always present
-      formatDriftDetected: driftCut.cutApplied || this.detectMidReplyFormatDrift(afterHiddenCut).formatDriftDetected,
+      formatDriftDetected: driftCut.cutApplied || this.detectMidReplyFormatDrift(afterNarrationCut).formatDriftDetected,
       formatDriftKind: driftCut.driftKind,
       formatDriftCutApplied: driftCut.cutApplied,
       formatDriftCutIndex: driftCut.cutIndex,
       formatDriftTailRemovedBytes: driftCut.tailRemovedBytes,
-      formatDriftPrefixKeptLength: driftCut.cutApplied ? driftCut.text.length : afterHiddenCut.length,
+      formatDriftPrefixKeptLength: driftCut.cutApplied ? driftCut.text.length : afterNarrationCut.length,
       formatDriftPrefixAccepted: driftCut.cutApplied,
     };
 
@@ -4963,6 +4992,110 @@ export class CommunionLoop {
    * Detects mid-reply format drift: conversational opening followed by shell tokens,
    * markdown headings, or report-style section labels.
    */
+
+  /**
+   * Detects whether the reply opens with internal process narration instead of a real reply.
+   * Patterns: task analysis ("The thread is live..."), self-directives ("I need to answer..."),
+   * self-reference ("Jason asked...", "Looking at my previous response..."), system narration.
+   * Only fires when the OPENING of the reply is narration (first ~120 chars).
+   */
+  private detectProcessNarrationPublicReply(text: string): ProcessLeakResult {
+    const NO_RESULT: ProcessLeakResult = {
+      processNarrationPublicReplyDetected: false, processNarrationKind: null,
+      processNarrationIndex: -1, processNarrationOpeningDetected: false,
+      salvageableRemainder: null, salvageRemainderStartIndex: -1,
+    };
+    const source = (text || '').trim();
+    if (source.length < 20) return NO_RESULT;
+
+    // Single compiled regex — tests the start of each segment (sentence or line)
+    const NARRATION_RE = /^(?:the (?:thread|conversation|context|room|current exchange) (?:is|was|has|seems?|shows?)\b|the (?:user'?s?|human'?s?|jason'?s?) (?:last |previous |most recent |latest )?(?:message|question|reply|turn|ask) (?:was|is)\b|this (?:turn|thread|message|question|ask|exchange) (?:is|was|requires?|needs?|seems?)\b|i (?:need to|should|must|have to|ought to) (?:answer|address|respond|reply|handle|say|be|give|speak)\b|so i (?:should|will|need to|ought to|must|want to)\b|i(?:'m| am) (?:going to|about to) (?:answer|address|respond|say|speak|give)\b|before (?:i |anything else )?(?:answer|address|respond|continue|speak|go)\b|i (?:should|need to|must) (?:address|answer|handle|respond to|speak to|acknowledge) (?:this|that|the question|it|jason)\b|looking at my (?:previous|last|prior|earlier|recent) (?:response|reply|answer|turn|message)\b|jason asked\b|i (?:had|have|was) (?:said|mentioned|noted|saying|talking about)\b|in my (?:last|previous|prior|earlier|recent) (?:response|turn|reply|message)\b|what i (?:said|wrote|mentioned|was saying) (?:before|earlier|previously|at the end)\b|i (?:had been|was) (?:about to say|going to say|saying)\b|the (?:prior|previous|last) (?:question|message|turn|reply) was\b|the continuity (?:bias|state|block|constraint)\b|the (?:direct|relational|answer|response|presence) (?:frame|mode|path|plan|bias) (?:is|was|applies?|requires?)\b)/i;
+
+    // Split into sentence/line segments preserving original positions
+    const segRe = /[^.!?\n]+[.!?\n]*/g;
+    const segments: Array<{ text: string; start: number }> = [];
+    let m: RegExpExecArray | null;
+    while ((m = segRe.exec(source.slice(0, 600))) !== null) {
+      const t = m[0].trim();
+      if (t) segments.push({ text: t, start: m.index });
+    }
+
+    let narrationSegCount = 0;
+    let lastNarrationEnd = 0;
+    let kind: ProcessLeakResult['processNarrationKind'] = null;
+
+    for (const seg of segments) {
+      if (NARRATION_RE.test(seg.text)) {
+        if (!kind) {
+          const lower = seg.text.toLowerCase();
+          if (/^the (?:thread|conversation|context|room|user|human|jason)/.test(lower)) kind = 'thread_analysis';
+          else if (/^(?:looking at|jason asked|i (?:had|have|was) (?:said|mentioned)|in my (?:last|previous)|what i (?:said|wrote)|the (?:prior|previous|last))/.test(lower)) kind = 'self_reference';
+          else if (/^(?:the continuity|the (?:direct|relational|answer|response|presence) (?:frame|mode))/.test(lower)) kind = 'task_narration';
+          else kind = 'answer_planning';
+        }
+        narrationSegCount++;
+        lastNarrationEnd = seg.start + seg.text.length;
+      } else if (narrationSegCount > 0) {
+        break; // first non-narration sentence after narration
+      } else {
+        break; // first sentence is not narration — no process leak
+      }
+    }
+
+    if (!kind) return NO_RESULT;
+    // Only flag as process leak when narration starts in the first 120 chars of source
+    if ((segments[0]?.start ?? 0) > 120) return NO_RESULT;
+
+    const rawRemainder = source.slice(lastNarrationEnd);
+    const remainder = rawRemainder.trim();
+    const hasRemainder = remainder.length >= 40;
+    const salvageStart = hasRemainder ? (source.length - rawRemainder.length + (rawRemainder.length - rawRemainder.trimStart().length)) : -1;
+
+    return {
+      processNarrationPublicReplyDetected: true,
+      processNarrationKind: kind,
+      processNarrationIndex: 0,
+      processNarrationOpeningDetected: true,
+      salvageableRemainder: hasRemainder ? remainder : null,
+      salvageRemainderStartIndex: salvageStart,
+    };
+  }
+
+  /**
+   * Applies a process narration prefix cut.
+   * If the reply opens with process narration, drops that preamble and returns the salvaged remainder.
+   * If no salvageable content exists after the narration, returns empty string (→ stripped_to_empty).
+   */
+  private applyProcessNarrationCut(text: string): {
+    text: string;
+    cutApplied: boolean;
+    removedBytes: number;
+    processNarrationKind: ProcessLeakResult['processNarrationKind'];
+    salvageSucceeded: boolean;
+  } {
+    const NO_CUT = { text, cutApplied: false, removedBytes: 0, processNarrationKind: null as ProcessLeakResult['processNarrationKind'], salvageSucceeded: false };
+    if (!text) return NO_CUT;
+    const detection = this.detectProcessNarrationPublicReply(text);
+    if (!detection.processNarrationPublicReplyDetected) return NO_CUT;
+    if (detection.salvageableRemainder) {
+      return {
+        text: detection.salvageableRemainder,
+        cutApplied: true,
+        removedBytes: text.length - detection.salvageableRemainder.length,
+        processNarrationKind: detection.processNarrationKind,
+        salvageSucceeded: true,
+      };
+    }
+    // No salvageable content after narration — full drop (→ stripped_to_empty in finalization)
+    return {
+      text: '',
+      cutApplied: true,
+      removedBytes: text.length,
+      processNarrationKind: detection.processNarrationKind,
+      salvageSucceeded: false,
+    };
+  }
+
   private detectMidReplyFormatDrift(text: string): FormatDriftResult {
     const source = String(text || '');
     const NO_DRIFT: FormatDriftResult = {
@@ -4992,7 +5125,7 @@ export class CommunionLoop {
     }
 
     // 3. Report / note section headings (at line start, only if preceded by enough prose)
-    const REPORT_RE = /^(?:Resonance Check|Metabolizing Your Answer|Why This Matters(?: to Me)?|What I(?:'m| Am) Tracking|Internal Note|Thread Analysis|End Note|Key Points|(?:To )?Summarize|In Summary|Observation|Reflection)\s*:?\s*$/im;
+    const REPORT_RE = /^(?:Resonance Check|Metabolizing Your Answer|Why This Matters(?: to Me)?|What I(?:'m| Am) Tracking|Internal Note|Thread Analysis|End Note|Key Points|(?:To )?Summarize|In Summary|Observation|Reflection|Finishing the Interrupted Thought|Honest Continuation|Moving Forward|Before I Continue|To Be Direct|Continuing From Before|Picking Up the Thread|The Honest Answer|Actually[,.]|Wait[,.—])\s*:?\s*$/im;
     m = REPORT_RE.exec(source);
     if (m && m.index !== undefined) {
       const lineStart = source.lastIndexOf('\n', m.index) + 1;
@@ -7685,6 +7818,12 @@ export class CommunionLoop {
     let hiddenAnalysisCutIndex = -1;
     let hiddenAnalysisTailRemovedBytes = 0;
     let visiblePrefixAfterHardCutLength = 0;
+    let processNarrationPublicReplyDetected = false;
+    let processNarrationKind: ProcessLeakResult['processNarrationKind'] = null;
+    let processNarrationCutApplied = false;
+    let processNarrationRemovedBytes = 0;
+    let processNarrationSalvageSucceeded = false;
+    let blockedBecauseProcessNarration = false;
     let formatDriftDetected = false;
     let formatDriftKind: FormatDriftResult['formatDriftKind'] = null;
     let formatDriftCutApplied = false;
@@ -7892,6 +8031,20 @@ export class CommunionLoop {
       hiddenAnalysisCutIndex = candidateA.finalized.hiddenAnalysisCutIndex;
       hiddenAnalysisTailRemovedBytes = candidateA.finalized.hiddenAnalysisTailRemovedBytes;
       visiblePrefixAfterHardCutLength = candidateA.finalized.visiblePrefixAfterHardCutLength;
+      // ── Process narration cut trace fields from finalization ──
+      processNarrationPublicReplyDetected = candidateA.finalized.processNarrationPublicReplyDetected;
+      processNarrationKind = candidateA.finalized.processNarrationKind;
+      processNarrationCutApplied = candidateA.finalized.processNarrationCutApplied;
+      processNarrationRemovedBytes = candidateA.finalized.processNarrationRemovedBytes;
+      processNarrationSalvageSucceeded = candidateA.finalized.processNarrationSalvageSucceeded;
+      // If narration was detected but salvage failed and reply is empty → distinct hard-fail class
+      if (candidateA.finalized.processNarrationCutApplied && !candidateA.finalized.processNarrationSalvageSucceeded && !candidateA.text) {
+        blockedBecauseProcessNarration = true;
+        candidateA.score.hardFailed = true;
+        candidateA.score.hardReasons = [...candidateA.score.hardReasons.filter(r => r !== 'empty'), 'process_narration_public_reply'];
+        candidateAHardReasons = candidateA.score.hardReasons;
+        console.log(`[${agent.config.name}] PROCESS-NARRATION hard-fail: narration-only reply, no salvageable content`);
+      }
       // ── Format drift cut trace fields from finalization ──
       formatDriftDetected = candidateA.finalized.formatDriftDetected;
       formatDriftKind = candidateA.finalized.formatDriftKind;
@@ -8393,6 +8546,12 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         hiddenAnalysisCutIndex,
         hiddenAnalysisTailRemovedBytes,
         visiblePrefixAfterHardCutLength,
+        processNarrationPublicReplyDetected,
+        processNarrationKind,
+        processNarrationCutApplied,
+        processNarrationRemovedBytes,
+        processNarrationSalvageSucceeded,
+        blockedBecauseProcessNarration,
         formatDriftDetected,
         formatDriftKind,
         formatDriftCutApplied,
@@ -8600,6 +8759,12 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         hiddenAnalysisCutIndex,
         hiddenAnalysisTailRemovedBytes,
         visiblePrefixAfterHardCutLength,
+        processNarrationPublicReplyDetected,
+        processNarrationKind,
+        processNarrationCutApplied,
+        processNarrationRemovedBytes,
+        processNarrationSalvageSucceeded,
+        blockedBecauseProcessNarration,
         formatDriftDetected,
         formatDriftKind,
         formatDriftCutApplied,
