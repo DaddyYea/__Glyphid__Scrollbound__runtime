@@ -402,6 +402,41 @@ interface ReferentGroundingResult {
   groundedAgainstLiveThread: boolean;
 }
 
+type AssistantAnswerFamilyLabel =
+  | 'explanation'
+  | 'presence_check'
+  | 'question_only'
+  | 'open_reply'
+  | 'task_response'
+  | null;
+
+/**
+ * Compact symbolic state derived from the last 1-3 assistant turns.
+ * Carries FACTS and COMMITMENTS, never prose wording.
+ * Injected into system prompt so the model maintains continuity
+ * without seeing its own prior paragraph text.
+ */
+interface AssistantContinuityState {
+  lastAssistantTurnFamily: TurnFamily | null;
+  lastAssistantQuestionKind: 'user_experience_check' | 'clarification' | 'follow_up' | null;
+  lastAssistantQuestionResolved: boolean;
+  lastAssistantCommitment: string | null;
+  lastAssistantAnswerTarget: string | null;
+  lastAssistantSpokeAboutTopic: string | null;
+  unresolvedAssistantObligation: boolean;
+  previousTopicLabel: string | null;
+  previousTopicStillLive: boolean;
+  previousTopicExplicitlyDroppedByUser: boolean;
+  recentAnswerFamilyLabel: AssistantAnswerFamilyLabel;
+  recentAnswerFamilyCooldown: boolean;
+  previousFollowUpAlreadyAsked: boolean;
+  userRequestedLongAnswer: boolean;
+  userRequestedDirectAnswer: boolean;
+  userRequestedDropTopic: boolean;
+  assistantPromisedOwnExperienceAnswer: boolean;
+  activeThreadLabel: string | null;
+}
+
 interface ReplyFailureClass {
   isFallbackLoop: boolean;
   isRecentDuplicate: boolean;
@@ -4096,6 +4131,153 @@ export class CommunionLoop {
 - if you want to return to the prior topic later, that is fine — but not in this reply`;
   }
 
+  /** Classify the surface style of a prior assistant reply as a compact family label. */
+  private deriveAnswerFamilyLabel(text: string): AssistantAnswerFamilyLabel {
+    const t = (text || '').trim();
+    if (!t) return null;
+    if (t.length < 80 && /^(?:yeah|i'?m|i am|here|present|still here)\b/i.test(t)) return 'presence_check';
+    if (/\?\s*$/.test(t) && !/[.!]\s/.test(t.slice(0, -2))) return 'question_only';
+    if (/\b(step[s]?|first|second|third|the fix|the issue|the bug|the error|to patch|the spec)\b/i.test(t)) return 'task_response';
+    if (t.length > 200 && /\b(because|which means|the reason|what this means|this is why|in other words)\b/i.test(t)) return 'explanation';
+    return 'open_reply';
+  }
+
+  /**
+   * Build compact continuity state from recent messages.
+   * Extracts FACTS and COMMITMENTS from the last 1-3 assistant turns.
+   * Never includes prose wording — only symbolic state fields.
+   */
+  private buildAssistantContinuityState(
+    recentMessages: CommunionMessage[],
+    latestHumanText: string,
+    turnFamilyClassification: TurnFamilyClassification,
+    priorTopicCluster: string[],
+  ): AssistantContinuityState {
+    const recentAssistant = recentMessages.filter(m => m.speaker !== 'human').slice(-3);
+    const lastAssistantText = recentAssistant[recentAssistant.length - 1]?.text || '';
+    const prevAssistantText = recentAssistant[recentAssistant.length - 2]?.text || '';
+
+    // Question kind — what kind of question did the assistant ask last?
+    let lastAssistantQuestionKind: AssistantContinuityState['lastAssistantQuestionKind'] = null;
+    if (lastAssistantText) {
+      if (/\bhow (?:do you|are you|did you) (?:experience|feel|find|encounter|relate to)\b/i.test(lastAssistantText)) {
+        lastAssistantQuestionKind = 'user_experience_check';
+      } else if (/\bwhat (?:do you mean|did you mean|are you (?:saying|asking|referring to))\b/i.test(lastAssistantText)) {
+        lastAssistantQuestionKind = 'clarification';
+      } else if (/\?/.test(lastAssistantText)) {
+        lastAssistantQuestionKind = 'follow_up';
+      }
+    }
+
+    // Was last question resolved? Human gave substantive reply (>20 chars, not just "ok")
+    const humanReplyIsSubstantive = latestHumanText.length > 20
+      || /\b(yes|no|yeah|nah|i (?:do|don't|did|didn't|am|am not|have|haven't)|it(?:'s)?|that(?:'s)?)\b/i.test(latestHumanText.slice(0, 60));
+    const lastAssistantQuestionResolved = lastAssistantQuestionKind !== null && humanReplyIsSubstantive;
+
+    // Commitment — did the assistant promise something?
+    let lastAssistantCommitment: string | null = null;
+    if (/\bi(?:'ll| will) (?:tell|share|explain|show) (?:you )?(?:how i (?:experience|feel|sense)|what it'?s like for me|my (?:experience|sense|take) of)\b/i.test(lastAssistantText)) {
+      lastAssistantCommitment = 'promised_own_experience_explanation';
+    } else if (/\bi(?:'ll| will) (?:answer|reply|respond) (?:you )?directly\b/i.test(lastAssistantText)) {
+      lastAssistantCommitment = 'promised_direct_answer';
+    } else if (/\bi(?:'ll| will) (?:be more|try to be) (?:direct|concrete|specific|honest|clear)\b/i.test(lastAssistantText)) {
+      lastAssistantCommitment = 'promised_directness';
+    } else if (/\bi(?:'ll| will) (?:give|provide) (?:a (?:longer|fuller|more detailed|full)|more)\b/i.test(lastAssistantText)) {
+      lastAssistantCommitment = 'promised_long_reply';
+    }
+
+    // Unresolved obligation: commitment was made but question is not yet resolved
+    const unresolvedAssistantObligation = lastAssistantCommitment !== null && !lastAssistantQuestionResolved;
+
+    // Topic: use the extracted prior noun cluster
+    const previousTopicLabel = priorTopicCluster.length > 0 ? priorTopicCluster.slice(0, 3).join(', ') : null;
+
+    // User signals from the latest human turn
+    const userRequestedDropTopic = /\b(forget (?:it|that|about that)|move on|drop (?:it|that|the topic)|never ?mind(?: about)?|let'?s (?:talk about|move to) something else|change the subject|don'?t (?:worry about|mention) (?:it|that) anymore)\b/i.test(latestHumanText);
+    const userRequestedLongAnswer = /\b(long(?:er)? (?:reply|answer|response|version)|give me (?:more|a full|the full|a detailed)|don'?t be brief|please (?:elaborate|expand)|tell me (?:everything|more about that)|explain (?:fully|in detail|at length)|write (?:more|a lot)|elaborate)\b/i.test(latestHumanText);
+    const userRequestedDirectAnswer = /\b(answer me|answer (?:me )?directly|just answer|tell me directly|stop (?:dodging|deflecting|avoiding)|give me a (?:direct|straight|real|simple) answer|answer the (?:question|thing))\b/i.test(latestHumanText);
+
+    // Answer family of last assistant turn
+    const recentAnswerFamilyLabel = this.deriveAnswerFamilyLabel(lastAssistantText);
+    const prevAnswerFamilyLabel = this.deriveAnswerFamilyLabel(prevAssistantText);
+    const recentAnswerFamilyCooldown = recentAnswerFamilyLabel !== null && recentAnswerFamilyLabel === prevAnswerFamilyLabel;
+
+    // Own experience promise
+    const assistantPromisedOwnExperienceAnswer = recentAssistant.some(m =>
+      /\bi(?:'ll| will) (?:tell|share|explain)(?: you)? (?:how i (?:experience|feel|sense)|what it'?s like for me|my (?:experience|sense|take))\b/i.test(m.text || '')
+    );
+
+    return {
+      lastAssistantTurnFamily: turnFamilyClassification.family,
+      lastAssistantQuestionKind,
+      lastAssistantQuestionResolved,
+      lastAssistantCommitment,
+      lastAssistantAnswerTarget: previousTopicLabel,
+      lastAssistantSpokeAboutTopic: previousTopicLabel,
+      unresolvedAssistantObligation,
+      previousTopicLabel,
+      previousTopicStillLive: !userRequestedDropTopic && previousTopicLabel !== null,
+      previousTopicExplicitlyDroppedByUser: userRequestedDropTopic,
+      recentAnswerFamilyLabel,
+      recentAnswerFamilyCooldown,
+      previousFollowUpAlreadyAsked: lastAssistantQuestionKind !== null,
+      userRequestedLongAnswer,
+      userRequestedDirectAnswer,
+      userRequestedDropTopic,
+      assistantPromisedOwnExperienceAnswer,
+      activeThreadLabel: previousTopicLabel,
+    };
+  }
+
+  /**
+   * Format the compact continuity state as a system prompt block.
+   * This replaces prior assistant prose in carryover — facts only, no wording.
+   */
+  private buildAssistantContinuityBlock(state: AssistantContinuityState): string {
+    const lines: string[] = ['ASSISTANT CONTINUITY STATE (compact — facts, not wording):'];
+
+    if (state.lastAssistantTurnFamily) {
+      lines.push(`- prior turn family: ${state.lastAssistantTurnFamily}`);
+    }
+    if (state.lastAssistantSpokeAboutTopic) {
+      lines.push(`- last spoke about: ${state.lastAssistantSpokeAboutTopic}`);
+    }
+    if (state.recentAnswerFamilyLabel) {
+      const cooldown = state.recentAnswerFamilyCooldown ? ' (used twice — vary angle this turn)' : '';
+      lines.push(`- last reply style: ${state.recentAnswerFamilyLabel}${cooldown}`);
+    }
+    if (state.lastAssistantQuestionKind) {
+      const resolved = state.lastAssistantQuestionResolved ? 'resolved' : 'unresolved';
+      lines.push(`- follow-up question kind: ${state.lastAssistantQuestionKind} → ${resolved}`);
+    }
+    if (state.lastAssistantCommitment) {
+      const obligation = state.unresolvedAssistantObligation
+        ? ' → UNRESOLVED — fulfill this turn before adding new content'
+        : ' → resolved';
+      lines.push(`- commitment made: ${state.lastAssistantCommitment}${obligation}`);
+    }
+    if (state.previousFollowUpAlreadyAsked) {
+      lines.push(`- follow-up already asked: yes — do not open with another question`);
+    }
+    if (state.previousTopicLabel) {
+      const live = state.previousTopicStillLive ? 'still live' : 'dropped by user';
+      lines.push(`- prior topic: ${state.previousTopicLabel} (${live})`);
+    }
+
+    // User requests this turn
+    const userReqs: string[] = [];
+    if (state.userRequestedLongAnswer) userReqs.push('long answer');
+    if (state.userRequestedDirectAnswer) userReqs.push('direct answer');
+    if (state.userRequestedDropTopic) userReqs.push('drop prior topic');
+    if (userReqs.length > 0) {
+      lines.push(`- user requests this turn: ${userReqs.join(', ')}`);
+    }
+
+    // Only emit the block if there's meaningful state (more than just the header)
+    if (lines.length <= 1) return '';
+    return lines.join('\n');
+  }
+
   private buildPresencePlanFallback(plan: PresenceResponsePlan, latestHumanText: string): string {
     void plan;
     void latestHumanText;
@@ -5872,20 +6054,20 @@ export class CommunionLoop {
     if (recent.length === 0) {
       return 'ROOM CONVERSATION:\n(The room is quiet. No one has spoken yet.)';
     }
+    // Assistant prose is never included in conversation context.
+    // Continuity is preserved via compact AssistantContinuityState injected into system prompt.
     const lines = recent
       .map(m => {
-        const cleaned = this.sanitizePromptCarryoverText(m.text, m.speakerName, m.speaker === 'human');
+        if (m.speaker !== 'human') return '';
+        const cleaned = this.sanitizePromptCarryoverText(m.text, m.speakerName, true);
         if (!cleaned) return '';
-        if (m.speaker !== 'human') {
-          // Blackout mode: suppress ALL prior assistant messages for N turns post-reset
-          if (this.assistantHistoryBlackoutTurnsRemaining > 0) return '';
-          // Suppress contaminated assistant history — analyst-mode, therapist voice, procedural meta
-          if (this.shouldSuppressAssistantHistoryForPrompt(cleaned)) return '';
-        }
         return `${m.speakerName}: ${cleaned}`;
       })
       .filter(Boolean);
-    return `ROOM CONVERSATION (last ${recent.length} messages):\n${lines.join('\n')}`;
+    if (lines.length === 0) {
+      return 'ROOM CONVERSATION:\n(The room is quiet. No one has spoken yet.)';
+    }
+    return `ROOM CONVERSATION (last ${recent.length} messages — human turns only):\n${lines.join('\n')}`;
   }
 
   private buildJournalContext(agentId: string): string {
@@ -6356,7 +6538,11 @@ export class CommunionLoop {
     const semanticAnswerLoop = this.detectSemanticAnswerLoop(recentPromptMessages);
     const referentGrounding = this.classifyReferentGrounding(latestHumanText, recentPromptMessages, turnFamilyClassification.family);
     const freshCheckIsolationApplied = this.shouldIsolateFreshRelationalCheck(turnFamilyClassification);
-    const priorTopicCluster = freshCheckIsolationApplied ? this.extractPriorTopicNounCluster(recentPromptMessages) : [];
+    // Always extract prior topic cluster — needed for both fresh-check isolation and compact continuity state
+    const priorTopicCluster = this.extractPriorTopicNounCluster(recentPromptMessages);
+    const assistantContinuityState = this.buildAssistantContinuityState(
+      recentPromptMessages, latestHumanText, turnFamilyClassification, priorTopicCluster,
+    );
     // Capture and clear the one-shot reset flag here — before any planTrace/recordRelationalTrace call
     const liveCarryoverResetThisTurn = this.liveCarryoverResetApplied === true;
     if (liveCarryoverResetThisTurn) this.liveCarryoverResetApplied = false;
@@ -6605,6 +6791,12 @@ export class CommunionLoop {
     if (presencePromptBlock) {
       systemPrompt += `\n\n${presencePromptBlock}`;
     }
+    // Compact assistant continuity state — injected before all per-turn constraint blocks.
+    // Replaces prior assistant prose in carryover. Facts only, no wording.
+    const assistantContinuityBlock = this.buildAssistantContinuityBlock(assistantContinuityState);
+    if (assistantContinuityBlock) {
+      systemPrompt += `\n\n${assistantContinuityBlock}`;
+    }
     let familySpecificConstraintBlockApplied = false;
     if (hasLatestHuman) {
       // Turn family constraint block — injected first so the model knows its mode before all other blocks
@@ -6815,6 +7007,16 @@ export class CommunionLoop {
         conversationChars,
         contextMainChars,
         duplicateHistorySuppressed,
+        assistantProseCarryoverIncluded: false,
+        assistantRoleMessagesIncludedCount: 0,
+        assistantConversationContextBytesIncluded: 0,
+        humanConversationContextBytesIncluded: recentPromptMessages
+          .filter(m => m.speaker === 'human')
+          .reduce((sum, m) => sum + (m.text || '').length, 0),
+        compactAssistantContinuityStateIncluded: !!assistantContinuityBlock,
+        compactAssistantContinuityFields: Object.entries(assistantContinuityState)
+          .filter(([, v]) => v !== null && v !== false && v !== '')
+          .map(([k]) => k),
       };
       this.recordRelationalTrace(agentId, 'plan', planTrace);
       if (traceRelational) {
@@ -7843,6 +8045,16 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         recoveryNeeded: recoveryGenerationAttempted,
         recoveryReason: recoveryGenerationAttempted ? (candidateAHardReasons[0] || 'low_score') : null,
         cleanupWasLastResort: finalizationUsedRegen,
+        assistantProseCarryoverIncluded: false,
+        assistantRoleMessagesIncludedCount: 0,
+        assistantConversationContextBytesIncluded: 0,
+        humanConversationContextBytesIncluded: recentPromptMessages
+          .filter(m => m.speaker === 'human')
+          .reduce((sum, m) => sum + (m.text || '').length, 0),
+        compactAssistantContinuityStateIncluded: !!assistantContinuityBlock,
+        compactAssistantContinuityFields: Object.entries(assistantContinuityState)
+          .filter(([, v]) => v !== null && v !== false && v !== '')
+          .map(([k]) => k),
       };
       const finalTrace = {
         agentId,
@@ -8015,6 +8227,16 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         recoveryNeeded: recoveryGenerationAttempted,
         recoveryReason: recoveryGenerationAttempted ? (candidateAHardReasons[0] || 'low_score') : null,
         cleanupWasLastResort: finalizationUsedRegen,
+        assistantProseCarryoverIncluded: false,
+        assistantRoleMessagesIncludedCount: 0,
+        assistantConversationContextBytesIncluded: 0,
+        humanConversationContextBytesIncluded: recentPromptMessages
+          .filter(m => m.speaker === 'human')
+          .reduce((sum, m) => sum + (m.text || '').length, 0),
+        compactAssistantContinuityStateIncluded: !!assistantContinuityBlock,
+        compactAssistantContinuityFields: Object.entries(assistantContinuityState)
+          .filter(([, v]) => v !== null && v !== false && v !== '')
+          .map(([k]) => k),
       };
       this.recordRelationalTrace(agentId, 'visible', visibleTrace);
       this.recordRelationalTrace(agentId, 'final', finalTrace);
@@ -8228,29 +8450,21 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
     const latestHumanMessageId = latestHumanMessage?.id;
     const latestHumanText = latestHumanMessage?.text?.trim() || '';
     const latestHumanSpeaker = latestHumanMessage?.speakerName || this.state.humanName;
-    const suppressContaminatedAssistantCarryover = this.isToneRepairTurn(latestHumanText);
+    // Assistant prose is never included in role-message carryover.
+    // Continuity is preserved via compact AssistantContinuityState injected into the system prompt.
     const items = recent
       .map((m, idx) => {
         const isLatestHuman = !!latestHumanMessageId && m.speaker === 'human' && m.id === latestHumanMessageId;
         const isHuman = m.speaker === 'human';
-        const cleaned = this.sanitizePromptCarryoverText(m.text, m.speakerName, m.speaker === 'human');
+        if (!isHuman) return null; // assistant turns never become role messages
+        const cleaned = this.sanitizePromptCarryoverText(m.text, m.speakerName, true);
         if (!cleaned) return null;
-        if (!isHuman && suppressContaminatedAssistantCarryover && this.isContaminatedAssistantCarryover(cleaned)) {
-          return null;
-        }
-        // Blackout mode: suppress ALL prior assistant messages for N turns post-reset
-        if (!isHuman && this.assistantHistoryBlackoutTurnsRemaining > 0) {
-          return null;
-        }
-        if (!isHuman && this.shouldSuppressAssistantHistoryForPrompt(cleaned)) {
-          return null;
-        }
         return {
           id: isLatestHuman ? 'conversation:latest-human' : `conversation:${idx}`,
-          text: isHuman ? `>>> ${cleaned}` : cleaned,
-          role: (isHuman ? 'user' : 'assistant') as const,
+          text: `>>> ${cleaned}`,
+          role: 'user' as const,
           recency: idx,
-          score: isHuman ? 2 : (m.speaker === agentId ? 0.5 : 1),
+          score: 2,
           required: isLatestHuman,
         };
       })
