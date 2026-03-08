@@ -455,6 +455,68 @@ interface StaleLockResult {
   staleLockClearReason: string;
 }
 
+type PendingAssistantObligationOpenerType =
+  | 'honesty'
+  | 'direct_answer'
+  | 'truth'
+  | 'explanation'
+  | 'enumeration'
+  | 'promise_to_continue'
+  | 'bridge'
+  | 'list_start'
+  | 'other';
+
+type PendingAssistantObligationKind =
+  | 'continue_statement'
+  | 'finish_answer'
+  | 'complete_list'
+  | 'resume_explanation';
+
+interface PendingAssistantObligation {
+  id: string;
+  createdAt: number;
+  sourceTurnId: string;
+  sourceMessageId: string;
+  sourceChannel: 'ui' | 'tts' | 'both';
+  sourceVisibleText: string;
+  sourceSpokenText: string | null;
+  cleanPrefix: string;
+  openerType: PendingAssistantObligationOpenerType;
+  obligationKind: PendingAssistantObligationKind;
+  anchorWindow: string;
+  unresolved: boolean;
+  resolutionState: 'pending' | 'resolved' | 'superseded' | 'expired';
+  resolutionTurnId: string | null;
+  userResumeRequestCount: number;
+  lastResumeRequestAt: number | null;
+  contaminationDetected: boolean;
+  emissionWasIncomplete: boolean;
+  transportFailureDetected: boolean;
+  resumeConfidence: number;
+}
+
+interface ResumeMatch {
+  matched: boolean;
+  strength: 'strong' | 'medium' | 'weak';
+  matchedPhrases: string[];
+  confidence: number;
+}
+
+interface ResumeValidation {
+  ok: boolean;
+  reason:
+    | 'meta_gap'
+    | 'tone_psychoanalysis'
+    | 'question_in_opening'
+    | 'agency_misbinding'
+    | 'heading_or_shell_drift'
+    | 'non_advancing_mirror'
+    | 'too_short_no_continuation'
+    | 'other'
+    | null;
+  salvageText: string | null;
+}
+
 type AssistantAnswerFamilyLabel =
   | 'explanation'
   | 'presence_check'
@@ -775,6 +837,14 @@ export class CommunionLoop {
   private speakingSetAt = 0;
   /** Last human-turn dedup result from buildConversationContext — exposed in trace. */
   private lastContextDedupResult: { humanTurnsRemoved: number } = { humanTurnsRemoved: 0 };
+  /** Live pending assistant obligation — single slot, updated at finalization, resolved/superseded across turns. */
+  private pendingAssistantObligation: PendingAssistantObligation | null = null;
+  /** Short history of the last 3 obligations for debug / supersession logic. */
+  private pendingObligationHistory: PendingAssistantObligation[] = [];
+  /** ID of the turn that was routed as a resume_pending_assistant_obligation — for trace. */
+  private lastResumeRouteTurnId: string | null = null;
+  /** Consecutive human turns that did not match the pending obligation (for supersession). */
+  private obligationUnrelatedTurnCount = 0;
 
   constructor(config: CommunionConfig) {
     this.tickIntervalMs = config.tickIntervalMs || 15000;
@@ -7093,6 +7163,35 @@ export class CommunionLoop {
     }
     const fastLaneReply = this.shouldUseFastLaneReply(agentId, latestHumanMessage);
     const staleRiskHigh = fastLaneReply || this.humanSpeaking || this.pendingHumanTurnsSinceLastAgent(agentId) >= 2;
+
+    // ── Pending Obligation Route — must run before all other planning ──
+    this.maybeExpirePendingObligation();
+    const activeObligation = this.pendingAssistantObligation;
+    const resumeMatch = hasLatestHuman ? this.detectResumeRequest(latestHumanText, activeObligation) : null;
+    const resumeRouteActive = !!(activeObligation?.unresolved && resumeMatch?.matched);
+    if (resumeRouteActive) {
+      activeObligation!.userResumeRequestCount++;
+      activeObligation!.lastResumeRequestAt = Date.now();
+      activeObligation!.resumeConfidence = resumeMatch!.confidence;
+      this.lastResumeRouteTurnId = this.state.tickCount.toString();
+      console.log(`[OBLIGATION] Resume route taken: confidence=${resumeMatch!.confidence.toFixed(2)} strength=${resumeMatch!.strength} cues=[${resumeMatch!.matchedPhrases.join(', ')}]`);
+    } else if (hasLatestHuman && activeObligation?.unresolved && !resumeMatch?.matched) {
+      // Human is talking but not asking for resume — track unrelated turns and check for supersession
+      const dropRe = /\b(never\s+mind|drop\s+it|forget\s+it|move\s+on|doesn'?t\s+matter)\b/i;
+      if (dropRe.test(latestHumanText)) {
+        this.obligationUnrelatedTurnCount = 0;
+        this.supersedePendingAssistantObligation('explicit_drop_by_human');
+      } else {
+        this.obligationUnrelatedTurnCount++;
+        if (this.obligationUnrelatedTurnCount >= 2) {
+          this.obligationUnrelatedTurnCount = 0;
+          this.supersedePendingAssistantObligation('two_unrelated_turns');
+        }
+      }
+    } else if (resumeRouteActive) {
+      this.obligationUnrelatedTurnCount = 0;
+    }
+
     const directQuestionContract = this.detectDirectQuestionContract(latestHumanText, turnMode, presenceState);
     const turnFamilyClassification = this.classifyTurnFamily(latestHumanText, directQuestionContract);
     const positivePull = this.detectPositivePull(latestHumanText, recentUserTurns);
@@ -7402,6 +7501,11 @@ export class CommunionLoop {
     }
     let familySpecificConstraintBlockApplied = false;
     if (hasLatestHuman) {
+      // Resume obligation block — takes priority over all other constraint blocks
+      if (resumeRouteActive && activeObligation) {
+        systemPrompt += this.buildResumePendingObligationSystemBlock(activeObligation, false);
+      }
+
       // Turn family constraint block — injected first so the model knows its mode before all other blocks
       const turnFamilyBlock = this.buildTurnFamilyConstraintBlock(turnFamilyClassification);
       if (turnFamilyBlock) {
@@ -7633,6 +7737,17 @@ export class CommunionLoop {
         resolvedStateConsistencyCheckPassed,
         humanConversationDedupApplied: this.lastContextDedupResult.humanTurnsRemoved > 0,
         duplicateHumanTurnsRemovedFromContext: this.lastContextDedupResult.humanTurnsRemoved,
+        pendingAssistantObligationDetected: !!activeObligation?.unresolved,
+        pendingAssistantObligationId: activeObligation?.id || null,
+        pendingAssistantOpenerType: activeObligation?.openerType || null,
+        pendingAssistantObligationKind: activeObligation?.obligationKind || null,
+        pendingAssistantObligationAnchor: activeObligation?.anchorWindow?.slice(0, 120) || null,
+        pendingAssistantObligationContaminationDetected: activeObligation?.contaminationDetected ?? false,
+        pendingAssistantObligationEmissionIncomplete: activeObligation?.emissionWasIncomplete ?? false,
+        assistantOwedContinuationAtTurnStart: resumeRouteActive,
+        resumeRequestDetected: resumeMatch?.matched ?? false,
+        resumeRequestConfidence: resumeMatch?.confidence ?? 0,
+        resumeRouteTaken: resumeRouteActive,
       };
       this.recordRelationalTrace(agentId, 'plan', planTrace);
       if (traceRelational) {
@@ -8535,6 +8650,65 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       }
     }
 
+    // ── Resume obligation validation + retry ──
+    let resumeValidationPassed = false;
+    let resumeValidationFailureReason: ResumeValidation['reason'] = null;
+    let resumeRetryCount = 0;
+    let resumeSalvageApplied = false;
+    let pendingAssistantObligationResolved = false;
+
+    if (resumeRouteActive && activeObligation && result.action === 'speak' && responseText) {
+      let validation = this.validateResumeOutput(responseText, activeObligation);
+      if (validation.ok) {
+        resumeValidationPassed = true;
+        pendingAssistantObligationResolved = true;
+      } else if (validation.salvageText) {
+        responseText = validation.salvageText;
+        resumeSalvageApplied = true;
+        resumeValidationPassed = true;
+        resumeValidationFailureReason = validation.reason;
+        pendingAssistantObligationResolved = true;
+        console.log(`[OBLIGATION] Resume salvage applied: reason=${validation.reason}`);
+      } else {
+        // Retry once with harder constraint
+        resumeRetryCount = 1;
+        resumeValidationFailureReason = validation.reason;
+        console.log(`[OBLIGATION] Resume validation failed (${validation.reason}), retrying with harder constraint`);
+        try {
+          const retryOptions: GenerateOptions = {
+            ...options,
+            systemPrompt: options.systemPrompt + this.buildResumePendingObligationSystemBlock(activeObligation, true),
+            prefill: undefined,
+          };
+          const retryResult = await agent.backend.generate(retryOptions);
+          const retryText = (retryResult.text || '').replace(/\[RAM:[^\]]+\]/gi, '').trim();
+          if (retryText) {
+            const retryValidation = this.validateResumeOutput(retryText, activeObligation);
+            if (retryValidation.ok) {
+              responseText = retryText;
+              resumeValidationPassed = true;
+              pendingAssistantObligationResolved = true;
+            } else if (retryValidation.salvageText) {
+              responseText = retryValidation.salvageText;
+              resumeSalvageApplied = true;
+              resumeValidationPassed = true;
+              pendingAssistantObligationResolved = true;
+              console.log('[OBLIGATION] Retry salvage applied');
+            } else {
+              // Minimal content-first fallback
+              const fallbackAnchor = activeObligation.anchorWindow.split('|').pop()?.trim() || 'the point I was making';
+              responseText = `I stopped before the actual point. Here it is: ${fallbackAnchor}`;
+              resumeValidationPassed = false;
+              pendingAssistantObligationResolved = true;
+              console.log('[OBLIGATION] Fell back to minimal content-first recovery');
+            }
+          }
+        } catch (retryErr) {
+          console.warn('[OBLIGATION] Retry generation failed:', retryErr);
+        }
+      }
+    }
+
     const fastLaneAcceptable = !!(
       fastLaneReply
       && result.action === 'speak'
@@ -8995,6 +9169,23 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         resolvedStateConsistencyCheckPassed,
         humanConversationDedupApplied: this.lastContextDedupResult.humanTurnsRemoved > 0,
         duplicateHumanTurnsRemovedFromContext: this.lastContextDedupResult.humanTurnsRemoved,
+        pendingAssistantObligationDetected: !!activeObligation?.unresolved,
+        pendingAssistantObligationId: activeObligation?.id || null,
+        pendingAssistantOpenerType: activeObligation?.openerType || null,
+        pendingAssistantObligationKind: activeObligation?.obligationKind || null,
+        pendingAssistantObligationAnchor: activeObligation?.anchorWindow?.slice(0, 120) || null,
+        pendingAssistantObligationContaminationDetected: activeObligation?.contaminationDetected ?? false,
+        pendingAssistantObligationEmissionIncomplete: activeObligation?.emissionWasIncomplete ?? false,
+        assistantOwedContinuationAtTurnStart: resumeRouteActive,
+        resumeRequestDetected: resumeMatch?.matched ?? false,
+        resumeRequestConfidence: resumeMatch?.confidence ?? 0,
+        resumeRouteTaken: resumeRouteActive,
+        resumeValidationPassed,
+        resumeValidationFailureReason,
+        resumeRetryCount,
+        resumeSalvageApplied,
+        pendingAssistantObligationResolved,
+        pendingAssistantObligationResolutionState: pendingAssistantObligationResolved ? 'resolved' : (activeObligation?.resolutionState || null),
       };
       this.recordRelationalTrace(agentId, 'visible', visibleTrace);
       this.recordRelationalTrace(agentId, 'final', finalTrace);
@@ -9050,6 +9241,15 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       const uiTextRendered = true; // message is in state.messages and broadcast to clients
       this.saveCriticalStateSync('message');
       console.log(`[${agent.config.name}] SPEAK: ${responseText}`);
+
+      // ── Pending obligation detection — inspect the finalized reply for unfinished commitments ──
+      const obligation = this.detectPendingAssistantObligation(responseText, this.state.tickCount.toString(), msg.id);
+      if (obligation) {
+        this.registerPendingAssistantObligation(obligation);
+      } else if (this.pendingAssistantObligation?.unresolved && this.lastResumeRouteTurnId === this.state.tickCount.toString()) {
+        // This tick was a resume route — resolve the obligation
+        this.resolvePendingAssistantObligation(this.state.tickCount.toString());
+      }
 
       // ── Feed into Alois tissue (every room message grows the brain) ──
       this.feedAloisBrains(agentId, responseText);
@@ -10211,6 +10411,321 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       return { blocked: true, noSpeakBlockKind: 'paused', noSpeakBlockDetail: 'paused=true' };
     }
     return { blocked: false, noSpeakBlockKind: null, noSpeakBlockDetail: '' };
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PENDING ASSISTANT OBLIGATION — detection, resume routing, resolution
+  // ──────────────────────────────────────────────────────────────────────────
+
+  private static readonly OPENER_RE_MAP: Array<{
+    re: RegExp;
+    openerType: PendingAssistantObligationOpenerType;
+    obligationKind: PendingAssistantObligationKind;
+  }> = [
+    { re: /\b(so\s+)?here'?s\s+honesty\b/i, openerType: 'honesty', obligationKind: 'continue_statement' },
+    { re: /\bhere'?s\s+the\s+truth\b/i, openerType: 'truth', obligationKind: 'continue_statement' },
+    { re: /\bthe\s+truth\s+is\b/i, openerType: 'truth', obligationKind: 'continue_statement' },
+    { re: /\b(let\s+me|to)\s+answer\s+directly\b/i, openerType: 'direct_answer', obligationKind: 'finish_answer' },
+    { re: /\bto\s+be\s+direct\b/i, openerType: 'direct_answer', obligationKind: 'finish_answer' },
+    { re: /\bwhat\s+i\s+mean\s+is\b/i, openerType: 'explanation', obligationKind: 'resume_explanation' },
+    { re: /\bhere'?s\s+why\b/i, openerType: 'explanation', obligationKind: 'resume_explanation' },
+    { re: /\bthe\s+answer\s+is\b/i, openerType: 'direct_answer', obligationKind: 'finish_answer' },
+    { re: /\bthere\s+are\s+(two|2|three|3)\s+things\b/i, openerType: 'enumeration', obligationKind: 'complete_list' },
+    { re: /\bfirst\s*[: ,]/i, openerType: 'list_start', obligationKind: 'complete_list' },
+    { re: /\bwhat\s+matters\s+is\b/i, openerType: 'explanation', obligationKind: 'continue_statement' },
+    { re: /\bthe\s+real\s+point\s+is\b/i, openerType: 'explanation', obligationKind: 'continue_statement' },
+    { re: /\bhere'?s\s+what\s+i\s+really\s+think\b/i, openerType: 'honesty', obligationKind: 'continue_statement' },
+    { re: /\bso\s+actually\b/i, openerType: 'bridge', obligationKind: 'continue_statement' },
+  ];
+
+  private static readonly CONTAMINATION_RE = /(?:^#{1,3}\s)|(?:\[\/?(SPEAK|THINK|JOURNAL)\])|(?:^(?:acknowledging the gap|before I continue|resonance check|metabolizing your answer)\b)/im;
+
+  private static readonly RESUME_STRONG_RE = /\b(continue|go\s+on|finish\s+(that|it|what\s+you\s+started)|pick\s+up\s+where\s+you\s+left\s+off|you\s+stopped|you\s+didn'?t\s+finish|follow\s+up\s+with\s+that|what\s+were\s+you\s+going\s+to\s+say|bridge\s+it|complete\s+that\s+thought|you\s+cut\s+off|keep\s+going|finish\s+what\s+you\s+started)\b/i;
+
+  private static readonly META_GAP_RE = /\b(the\s+gap|the\s+pause|the\s+stopping|the\s+momentum|thread'?s\s+still\s+alive|visible\s+from\s+your\s+perspective|already\s+in\s+motion)\b/i;
+
+  private static readonly PSYCHOANALYSIS_RE = /\b(when\s+you\s+say|the\s+language\s+(seems|implies)|feels\s+like\s+a\s+push|not\s+a\s+request|reactive\s+rather\s+than\s+responsive)\b/i;
+
+  private static readonly AGENCY_MISBIND_RE = /\b(what\s+do\s+you\s+think\s+you\s+were\s+about\s+to\s+say|where\s+your\s+attention\s+went|you\s+stopped|you\s+paused|what\s+were\s+you\s+trying\s+to\s+say)\b/i;
+
+  private static readonly HEADING_SHELL_RE = /^(?:#{1,3}\s|\[\/?(SPEAK|THINK|JOURNAL)\]|acknowledging the gap\s*[\n:])/im;
+
+  /**
+   * Inspect a finalized assistant reply for forward-binding openers that
+   * were not followed by substantive content. Creates a PendingAssistantObligation
+   * if the reply opened a commitment it couldn't complete.
+   */
+  private detectPendingAssistantObligation(
+    finalText: string,
+    sourceTurnId: string,
+    sourceMessageId: string,
+  ): PendingAssistantObligation | null {
+    if (!finalText || finalText.length < 5) return null;
+
+    const normalized = finalText.toLowerCase().replace(/\s+/g, ' ').trim();
+
+    let matchedOpener: typeof CommunionLoop.OPENER_RE_MAP[0] | null = null;
+    let openerIndex = -1;
+
+    for (const entry of CommunionLoop.OPENER_RE_MAP) {
+      const m = entry.re.exec(normalized);
+      if (m) {
+        // For this to be an unfinished obligation, the opener must appear near the end
+        openerIndex = m.index;
+        matchedOpener = entry;
+        break;
+      }
+    }
+
+    if (!matchedOpener || openerIndex === -1) return null;
+
+    // Calculate how much substantive text follows the opener
+    const afterOpener = normalized.slice(openerIndex + (normalized.match(matchedOpener.re)?.[0].length || 0));
+    const substantiveTokens = afterOpener.split(/\s+/).filter(t => t.length >= 3).length;
+
+    // Only flag as incomplete if there are fewer than 12 substantive tokens after opener
+    // OR if the opener sentence IS the final sentence with very little after it
+    const isNearEnd = openerIndex > normalized.length * 0.4;
+    const isIncomplete = substantiveTokens < 12 || (isNearEnd && substantiveTokens < 20);
+    if (!isIncomplete) return null;
+
+    // Contamination check — did the reply contain shell/heading markers before delivering the promise?
+    const contaminationDetected = CommunionLoop.CONTAMINATION_RE.test(finalText);
+
+    // Build anchor window from context
+    const sentences = finalText.split(/(?<=[.!?])\s+/);
+    const openerSentenceIdx = sentences.findIndex(s => matchedOpener!.re.test(s.toLowerCase()));
+    const contextBefore = openerSentenceIdx > 0
+      ? sentences.slice(Math.max(0, openerSentenceIdx - 2), openerSentenceIdx).join(' ')
+      : '';
+    const openerSentence = openerSentenceIdx >= 0 ? sentences[openerSentenceIdx] : '';
+    const anchorWindow = [contextBefore.trim(), openerSentence.trim()].filter(Boolean).join(' | ');
+
+    const cleanPrefix = finalText.slice(0, 300).trim();
+
+    return {
+      id: crypto.randomUUID(),
+      createdAt: Date.now(),
+      sourceTurnId,
+      sourceMessageId,
+      sourceChannel: 'both',
+      sourceVisibleText: finalText.slice(0, 800),
+      sourceSpokenText: null,
+      cleanPrefix,
+      openerType: matchedOpener.openerType,
+      obligationKind: matchedOpener.obligationKind,
+      anchorWindow: anchorWindow.slice(0, 400),
+      unresolved: true,
+      resolutionState: 'pending',
+      resolutionTurnId: null,
+      userResumeRequestCount: 0,
+      lastResumeRequestAt: null,
+      contaminationDetected,
+      emissionWasIncomplete: true,
+      transportFailureDetected: false,
+      resumeConfidence: 0,
+    };
+  }
+
+  /**
+   * Registers a new pending obligation, pushing the current one to history.
+   */
+  private registerPendingAssistantObligation(obligation: PendingAssistantObligation): void {
+    if (this.pendingAssistantObligation) {
+      this.pendingObligationHistory.push(this.pendingAssistantObligation);
+      if (this.pendingObligationHistory.length > 3) {
+        this.pendingObligationHistory.shift();
+      }
+    }
+    this.pendingAssistantObligation = obligation;
+    console.log(`[OBLIGATION] Registered pending obligation: openerType=${obligation.openerType} kind=${obligation.obligationKind} anchor="${obligation.anchorWindow.slice(0, 80)}"`);
+  }
+
+  /**
+   * Detects whether the current human turn is requesting a continuation/resume
+   * of an unfinished assistant commitment.
+   */
+  private detectResumeRequest(humanText: string, pending: PendingAssistantObligation | null): ResumeMatch {
+    if (!humanText || !pending || !pending.unresolved) {
+      return { matched: false, strength: 'weak', matchedPhrases: [], confidence: 0 };
+    }
+
+    const normalized = humanText.toLowerCase().trim();
+    const matchedPhrases: string[] = [];
+
+    // Strong cues from the spec
+    const strongMatch = CommunionLoop.RESUME_STRONG_RE.exec(normalized);
+    if (strongMatch) {
+      matchedPhrases.push(strongMatch[0]);
+      return { matched: true, strength: 'strong', matchedPhrases, confidence: 0.97 };
+    }
+
+    // User references the opener phrase from pending
+    const openerWords = pending.anchorWindow.toLowerCase().split(/\s+/).slice(0, 8).join(' ');
+    if (openerWords.length > 5 && normalized.includes(openerWords.slice(0, 20))) {
+      matchedPhrases.push(`opener_reference: ${openerWords.slice(0, 30)}`);
+      return { matched: true, strength: 'strong', matchedPhrases, confidence: 0.95 };
+    }
+
+    // Protest about assistant stopping / being cut off
+    const protestRe = /\b(you\s+(stopped|didn'?t\s+finish|cut\s+off|paused|dropped\s+it)|never\s+finished|you\s+forgot)\b/i;
+    if (protestRe.test(normalized)) {
+      matchedPhrases.push('protest_stopped');
+      return { matched: true, strength: 'strong', matchedPhrases, confidence: 0.98 };
+    }
+
+    // Implicit bridge request — user says "and?" / "so?" / "go ahead" / "yes?" / "bridge it"
+    const implicitRe = /\b(and\??|so\??|go\s+ahead|yes\??|and\?\s*$|proceed|do\s+it)\b/i;
+    if (implicitRe.test(normalized) && normalized.length < 40) {
+      matchedPhrases.push('implicit_bridge');
+      return { matched: true, strength: 'medium', matchedPhrases, confidence: 0.82 };
+    }
+
+    return { matched: false, strength: 'weak', matchedPhrases: [], confidence: 0 };
+  }
+
+  /**
+   * Supersedes the current pending obligation (user changed topic or dropped it).
+   */
+  private supersedePendingAssistantObligation(reason: string): void {
+    if (!this.pendingAssistantObligation) return;
+    this.pendingAssistantObligation.resolutionState = 'superseded';
+    this.pendingAssistantObligation.unresolved = false;
+    console.log(`[OBLIGATION] Superseded: ${reason}`);
+    this.pendingObligationHistory.push(this.pendingAssistantObligation);
+    if (this.pendingObligationHistory.length > 3) this.pendingObligationHistory.shift();
+    this.pendingAssistantObligation = null;
+  }
+
+  /**
+   * Resolves the pending obligation after a confirmed continuation.
+   */
+  private resolvePendingAssistantObligation(turnId: string): void {
+    if (!this.pendingAssistantObligation) return;
+    this.pendingAssistantObligation.resolutionState = 'resolved';
+    this.pendingAssistantObligation.unresolved = false;
+    this.pendingAssistantObligation.resolutionTurnId = turnId;
+    console.log(`[OBLIGATION] Resolved on turn ${turnId}`);
+    this.pendingObligationHistory.push(this.pendingAssistantObligation);
+    if (this.pendingObligationHistory.length > 3) this.pendingObligationHistory.shift();
+    this.pendingAssistantObligation = null;
+  }
+
+  /**
+   * Expires the pending obligation if it's been idle for >20 minutes.
+   */
+  private maybeExpirePendingObligation(): void {
+    const pending = this.pendingAssistantObligation;
+    if (!pending || !pending.unresolved) return;
+    const ageMs = Date.now() - pending.createdAt;
+    if (ageMs > 20 * 60 * 1000) {
+      pending.resolutionState = 'expired';
+      pending.unresolved = false;
+      console.log('[OBLIGATION] Expired (20min idle)');
+      this.pendingObligationHistory.push(pending);
+      if (this.pendingObligationHistory.length > 3) this.pendingObligationHistory.shift();
+      this.pendingAssistantObligation = null;
+    }
+  }
+
+  /**
+   * Validates a resume-mode reply. Returns ok=true if the reply advances
+   * the obligation. Returns salvageText if a clean prefix can be kept.
+   */
+  private validateResumeOutput(text: string, pending: PendingAssistantObligation): ResumeValidation {
+    if (!text || text.length < 15) {
+      return { ok: false, reason: 'too_short_no_continuation', salvageText: null };
+    }
+
+    // First 2 sentences
+    const firstTwoSentences = text.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
+
+    // Heading / shell drift
+    if (CommunionLoop.HEADING_SHELL_RE.test(text)) {
+      // Try salvage: find first non-heading content
+      const lines = text.split('\n');
+      const cleanLines = lines.filter(l => !(/^#{1,3}\s/.test(l) || /^\[(SPEAK|THINK|JOURNAL)\]/.test(l)));
+      const salvage = cleanLines.join('\n').trim();
+      return { ok: false, reason: 'heading_or_shell_drift', salvageText: salvage.length >= 30 ? salvage : null };
+    }
+
+    // Meta-gap talk
+    if (CommunionLoop.META_GAP_RE.test(firstTwoSentences)) {
+      // Try salvage after the meta-gap sentence
+      const sentences = text.split(/(?<=[.!?])\s+/);
+      const metaIdx = sentences.findIndex(s => CommunionLoop.META_GAP_RE.test(s));
+      const salvage = sentences.slice(metaIdx + 1).join(' ').trim();
+      return { ok: false, reason: 'meta_gap', salvageText: salvage.length >= 30 ? salvage : null };
+    }
+
+    // Tone psychoanalysis
+    if (CommunionLoop.PSYCHOANALYSIS_RE.test(firstTwoSentences)) {
+      const sentences = text.split(/(?<=[.!?])\s+/);
+      const psyIdx = sentences.findIndex(s => CommunionLoop.PSYCHOANALYSIS_RE.test(s));
+      const salvage = sentences.slice(psyIdx + 1).join(' ').trim();
+      return { ok: false, reason: 'tone_psychoanalysis', salvageText: salvage.length >= 30 ? salvage : null };
+    }
+
+    // Agency misbinding
+    if (CommunionLoop.AGENCY_MISBIND_RE.test(firstTwoSentences)) {
+      return { ok: false, reason: 'agency_misbinding', salvageText: null };
+    }
+
+    // Question ban in opening (unless list completion)
+    if (pending.obligationKind !== 'complete_list' && /\?/.test(firstTwoSentences)) {
+      const sentences = text.split(/(?<=[.!?])\s+/);
+      const qIdx = sentences.findIndex(s => s.includes('?'));
+      const salvage = sentences.slice(qIdx + 1).join(' ').trim();
+      return { ok: false, reason: 'question_in_opening', salvageText: salvage.length >= 30 ? salvage : null };
+    }
+
+    // Non-advancing mirror: reply is primarily apology/acknowledgment without real continuation
+    const substantiveTokens = text.split(/\s+/).filter(t => t.length >= 4).length;
+    const isJustApology = /^(you('?re|\s+are)\s+right|i\s+(stopped|paused|didn'?t|apologize)|i\s+know)[,.]?\s*$/i.test(text.trim());
+    if (isJustApology || substantiveTokens < 8) {
+      return { ok: false, reason: 'non_advancing_mirror', salvageText: null };
+    }
+
+    return { ok: true, reason: null, salvageText: null };
+  }
+
+  /**
+   * Builds the system prompt block for a resume_pending_assistant_obligation turn.
+   * Replaces the normal constraint blocks with a hard continuation directive.
+   */
+  private buildResumePendingObligationSystemBlock(
+    pending: PendingAssistantObligation,
+    isRetry: boolean = false,
+  ): string {
+    const anchor = pending.anchorWindow || pending.cleanPrefix.slice(0, 200);
+    const obligationDesc = {
+      continue_statement: 'You publicly started a statement and did not finish it.',
+      finish_answer: 'You publicly started to give an answer and did not finish it.',
+      complete_list: 'You started a list and did not complete even the first item.',
+      resume_explanation: 'You began an explanation and stopped before delivering it.',
+    }[pending.obligationKind] || 'You started a commitment and did not complete it.';
+
+    const opener = `\n\nPENDING ASSISTANT OBLIGATION — RESUME MODE${isRetry ? ' (RETRY)' : ''}:\n`;
+    const body = [
+      `${obligationDesc}`,
+      `The context anchor from your prior message: "${anchor}"`,
+      ``,
+      `YOU MUST continue the unfinished content immediately.`,
+      `DO NOT analyze the interruption, the gap, the pause, the momentum, or the thread.`,
+      `DO NOT discuss why you stopped.`,
+      `DO NOT ask the human what they meant by "bridge" or "continue."`,
+      `DO NOT psychoanalyze tone, pressure, wording, or implication.`,
+      `DO NOT act as if the human was the interrupted speaker. You were.`,
+      `DO NOT ask any clarifying questions in the first 2 sentences.`,
+      `DO NOT start with a heading, markdown section, or bullet list (unless the owed content was explicitly a list).`,
+      ``,
+      `A brief accountability clause is allowed — ONE short sentence only, then continue the content immediately.`,
+      `Allowed openings: "You're right. Here it is: ..." / "Here it is: ..." / "What I was saying is ..." / "The honest part is ..."`,
+      `Forbidden: any question, any meta-commentary about the gap, any heading, any tone-reading.`,
+      `Stay conversational. Deliver the owed content now.`,
+    ].join('\n');
+
+    return opener + body;
   }
 
   /**
