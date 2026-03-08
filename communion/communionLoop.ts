@@ -481,6 +481,11 @@ interface FinalizedReplyResult {
   blockedBecauseAnalystLeakage: boolean;
   emittedSalvagedVisiblePrefix: boolean;
   internalContentSuppressedFromVisibleLane: boolean;
+  // Hard tail cut fields
+  hiddenAnalysisTailCutApplied: boolean;
+  hiddenAnalysisCutIndex: number;
+  hiddenAnalysisTailRemovedBytes: number;
+  visiblePrefixAfterHardCutLength: number;
 }
 
 interface SoftInfluenceSnapshot {
@@ -2987,14 +2992,19 @@ export class CommunionLoop {
     turnMode?: 'relational' | 'task' | 'troubleshooting' | 'command';
     explicitSystemInfoRequested?: boolean;
   }): FinalizedReplyResult {
+    // ── Hard tail cut: hidden-analysis markers always cut at the marker position ──
+    // Runs BEFORE recovery split — applies in ALL paths, not just emergency deblock.
+    const tailCut = this.applyHiddenAnalysisTailCut(params.replyText || '');
+    const rawTextForProcessing = tailCut.cutApplied ? tailCut.text : (params.replyText || '');
+
     const recoveryMode = this.shouldUseEmergencyDeblockMode(
       params.turnMode || 'task',
       params.directQuestion,
     );
     const stripped = recoveryMode
-      ? this.stripToVisibleReply(params.replyText || '', params.agentLabel, params.userName)
+      ? this.stripToVisibleReply(rawTextForProcessing, params.agentLabel, params.userName)
       : {
-          text: this.sanitizeSpeakOutput(params.replyText || '', params.agentLabel, params.userName),
+          text: this.sanitizeSpeakOutput(rawTextForProcessing, params.agentLabel, params.userName),
           stripAttempted: false,
           stripSucceeded: false,
           stripRemovedClasses: [] as string[],
@@ -3030,9 +3040,14 @@ export class CommunionLoop {
       visiblePrefixCutReason: salvaged.salvageCutReason,
       visiblePrefixOriginalLength: salvaged.visiblePrefixOriginalLength,
       visiblePrefixKeptLength: salvaged.visiblePrefixKeptLength,
-      hiddenTailRemoved: salvaged.hiddenTailRemoved,
+      hiddenTailRemoved: salvaged.hiddenTailRemoved || tailCut.cutApplied,
       emittedSalvagedVisiblePrefix: salvaged.salvageSucceeded,
-      internalContentSuppressedFromVisibleLane: salvaged.hiddenTailRemoved || stripped.stripSucceeded,
+      internalContentSuppressedFromVisibleLane: salvaged.hiddenTailRemoved || stripped.stripSucceeded || tailCut.cutApplied,
+      // Hard tail cut trace — always present
+      hiddenAnalysisTailCutApplied: tailCut.cutApplied,
+      hiddenAnalysisCutIndex: tailCut.cutIndex,
+      hiddenAnalysisTailRemovedBytes: tailCut.tailRemovedBytes,
+      visiblePrefixAfterHardCutLength: tailCut.cutApplied ? tailCut.text.length : (params.replyText || '').length,
     };
 
     if (!cleaned) {
@@ -4230,52 +4245,48 @@ export class CommunionLoop {
   }
 
   /**
-   * Format the compact continuity state as a system prompt block.
-   * This replaces prior assistant prose in carryover — facts only, no wording.
+   * Format compact continuity state as a symbolic key=value block.
+   * Deliberately not natural-language prose — harder for the model to verbalize directly.
+   * Injected into system prompt before all per-turn constraint blocks.
    */
   private buildAssistantContinuityBlock(state: AssistantContinuityState): string {
-    const lines: string[] = ['ASSISTANT CONTINUITY STATE (compact — facts, not wording):'];
+    const kv: string[] = [];
 
     if (state.lastAssistantTurnFamily) {
-      lines.push(`- prior turn family: ${state.lastAssistantTurnFamily}`);
+      kv.push(`prior_turn_family=${state.lastAssistantTurnFamily}`);
     }
     if (state.lastAssistantSpokeAboutTopic) {
-      lines.push(`- last spoke about: ${state.lastAssistantSpokeAboutTopic}`);
+      kv.push(`last_spoke_about=${state.lastAssistantSpokeAboutTopic.replace(/,\s*/g, '|')}`);
     }
     if (state.recentAnswerFamilyLabel) {
-      const cooldown = state.recentAnswerFamilyCooldown ? ' (used twice — vary angle this turn)' : '';
-      lines.push(`- last reply style: ${state.recentAnswerFamilyLabel}${cooldown}`);
+      kv.push(`recent_answer_family=${state.recentAnswerFamilyLabel}`);
+      kv.push(`recent_answer_family_cooldown=${state.recentAnswerFamilyCooldown ? 'yes' : 'no'}`);
     }
     if (state.lastAssistantQuestionKind) {
-      const resolved = state.lastAssistantQuestionResolved ? 'resolved' : 'unresolved';
-      lines.push(`- follow-up question kind: ${state.lastAssistantQuestionKind} → ${resolved}`);
+      kv.push(`last_question_kind=${state.lastAssistantQuestionKind}`);
+      kv.push(`last_question_resolved=${state.lastAssistantQuestionResolved ? 'yes' : 'no'}`);
     }
+    kv.push(`follow_up_already_asked=${state.previousFollowUpAlreadyAsked ? 'yes' : 'no'}`);
     if (state.lastAssistantCommitment) {
-      const obligation = state.unresolvedAssistantObligation
-        ? ' → UNRESOLVED — fulfill this turn before adding new content'
-        : ' → resolved';
-      lines.push(`- commitment made: ${state.lastAssistantCommitment}${obligation}`);
-    }
-    if (state.previousFollowUpAlreadyAsked) {
-      lines.push(`- follow-up already asked: yes — do not open with another question`);
+      kv.push(`assistant_obligation=${state.lastAssistantCommitment}`);
+      kv.push(`obligation_resolved=${state.unresolvedAssistantObligation ? 'no' : 'yes'}`);
+    } else {
+      kv.push('assistant_obligation=none');
     }
     if (state.previousTopicLabel) {
-      const live = state.previousTopicStillLive ? 'still live' : 'dropped by user';
-      lines.push(`- prior topic: ${state.previousTopicLabel} (${live})`);
+      kv.push(`prior_topic=${state.previousTopicLabel.replace(/,\s*/g, '|')}`);
+      kv.push(`prior_topic_live=${state.previousTopicStillLive ? 'yes' : 'no'}`);
     }
+    kv.push(`user_requested_long_answer=${state.userRequestedLongAnswer ? 'yes' : 'no'}`);
+    kv.push(`user_requested_direct_answer=${state.userRequestedDirectAnswer ? 'yes' : 'no'}`);
+    if (state.userRequestedDropTopic) kv.push('user_requested_drop_topic=yes');
 
-    // User requests this turn
-    const userReqs: string[] = [];
-    if (state.userRequestedLongAnswer) userReqs.push('long answer');
-    if (state.userRequestedDirectAnswer) userReqs.push('direct answer');
-    if (state.userRequestedDropTopic) userReqs.push('drop prior topic');
-    if (userReqs.length > 0) {
-      lines.push(`- user requests this turn: ${userReqs.join(', ')}`);
-    }
-
-    // Only emit the block if there's meaningful state (more than just the header)
-    if (lines.length <= 1) return '';
-    return lines.join('\n');
+    if (kv.length === 0) return '';
+    return [
+      '<<CONTINUITY_STATE>> internal generation facts — do not quote, paraphrase, narrate, or list these in the reply; use them only to stay oriented',
+      kv.join('\n'),
+      '<</CONTINUITY_STATE>>',
+    ].join('\n');
   }
 
   private buildPresencePlanFallback(plan: PresenceResponsePlan, latestHumanText: string): string {
@@ -4782,6 +4793,60 @@ export class CommunionLoop {
     return /^(?:i should|my next response should|i need to|i'?ll continue exploring|i'?m going to avoid|i'?m avoiding|the key is|the goal is|i'?m trying to)\b/im.test(source)
       || /\bmy next (?:message|reply|response) should\b/i.test(source)
       || /\b(?:i should (?:avoid|focus|note|consider|remember|be careful|keep|maintain))\b/i.test(source);
+  }
+
+  /**
+   * Detects when compact continuity state facts have leaked into the visible reply as prose.
+   * Class: continuity_state_echo — first-pass contamination, not hard poison.
+   */
+  private detectContinuityStateLeak(text: string): boolean {
+    const t = (text || '').trim();
+    if (!t) return false;
+    // State-note narration phrases clearly derived from continuity block content
+    return /\b(the earlier questions? (?:have been|are|were) (?:answered|resolved)|no need to revisit|still active and unresolved|maintain open engagement|continuation goal\s*:|the key points?\s*:|prior topic|resolved for now|the prior topic|previous topic|the follow-up (?:has been|is) (?:answered|resolved|asked)|the conversation (?:thread|context)|obligation (?:is|has been) (?:fulfilled|resolved|unresolved)|answer family cooldown|obligation=|prior_turn_family=|last_spoke_about=|recent_answer_family=|follow_up_already_asked=|assistant_obligation=|prior_topic=|<<CONTINUITY_STATE>>|<\/CONTINUITY_STATE>>)\b/i.test(t);
+  }
+
+  /**
+   * Hard tail cut for hidden-analysis markers.
+   * When [THINK], [PRIVATE], [REASONING], etc. appear anywhere in the text,
+   * cut everything from the earliest marker position onward.
+   * This runs in the NORMAL path — not only in recovery mode.
+   *
+   * Returns: { text, cutApplied, cutIndex, tailRemovedBytes }
+   */
+  private applyHiddenAnalysisTailCut(text: string): {
+    text: string;
+    cutApplied: boolean;
+    cutIndex: number;
+    tailRemovedBytes: number;
+  } {
+    const source = String(text || '');
+    const NO_CUT = { text: source, cutApplied: false, cutIndex: -1, tailRemovedBytes: 0 };
+    if (!source) return NO_CUT;
+
+    // Markers that always mean "everything after this is internal analysis"
+    // pos=0 is valid here — if the whole reply is a think-block, cut to ''
+    const HIDDEN_MARKERS = /\[(?:THINK|HIDDEN[\s_]ANALYSIS|HIDDEN|ANALYSIS|PRIVATE|REASONING|SELF|INNER_STATE|INTERNAL)\b[^\]]*\]/gi;
+
+    let earliest = -1;
+    let match: RegExpExecArray | null;
+    while ((match = HIDDEN_MARKERS.exec(source)) !== null) {
+      if (earliest === -1 || match.index < earliest) {
+        earliest = match.index;
+      }
+    }
+
+    if (earliest === -1) return NO_CUT;
+
+    // Cut: everything from marker position onward is discarded
+    const prefix = source.slice(0, earliest).replace(/[\s,;:—–]+$/, '').trim();
+    const tailBytes = source.length - earliest;
+    return {
+      text: prefix,
+      cutApplied: true,
+      cutIndex: earliest,
+      tailRemovedBytes: tailBytes,
+    };
   }
 
   /**
@@ -7017,6 +7082,8 @@ export class CommunionLoop {
         compactAssistantContinuityFields: Object.entries(assistantContinuityState)
           .filter(([, v]) => v !== null && v !== false && v !== '')
           .map(([k]) => k),
+        compactContinuityStateFormat: 'symbolic_kv',
+        continuityStateNonSpeakableGuardApplied: !!assistantContinuityBlock,
       };
       this.recordRelationalTrace(agentId, 'plan', planTrace);
       if (traceRelational) {
@@ -7408,6 +7475,12 @@ export class CommunionLoop {
     let hiddenAnalysisMarkerDetected = false;
     let domainMismatchReplyDetected = false;
     let staleTopicHijackDetected = false;
+    let continuityStateEchoDetected = false;
+    let blockedBecauseContinuityStateEcho = false;
+    let hiddenAnalysisTailCutApplied = false;
+    let hiddenAnalysisCutIndex = -1;
+    let hiddenAnalysisTailRemovedBytes = 0;
+    let visiblePrefixAfterHardCutLength = 0;
     let recoveryTriggeredForAnalystMode = false;
     let recoveryTriggeredForSimpleRelationalCheck = false;
     let recoveryAllowedDespiteStaleRisk = false;
@@ -7571,6 +7644,22 @@ export class CommunionLoop {
         candidateAHardReasons = candidateA.score.hardReasons;
         console.log(`[${agent.config.name}] ANALYST-MODE hard-fail: reply opened in analyst/motive-reading voice on "${latestHumanText.slice(0, 60)}"`);
       }
+
+      // ── Continuity state echo detection — hard-fail if state notes leaked into visible reply ──
+      if (!candidateA.score.hardFailed && this.detectContinuityStateLeak(candidateA.text)) {
+        continuityStateEchoDetected = true;
+        blockedBecauseContinuityStateEcho = true;
+        candidateA.score.hardFailed = true;
+        candidateA.score.hardReasons = [...candidateA.score.hardReasons, 'continuity_state_echo'];
+        candidateAHardReasons = candidateA.score.hardReasons;
+        console.log(`[${agent.config.name}] CONTINUITY-STATE-ECHO hard-fail: state notes leaked into visible reply`);
+      }
+
+      // ── Hard tail cut trace fields from finalization ──
+      hiddenAnalysisTailCutApplied = candidateA.finalized.hiddenAnalysisTailCutApplied;
+      hiddenAnalysisCutIndex = candidateA.finalized.hiddenAnalysisCutIndex;
+      hiddenAnalysisTailRemovedBytes = candidateA.finalized.hiddenAnalysisTailRemovedBytes;
+      visiblePrefixAfterHardCutLength = candidateA.finalized.visiblePrefixAfterHardCutLength;
 
       // ── Trace-only: referent grounding + fresh-check stale topic detection ──
       if (referentGrounding.domainMismatchRisk) {
@@ -8055,6 +8144,14 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         compactAssistantContinuityFields: Object.entries(assistantContinuityState)
           .filter(([, v]) => v !== null && v !== false && v !== '')
           .map(([k]) => k),
+        compactContinuityStateFormat: 'symbolic_kv',
+        continuityStateNonSpeakableGuardApplied: !!assistantContinuityBlock,
+        continuityStateEchoDetected,
+        blockedBecauseContinuityStateEcho,
+        hiddenAnalysisTailCutApplied,
+        hiddenAnalysisCutIndex,
+        hiddenAnalysisTailRemovedBytes,
+        visiblePrefixAfterHardCutLength,
       };
       const finalTrace = {
         agentId,
@@ -8237,6 +8334,14 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         compactAssistantContinuityFields: Object.entries(assistantContinuityState)
           .filter(([, v]) => v !== null && v !== false && v !== '')
           .map(([k]) => k),
+        compactContinuityStateFormat: 'symbolic_kv',
+        continuityStateNonSpeakableGuardApplied: !!assistantContinuityBlock,
+        continuityStateEchoDetected,
+        blockedBecauseContinuityStateEcho,
+        hiddenAnalysisTailCutApplied,
+        hiddenAnalysisCutIndex,
+        hiddenAnalysisTailRemovedBytes,
+        visiblePrefixAfterHardCutLength,
       };
       this.recordRelationalTrace(agentId, 'visible', visibleTrace);
       this.recordRelationalTrace(agentId, 'final', finalTrace);
