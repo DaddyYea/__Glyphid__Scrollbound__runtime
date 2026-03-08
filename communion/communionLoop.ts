@@ -402,6 +402,21 @@ interface ReferentGroundingResult {
   groundedAgainstLiveThread: boolean;
 }
 
+interface FormatDriftResult {
+  formatDriftDetected: boolean;
+  formatDriftKind: 'shell_token' | 'markdown_heading' | 'report_heading' | 'structured_pivot' | null;
+  formatDriftIndex: number;
+  conversationalPrefixLength: number;
+  formatDriftSalvageCandidate: boolean;
+}
+
+interface RelitigationResult {
+  answeredQuestionRelitigationDetected: boolean;
+  relitigationKind: 'stale_accusation' | 'stale_challenge' | 'stale_interpretation' | null;
+  priorQuestionResolved: boolean;
+  stanceResetRequired: boolean;
+}
+
 type AssistantAnswerFamilyLabel =
   | 'explanation'
   | 'presence_check'
@@ -486,6 +501,14 @@ interface FinalizedReplyResult {
   hiddenAnalysisCutIndex: number;
   hiddenAnalysisTailRemovedBytes: number;
   visiblePrefixAfterHardCutLength: number;
+  // Format drift cut fields
+  formatDriftDetected: boolean;
+  formatDriftKind: FormatDriftResult['formatDriftKind'];
+  formatDriftCutApplied: boolean;
+  formatDriftCutIndex: number;
+  formatDriftTailRemovedBytes: number;
+  formatDriftPrefixKeptLength: number;
+  formatDriftPrefixAccepted: boolean;
 }
 
 interface SoftInfluenceSnapshot {
@@ -2398,6 +2421,73 @@ export class CommunionLoop {
     return lines.join('\n');
   }
 
+  /**
+   * Upstream constraint block: fires when the prior question is marked answered.
+   * More aggressive than buildQuestionResolutionPromptBlock — explicitly prohibits
+   * re-prosecution of the concern in any new framing.
+   */
+  private buildMetabolizeAnswerConstraintBlock(questionContext: QuestionResolutionContext): string {
+    const answered = questionContext.answeredThisTurn || questionContext.activeQuestion?.answered;
+    if (!answered) return '';
+    const questionText = questionContext.activeQuestion?.questionText || questionContext.metabolizeAnswer || '';
+    const lines = [
+      'ANSWERED-QUESTION STANCE RESET:',
+      questionText
+        ? `- your prior question was answered: "${questionText.slice(0, 90)}"`
+        : '- your prior question was answered',
+      '- do NOT re-prosecute the same concern in a new frame or with different wording',
+      '- do NOT challenge, interrogate, or re-examine the answer you already received',
+      '- do NOT re-apply the same interpretive lens to something the human just clarified',
+      '- the stance resets: accept the answer as given and respond to it directly',
+      '- your next reply must metabolize what was said, not probe it further',
+    ];
+    return lines.join('\n');
+  }
+
+  /**
+   * Detects answered-question relitigation: the prior question was resolved but the
+   * candidate reply re-prosecutes the same accusation, challenge, or interpretive stance.
+   */
+  private detectAnsweredQuestionRelitigation(
+    questionContext: QuestionResolutionContext,
+    continuityState: AssistantContinuityState,
+    candidateText: string,
+  ): RelitigationResult {
+    const NO_RESULT: RelitigationResult = {
+      answeredQuestionRelitigationDetected: false,
+      relitigationKind: null,
+      priorQuestionResolved: false,
+      stanceResetRequired: false,
+    };
+    const priorQuestionResolved =
+      questionContext.answeredThisTurn ||
+      questionContext.activeQuestion?.answered === true ||
+      continuityState.lastAssistantQuestionResolved;
+    if (!priorQuestionResolved) return NO_RESULT;
+
+    const candidate = (candidateText || '').toLowerCase();
+    if (candidate.length < 40) return { ...NO_RESULT, priorQuestionResolved: true };
+
+    // Stale accusation: re-framing same concern in adversarial terms after answer received
+    const ACCUSATION_RE = /\b(but (?:you (?:said|seemed|were|sounded)|that (?:seems|sounds|feels|appears))|if you (?:really|actually|truly)\b|that'?s (?:still|not quite|not exactly)\b|it (?:still )?(?:sounds like|seems like|feels like) you(?:'re| are))\b/i;
+    // Stale challenge: re-interrogating a choice or position the user just explained
+    const CHALLENGE_RE = /\b(why (?:would you|did you|are you) (?:still|then|though)\b|i(?:'m| am) (?:still|yet) (?:not sure|unsure|wondering) (?:if|whether|why|how)\b|how (?:does|do) (?:that|you) (?:actually|really) (?:work|make sense|fit)\b)\b/i;
+    // Stale interpretation: re-reading user intent after they already clarified
+    const INTERPRETATION_RE = /\b(i (?:sense|get the impression|feel like|notice) (?:you(?:'re| are) (?:maybe|perhaps|possibly|still)|there(?:'s| is) (?:still )?a (?:part|sense|weight))|maybe you(?:'re| are) (?:actually|still|really)\b|it (?:could be|might be) that you(?:'re| are) (?:still|actually|really)\b)\b/i;
+
+    if (ACCUSATION_RE.test(candidate)) {
+      return { answeredQuestionRelitigationDetected: true, relitigationKind: 'stale_accusation', priorQuestionResolved: true, stanceResetRequired: true };
+    }
+    if (CHALLENGE_RE.test(candidate)) {
+      return { answeredQuestionRelitigationDetected: true, relitigationKind: 'stale_challenge', priorQuestionResolved: true, stanceResetRequired: true };
+    }
+    if (INTERPRETATION_RE.test(candidate)) {
+      return { answeredQuestionRelitigationDetected: true, relitigationKind: 'stale_interpretation', priorQuestionResolved: true, stanceResetRequired: true };
+    }
+
+    return { ...NO_RESULT, priorQuestionResolved: true };
+  }
+
   private containsEquivalentFollowUpQuestion(replyText: string, questionContext: QuestionResolutionContext): boolean {
     if (!questionContext.activeQuestion || !questionContext.cooldownActive) return false;
     const questions = (String(replyText || '').match(/[^?]+\?/g) || [])
@@ -2995,7 +3085,12 @@ export class CommunionLoop {
     // ── Hard tail cut: hidden-analysis markers always cut at the marker position ──
     // Runs BEFORE recovery split — applies in ALL paths, not just emergency deblock.
     const tailCut = this.applyHiddenAnalysisTailCut(params.replyText || '');
-    const rawTextForProcessing = tailCut.cutApplied ? tailCut.text : (params.replyText || '');
+    const afterHiddenCut = tailCut.cutApplied ? tailCut.text : (params.replyText || '');
+
+    // ── Format drift cut: salvage conversational prefix before channel-token hard check ──
+    // Only triggers when shell tokens / markdown headings appear after a good prose prefix.
+    const driftCut = this.applyFormatDriftCut(afterHiddenCut);
+    const rawTextForProcessing = driftCut.cutApplied ? driftCut.text : afterHiddenCut;
 
     const recoveryMode = this.shouldUseEmergencyDeblockMode(
       params.turnMode || 'task',
@@ -3048,6 +3143,14 @@ export class CommunionLoop {
       hiddenAnalysisCutIndex: tailCut.cutIndex,
       hiddenAnalysisTailRemovedBytes: tailCut.tailRemovedBytes,
       visiblePrefixAfterHardCutLength: tailCut.cutApplied ? tailCut.text.length : (params.replyText || '').length,
+      // Format drift cut trace — always present
+      formatDriftDetected: driftCut.cutApplied || this.detectMidReplyFormatDrift(afterHiddenCut).formatDriftDetected,
+      formatDriftKind: driftCut.driftKind,
+      formatDriftCutApplied: driftCut.cutApplied,
+      formatDriftCutIndex: driftCut.cutIndex,
+      formatDriftTailRemovedBytes: driftCut.tailRemovedBytes,
+      formatDriftPrefixKeptLength: driftCut.cutApplied ? driftCut.text.length : afterHiddenCut.length,
+      formatDriftPrefixAccepted: driftCut.cutApplied,
     };
 
     if (!cleaned) {
@@ -4167,6 +4270,7 @@ export class CommunionLoop {
     latestHumanText: string,
     turnFamilyClassification: TurnFamilyClassification,
     priorTopicCluster: string[],
+    questionContext?: QuestionResolutionContext,
   ): AssistantContinuityState {
     const recentAssistant = recentMessages.filter(m => m.speaker !== 'human').slice(-3);
     const lastAssistantText = recentAssistant[recentAssistant.length - 1]?.text || '';
@@ -4222,10 +4326,16 @@ export class CommunionLoop {
       /\bi(?:'ll| will) (?:tell|share|explain)(?: you)? (?:how i (?:experience|feel|sense)|what it'?s like for me|my (?:experience|sense|take))\b/i.test(m.text || '')
     );
 
+    // Authoritative override: questionContext knows for certain whether the question is resolved
+    const resolvedQuestionOverride =
+      questionContext?.answeredThisTurn === true ||
+      questionContext?.activeQuestion?.answered === true;
+    const resolvedLastAssistantQuestion = resolvedQuestionOverride || lastAssistantQuestionResolved;
+
     return {
       lastAssistantTurnFamily: turnFamilyClassification.family,
       lastAssistantQuestionKind,
-      lastAssistantQuestionResolved,
+      lastAssistantQuestionResolved: resolvedLastAssistantQuestion,
       lastAssistantCommitment,
       lastAssistantAnswerTarget: previousTopicLabel,
       lastAssistantSpokeAboutTopic: previousTopicLabel,
@@ -4846,6 +4956,87 @@ export class CommunionLoop {
       cutApplied: true,
       cutIndex: earliest,
       tailRemovedBytes: tailBytes,
+    };
+  }
+
+  /**
+   * Detects mid-reply format drift: conversational opening followed by shell tokens,
+   * markdown headings, or report-style section labels.
+   */
+  private detectMidReplyFormatDrift(text: string): FormatDriftResult {
+    const source = String(text || '');
+    const NO_DRIFT: FormatDriftResult = {
+      formatDriftDetected: false, formatDriftKind: null,
+      formatDriftIndex: -1, conversationalPrefixLength: source.length, formatDriftSalvageCandidate: false,
+    };
+    if (!source || source.length < 40) return NO_DRIFT;
+
+    let earliest = -1;
+    let driftKind: FormatDriftResult['formatDriftKind'] = null;
+
+    // 1. Shell/channel tokens mid-reply (pos > 0)
+    const SHELL_RE = /\[\/?(?:SPEAK|SPEECH|JOURNAL|SILENT|VISIBLE)\]/gi;
+    let m: RegExpExecArray | null;
+    while ((m = SHELL_RE.exec(source)) !== null) {
+      if (m.index > 0 && (earliest === -1 || m.index < earliest)) {
+        earliest = m.index; driftKind = 'shell_token';
+      }
+    }
+
+    // 2. Markdown headings appearing at line-start after enough prose
+    const HEADING_RE = /^#{1,3}\s+\S/gm;
+    while ((m = HEADING_RE.exec(source)) !== null) {
+      if (m.index !== undefined && m.index >= 60 && (earliest === -1 || m.index < earliest)) {
+        earliest = m.index; driftKind = 'markdown_heading';
+      }
+    }
+
+    // 3. Report / note section headings (at line start, only if preceded by enough prose)
+    const REPORT_RE = /^(?:Resonance Check|Metabolizing Your Answer|Why This Matters(?: to Me)?|What I(?:'m| Am) Tracking|Internal Note|Thread Analysis|End Note|Key Points|(?:To )?Summarize|In Summary|Observation|Reflection)\s*:?\s*$/im;
+    m = REPORT_RE.exec(source);
+    if (m && m.index !== undefined) {
+      const lineStart = source.lastIndexOf('\n', m.index) + 1;
+      if (lineStart >= 60 && (earliest === -1 || lineStart < earliest)) {
+        earliest = lineStart; driftKind = 'report_heading';
+      }
+    }
+
+    if (earliest === -1) return NO_DRIFT;
+
+    const prefix = source.slice(0, earliest).replace(/[\s,;:—–\n]+$/, '').trim();
+    return {
+      formatDriftDetected: true,
+      formatDriftKind: driftKind,
+      formatDriftIndex: earliest,
+      conversationalPrefixLength: prefix.length,
+      formatDriftSalvageCandidate: prefix.length >= 40,
+    };
+  }
+
+  /**
+   * Hard cut at the earliest format drift boundary.
+   * Returns trimmed prefix + cut metadata.
+   * Only cuts when there is a substantial conversational prefix to salvage.
+   */
+  private applyFormatDriftCut(text: string): {
+    text: string;
+    cutApplied: boolean;
+    cutIndex: number;
+    tailRemovedBytes: number;
+    driftKind: FormatDriftResult['formatDriftKind'];
+  } {
+    const NO_CUT = { text, cutApplied: false, cutIndex: -1, tailRemovedBytes: 0, driftKind: null as FormatDriftResult['formatDriftKind'] };
+    if (!text) return NO_CUT;
+    const drift = this.detectMidReplyFormatDrift(text);
+    if (!drift.formatDriftDetected || !drift.formatDriftSalvageCandidate) return NO_CUT;
+    const prefix = text.slice(0, drift.formatDriftIndex).replace(/[\s,;:—–\n]+$/, '').trim();
+    if (prefix.length < 40) return NO_CUT;
+    return {
+      text: prefix,
+      cutApplied: true,
+      cutIndex: drift.formatDriftIndex,
+      tailRemovedBytes: text.length - drift.formatDriftIndex,
+      driftKind: drift.formatDriftKind,
     };
   }
 
@@ -6606,8 +6797,12 @@ export class CommunionLoop {
     // Always extract prior topic cluster — needed for both fresh-check isolation and compact continuity state
     const priorTopicCluster = this.extractPriorTopicNounCluster(recentPromptMessages);
     const assistantContinuityState = this.buildAssistantContinuityState(
-      recentPromptMessages, latestHumanText, turnFamilyClassification, priorTopicCluster,
+      recentPromptMessages, latestHumanText, turnFamilyClassification, priorTopicCluster, questionContext,
     );
+    // State consistency normalization — ensure questionContext and continuityState agree on resolution
+    const questionStateResolvedNormalized = questionContext.answeredThisTurn || questionContext.activeQuestion?.answered === true;
+    const continuityStateResolvedNormalized = assistantContinuityState.lastAssistantQuestionResolved;
+    const resolvedStateConsistencyCheckPassed = !questionStateResolvedNormalized || continuityStateResolvedNormalized;
     // Capture and clear the one-shot reset flag here — before any planTrace/recordRelationalTrace call
     const liveCarryoverResetThisTurn = this.liveCarryoverResetApplied === true;
     if (liveCarryoverResetThisTurn) this.liveCarryoverResetApplied = false;
@@ -6878,6 +7073,11 @@ export class CommunionLoop {
       if (questionPromptBlock) {
         systemPrompt += `\n\n${questionPromptBlock}`;
       }
+      // Metabolize-answer stance reset — stronger prohibition on re-prosecuting an answered question
+      const metabolizeBlock = this.buildMetabolizeAnswerConstraintBlock(questionContext);
+      if (metabolizeBlock) {
+        systemPrompt += `\n\n${metabolizeBlock}`;
+      }
       // Semantic answer loop warning — when recent replies are semantically identical, request a fresh angle
       if (semanticAnswerLoop.detected) {
         systemPrompt += `\n\n- your last several replies have been semantically similar (overlap ${semanticAnswerLoop.overlapScore})\n- vary the angle, simplify, or shift the lens — do not just rephrase or reformat the same packet`;
@@ -7084,6 +7284,10 @@ export class CommunionLoop {
           .map(([k]) => k),
         compactContinuityStateFormat: 'symbolic_kv',
         continuityStateNonSpeakableGuardApplied: !!assistantContinuityBlock,
+        metabolizeAnswerConstraintBlockApplied: questionContext.answeredThisTurn || questionContext.activeQuestion?.answered === true,
+        questionStateResolvedNormalized,
+        continuityStateResolvedNormalized,
+        resolvedStateConsistencyCheckPassed,
       };
       this.recordRelationalTrace(agentId, 'plan', planTrace);
       if (traceRelational) {
@@ -7481,6 +7685,18 @@ export class CommunionLoop {
     let hiddenAnalysisCutIndex = -1;
     let hiddenAnalysisTailRemovedBytes = 0;
     let visiblePrefixAfterHardCutLength = 0;
+    let formatDriftDetected = false;
+    let formatDriftKind: FormatDriftResult['formatDriftKind'] = null;
+    let formatDriftCutApplied = false;
+    let formatDriftCutIndex = -1;
+    let formatDriftTailRemovedBytes = 0;
+    let formatDriftPrefixKeptLength = 0;
+    let formatDriftPrefixAccepted = false;
+    let answeredQuestionRelitigationDetected = false;
+    let relitigationKind: RelitigationResult['relitigationKind'] = null;
+    let staleStancePersistenceDetected = false;
+    let blockedBecauseStaleStancePersistence = false;
+    let stanceResetRequired = false;
     let recoveryTriggeredForAnalystMode = false;
     let recoveryTriggeredForSimpleRelationalCheck = false;
     let recoveryAllowedDespiteStaleRisk = false;
@@ -7655,11 +7871,35 @@ export class CommunionLoop {
         console.log(`[${agent.config.name}] CONTINUITY-STATE-ECHO hard-fail: state notes leaked into visible reply`);
       }
 
+      // ── Answered-question relitigation detection — hard-fail for stale stance persistence ──
+      if (!candidateA.score.hardFailed && candidateA.text) {
+        const relitigation = this.detectAnsweredQuestionRelitigation(questionContext, assistantContinuityState, candidateA.text);
+        if (relitigation.answeredQuestionRelitigationDetected) {
+          answeredQuestionRelitigationDetected = true;
+          staleStancePersistenceDetected = true;
+          stanceResetRequired = relitigation.stanceResetRequired;
+          relitigationKind = relitigation.relitigationKind;
+          blockedBecauseStaleStancePersistence = true;
+          candidateA.score.hardFailed = true;
+          candidateA.score.hardReasons = [...candidateA.score.hardReasons, 'stale_stance_persistence'];
+          candidateAHardReasons = candidateA.score.hardReasons;
+          console.log(`[${agent.config.name}] STALE-STANCE hard-fail: relitigation kind=${relitigation.relitigationKind}`);
+        }
+      }
+
       // ── Hard tail cut trace fields from finalization ──
       hiddenAnalysisTailCutApplied = candidateA.finalized.hiddenAnalysisTailCutApplied;
       hiddenAnalysisCutIndex = candidateA.finalized.hiddenAnalysisCutIndex;
       hiddenAnalysisTailRemovedBytes = candidateA.finalized.hiddenAnalysisTailRemovedBytes;
       visiblePrefixAfterHardCutLength = candidateA.finalized.visiblePrefixAfterHardCutLength;
+      // ── Format drift cut trace fields from finalization ──
+      formatDriftDetected = candidateA.finalized.formatDriftDetected;
+      formatDriftKind = candidateA.finalized.formatDriftKind;
+      formatDriftCutApplied = candidateA.finalized.formatDriftCutApplied;
+      formatDriftCutIndex = candidateA.finalized.formatDriftCutIndex;
+      formatDriftTailRemovedBytes = candidateA.finalized.formatDriftTailRemovedBytes;
+      formatDriftPrefixKeptLength = candidateA.finalized.formatDriftPrefixKeptLength;
+      formatDriftPrefixAccepted = candidateA.finalized.formatDriftPrefixAccepted;
 
       // ── Trace-only: referent grounding + fresh-check stale topic detection ──
       if (referentGrounding.domainMismatchRisk) {
@@ -8129,8 +8369,9 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         recoveryTriggeredForSimpleRelationalCheck,
         recoveryAllowedDespiteStaleRisk,
         recoverySkippedReason,
-        firstPassAcceptedWithoutRecovery: !recoveryGenerationAttempted,
-        firstPassRejectedReason: recoveryGenerationAttempted ? (candidateAHardReasons[0] || 'low_score') : null,
+        firstPassAcceptedWithoutRecovery: !recoveryGenerationAttempted && !candidateAHardReasons.length,
+        replyActuallyEmitted: result.action === 'speak' && !!responseText,
+        firstPassRejectedReason: (recoveryGenerationAttempted || candidateAHardReasons.length) ? (candidateAHardReasons[0] || 'low_score') : null,
         recoveryNeeded: recoveryGenerationAttempted,
         recoveryReason: recoveryGenerationAttempted ? (candidateAHardReasons[0] || 'low_score') : null,
         cleanupWasLastResort: finalizationUsedRegen,
@@ -8152,6 +8393,22 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         hiddenAnalysisCutIndex,
         hiddenAnalysisTailRemovedBytes,
         visiblePrefixAfterHardCutLength,
+        formatDriftDetected,
+        formatDriftKind,
+        formatDriftCutApplied,
+        formatDriftCutIndex,
+        formatDriftTailRemovedBytes,
+        formatDriftPrefixKeptLength,
+        formatDriftPrefixAccepted,
+        answeredQuestionRelitigationDetected,
+        relitigationKind,
+        staleStancePersistenceDetected,
+        blockedBecauseStaleStancePersistence,
+        stanceResetRequired,
+        metabolizeAnswerConstraintBlockApplied: questionContext.answeredThisTurn || questionContext.activeQuestion?.answered === true,
+        questionStateResolvedNormalized,
+        continuityStateResolvedNormalized,
+        resolvedStateConsistencyCheckPassed,
       };
       const finalTrace = {
         agentId,
@@ -8319,8 +8576,9 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         recoveryTriggeredForSimpleRelationalCheck,
         recoveryAllowedDespiteStaleRisk,
         recoverySkippedReason,
-        firstPassAcceptedWithoutRecovery: !recoveryGenerationAttempted,
-        firstPassRejectedReason: recoveryGenerationAttempted ? (candidateAHardReasons[0] || 'low_score') : null,
+        firstPassAcceptedWithoutRecovery: !recoveryGenerationAttempted && !candidateAHardReasons.length,
+        replyActuallyEmitted: result.action === 'speak' && !!responseText,
+        firstPassRejectedReason: (recoveryGenerationAttempted || candidateAHardReasons.length) ? (candidateAHardReasons[0] || 'low_score') : null,
         recoveryNeeded: recoveryGenerationAttempted,
         recoveryReason: recoveryGenerationAttempted ? (candidateAHardReasons[0] || 'low_score') : null,
         cleanupWasLastResort: finalizationUsedRegen,
@@ -8342,6 +8600,22 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         hiddenAnalysisCutIndex,
         hiddenAnalysisTailRemovedBytes,
         visiblePrefixAfterHardCutLength,
+        formatDriftDetected,
+        formatDriftKind,
+        formatDriftCutApplied,
+        formatDriftCutIndex,
+        formatDriftTailRemovedBytes,
+        formatDriftPrefixKeptLength,
+        formatDriftPrefixAccepted,
+        answeredQuestionRelitigationDetected,
+        relitigationKind,
+        staleStancePersistenceDetected,
+        blockedBecauseStaleStancePersistence,
+        stanceResetRequired,
+        metabolizeAnswerConstraintBlockApplied: questionContext.answeredThisTurn || questionContext.activeQuestion?.answered === true,
+        questionStateResolvedNormalized,
+        continuityStateResolvedNormalized,
+        resolvedStateConsistencyCheckPassed,
       };
       this.recordRelationalTrace(agentId, 'visible', visibleTrace);
       this.recordRelationalTrace(agentId, 'final', finalTrace);
