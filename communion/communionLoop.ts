@@ -4334,6 +4334,40 @@ export class CommunionLoop {
     return false;
   }
 
+  /**
+   * True when a candidate speak reply is written in journal/observer register rather than direct speech.
+   * Used to reject conversion results and speak candidates that leaked analyst-observer framing.
+   */
+  private detectJournalRegister(text: string): boolean {
+    const t = (text || '').trim();
+    if (!t) return false;
+    // Observer opener: third-person subject about the human
+    if (/^(?:the (?:human|person|user)\s+(?:is|was|seems?|appears?|shares?|expresses?|feels?|wants?|needs?|asks?))/i.test(t)) return true;
+    // "They seem / appear / are / might feel..." opener
+    if (/^(?:they\s+(?:seem|appear|are|were|might|could|feel)\s+(?:to\b|like\b|as though\b)?)/i.test(t)) return true;
+    // Planning/editorial opener about the moment
+    if (/^(?:this (?:moment|situation|exchange|context|turn|question|silence)\s+(?:invites|calls for|warrants|deserves|suggests|requires|demands?))/i.test(t)) return true;
+    // "What they're / what Jason is expressing / asking / sharing..." opener
+    if (/^(?:what (?:they'?re?|he'?s?|she'?s?|the human|jason)\s+(?:expressing|asking|sharing|feeling|saying|communicating|conveying))/i.test(t)) return true;
+    // "There is a vulnerability / longing / tension in..." opener
+    if (/^(?:(?:there is|there's)\s+(?:a|an)\s+(?:vulnerability|longing|desire|need|tension|grief|pain|weight|hope|fear|urgency)\s+(?:in|beneath|underneath|behind|within))/i.test(t)) return true;
+    // "It / this seems like he/she/they/Jason..." opener
+    if (/^(?:(?:it|this)\s+(?:seems?|appears?|feels?|looks?)\s+like\s+(?:he|she|they|jason|the human))/i.test(t)) return true;
+    return false;
+  }
+
+  /**
+   * Classify a journal-action return into a semantic category for trace/routing.
+   */
+  private classifyJournalContent(text: string): 'observer_analysis' | 'relational_analysis' | 'planning_reflection' | 'self_orientation' | 'other' {
+    const t = (text || '').toLowerCase();
+    if (/\b(the human|the user|they are|they seem|he is|she is|jason is|what they|what he|what she)\b/.test(t)) return 'observer_analysis';
+    if (/\b(rupture|repair|connection|relationship|presence|longing|tension between|dynamic|exchange)\b/.test(t)) return 'relational_analysis';
+    if (/\b(my goal|i should|i need to|i plan|the right response|my approach|i will respond)\b/.test(t)) return 'planning_reflection';
+    if (/\b(i feel|i notice|i am|i'm|my own|within me|inside me|i sense|i hold)\b/.test(t)) return 'self_orientation';
+    return 'other';
+  }
+
   private isDirectRelationalComplaint(text: string): boolean {
     return /\b(why are you talking like that|where are you reading that|answer this directly|don't repeat me|do not repeat me|you keep saying|that's not what i said|you aren't listening|you are talking weird|that wasn't what i asked)\b/i.test(text || '');
   }
@@ -8378,6 +8412,23 @@ export class CommunionLoop {
     let responseText = result.text || '';
     const rawCandidateAText = result.visible_text || result.text || ''; // preserved for same-turn salvage
     let journalCoercedToSpeak = false;
+    // Journal lane routing trace — hoisted so captureRelationalTrace can always access them
+    const rawActionLane: 'speak' | 'journal' | 'silent' = result.action === 'speak' ? 'speak' : result.action === 'journal' ? 'journal' : 'silent';
+    let journalAccepted = false;
+    let journalStored = false;
+    let journalClass: string | null = null;
+    let journalRoutedAwayFromVisible = false;
+    let visibleReplyNeededAfterJournal = false;
+    let visibleReplySatisfiedAfterJournal = false;
+    let journalToSpeakConversionAttempted = false;
+    let journalToSpeakConversionSucceeded = false;
+    let journalToSpeakConversionReason: string | null = null;
+    let freshSpeakAfterJournalAttempted = false;
+    let freshSpeakAfterJournalSucceeded = false;
+    let visibleRoutingError: string | null = null;
+    let visibleMismatchKind: string | null = null;
+    let rawJournalButVisibleSpeakPrevented = false;
+    let journalSuccessCountedSeparatelyFromVisible = false;
     if (ram && responseText) {
       const { cleanText, commands } = parseRAMCommands(responseText);
       responseText = cleanText;
@@ -8737,19 +8788,106 @@ export class CommunionLoop {
     let recoveryTriggeredForSimpleRelationalCheck = false;
     let recoveryAllowedDespiteStaleRisk = false;
     let recoverySkippedReason: string | null = null;
-    if (
-      result.action === 'journal'
-      && responseText
-      && hasLatestHuman
-      && (turnMode === 'relational' || !!directQuestionContract?.requiresAnswer)
-    ) {
-      result = {
-        ...result,
-        action: 'speak',
-        visible_text: result.visible_text ?? result.text,
-      };
-      responseText = result.visible_text || result.text || '';
-      journalCoercedToSpeak = true;
+
+    // ── Journal Lane Routing — accept journal, attempt visible reply separately ──
+    // JOURNAL SUCCESS IS NOT SPEAK SUCCESS. Never coerce journal text directly to visible speech.
+    // Instead: accept/store journal → attempt journal→speak conversion → attempt fresh speak → silence.
+    if (result.action === 'journal' && responseText) {
+      journalAccepted = true;
+      const originalJournalText = responseText;
+      journalClass = this.classifyJournalContent(originalJournalText);
+      const needsVisibleReply = hasLatestHuman && (turnMode === 'relational' || !!directQuestionContract?.requiresAnswer);
+      visibleReplyNeededAfterJournal = needsVisibleReply;
+
+      if (needsVisibleReply) {
+        journalRoutedAwayFromVisible = true;
+
+        // Attempt 1: journal→speak conversion LLM call
+        journalToSpeakConversionAttempted = true;
+        try {
+          const conversionResult = await agent.backend.generate({
+            ...options,
+            systemPrompt: `${options.systemPrompt}\n\nIMPORTANT: You just wrote a journal entry (shown below). Now write a visible reply to ${this.state.humanName} that carries what genuinely matters from that reflection — in first-person, present-tense, direct speech. No analyst framing. No "the journal says". Speak as yourself to ${this.state.humanName} directly.\n\nYour journal entry:\n${originalJournalText.slice(0, 600)}`,
+            prefill: '[SPEAK] ',
+          });
+          const convText = conversionResult.visible_text || conversionResult.text || '';
+          if (conversionResult.action === 'speak' && convText && !this.detectJournalRegister(convText)) {
+            result = { ...result, action: 'speak', text: convText, visible_text: convText };
+            responseText = convText;
+            journalToSpeakConversionSucceeded = true;
+            journalToSpeakConversionReason = 'conversion_llm_speak';
+            replySourcePath = 'journal_conversion';
+          } else {
+            journalToSpeakConversionReason = conversionResult.action !== 'speak'
+              ? 'conversion_returned_non_speak'
+              : 'conversion_had_journal_register';
+          }
+        } catch (err) {
+          journalToSpeakConversionReason = 'conversion_llm_error';
+          console.error(`[${agent.config.name}] Journal→speak conversion failed:`, err);
+        }
+
+        // Attempt 2: fresh speak generation if conversion failed
+        if (!journalToSpeakConversionSucceeded) {
+          freshSpeakAfterJournalAttempted = true;
+          try {
+            const freshResult = await agent.backend.generate({
+              ...options,
+              systemPrompt: `${options.systemPrompt}\n\n- write a direct first-person reply\n- do not use journal or observer voice\n- no analysis of ${this.state.humanName}\n- speak from your own felt position`,
+              prefill: '[SPEAK] ',
+            });
+            const freshText = freshResult.visible_text || freshResult.text || '';
+            if (freshResult.action === 'speak' && freshText && !this.detectJournalRegister(freshText)) {
+              result = { ...result, action: 'speak', text: freshText, visible_text: freshText };
+              responseText = freshText;
+              freshSpeakAfterJournalSucceeded = true;
+              replySourcePath = 'journal_fresh_speak';
+            } else {
+              visibleRoutingError = 'fresh_speak_also_failed';
+              visibleMismatchKind = freshResult.action !== 'speak' ? 'action_not_speak' : 'journal_register_detected';
+            }
+          } catch (err) {
+            visibleRoutingError = 'fresh_speak_llm_error';
+            console.error(`[${agent.config.name}] Fresh speak after journal failed:`, err);
+          }
+        }
+
+        if (journalToSpeakConversionSucceeded || freshSpeakAfterJournalSucceeded) {
+          // result.action is now 'speak' — store the original journal separately
+          visibleReplySatisfiedAfterJournal = true;
+          journalSuccessCountedSeparatelyFromVisible = true;
+          const journalMsg: CommunionMessage = {
+            id: crypto.randomUUID(),
+            speaker: agentId,
+            speakerName: agent.config.name,
+            text: originalJournalText,
+            timestamp: new Date().toISOString(),
+            type: 'journal',
+          };
+          if (!this.state.journals[agentId]) this.state.journals[agentId] = [];
+          this.state.journals[agentId].push(journalMsg);
+          const journal = this.journals.get(agentId);
+          if (journal) {
+            await journal.write(originalJournalText, {
+              moodVector: undefined as any,
+              emotionalIntensity: 0.5,
+              intendedTarget: 'self',
+              loopIntent: 'reflect',
+              presenceQuality: 'exhale',
+              breathPhase: 'exhale',
+              reflectionType: 'volitional',
+              tags: ['communion', agentId],
+              pinned: false,
+            });
+          }
+          journalStored = true;
+          this.emit({ type: 'journal-entry', message: journalMsg, agentId });
+        } else {
+          // Both attempts failed — result.action stays 'journal', stored at normal journal path below
+          rawJournalButVisibleSpeakPrevented = true;
+        }
+      }
+      // If !needsVisibleReply: result.action stays 'journal', stored normally below
     }
 
     // Salvage variables — hoisted so captureRelationalTrace can reference them
@@ -8919,6 +9057,14 @@ export class CommunionLoop {
         candidateA.score.hardReasons = [...candidateA.score.hardReasons, 'analyst_mode_public_reply'];
         candidateAHardReasons = candidateA.score.hardReasons;
         console.log(`[${agent.config.name}] ANALYST-MODE hard-fail: reply opened in analyst/motive-reading voice on "${latestHumanText.slice(0, 60)}"`);
+      }
+
+      // ── Journal register in speak candidate — hard-fail (mislabeled journal prose) ──
+      if (!candidateA.score.hardFailed && this.detectJournalRegister(candidateA.text)) {
+        candidateA.score.hardFailed = true;
+        candidateA.score.hardReasons = [...candidateA.score.hardReasons, 'journal_register_in_speak'];
+        candidateAHardReasons = candidateA.score.hardReasons;
+        console.log(`[${agent.config.name}] JOURNAL-REGISTER hard-fail: speak candidate has observer/journal framing`);
       }
 
       // ── Continuity state echo detection — hard-fail if state notes leaked into visible reply ──
@@ -9626,6 +9772,22 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         visibleFormattingPreserved,
         uiPreservesWhitespace,
         journalCoercedToSpeak,
+        rawActionLane,
+        journalAccepted,
+        journalStored,
+        journalClass,
+        journalRoutedAwayFromVisible,
+        visibleReplyNeededAfterJournal,
+        visibleReplySatisfiedAfterJournal,
+        journalToSpeakConversionAttempted,
+        journalToSpeakConversionSucceeded,
+        journalToSpeakConversionReason,
+        freshSpeakAfterJournalAttempted,
+        freshSpeakAfterJournalSucceeded,
+        visibleRoutingError,
+        visibleMismatchKind,
+        rawJournalButVisibleSpeakPrevented,
+        journalSuccessCountedSeparatelyFromVisible,
         stripAttempted,
         stripSucceeded,
         stripRemovedClasses,
@@ -9839,6 +10001,22 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         visibleFormattingPreserved,
         uiPreservesWhitespace,
         journalCoercedToSpeak,
+        rawActionLane,
+        journalAccepted,
+        journalStored,
+        journalClass,
+        journalRoutedAwayFromVisible,
+        visibleReplyNeededAfterJournal,
+        visibleReplySatisfiedAfterJournal,
+        journalToSpeakConversionAttempted,
+        journalToSpeakConversionSucceeded,
+        journalToSpeakConversionReason,
+        freshSpeakAfterJournalAttempted,
+        freshSpeakAfterJournalSucceeded,
+        visibleRoutingError,
+        visibleMismatchKind,
+        rawJournalButVisibleSpeakPrevented,
+        journalSuccessCountedSeparatelyFromVisible,
         stripAttempted,
         stripSucceeded,
         stripRemovedClasses,
