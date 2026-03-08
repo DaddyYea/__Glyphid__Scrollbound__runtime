@@ -3362,11 +3362,16 @@
           // Order matters: server must know human is done before message triggers tick.
           speechActive = false;
           accumulatedText = ''; // Reset for next utterance
-          lastRecognitionRenderedText = '';
+          // NOTE: lastRecognitionRenderedText intentionally NOT cleared before the await.
+          // pauseRecognitionForTts may fire during the await window and needs to compare
+          // chatInput.value against lastRecognitionRenderedText to know the text is STT-generated
+          // and safe to clear. If we clear it here, the guard fails and chatInput keeps the stale
+          // text, which then gets re-sent after the await. Clear it AFTER the await instead.
           await Promise.race([
             signalMicState(false, 300),
             new Promise(resolve => setTimeout(resolve, 300)),
           ]);
+          lastRecognitionRenderedText = '';
           const text = chatInput.value.trim();
           if (text && micListening) {
             sendMessage();
