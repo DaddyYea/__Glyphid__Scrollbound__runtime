@@ -394,6 +394,14 @@ interface SemanticAnswerLoopResult {
   overlapScore: number;
 }
 
+interface ReferentGroundingResult {
+  ambiguousReferentsDetected: string[];
+  referentGroundingDomain: 'relational' | 'conversational' | 'technical' | 'embodiment' | 'mixed' | 'unclear';
+  referentGroundingConfidence: number;
+  domainMismatchRisk: boolean;
+  groundedAgainstLiveThread: boolean;
+}
+
 interface ReplyFailureClass {
   isFallbackLoop: boolean;
   isRecentDuplicate: boolean;
@@ -3180,6 +3188,160 @@ export class CommunionLoop {
     };
   }
 
+  /**
+   * Identifies ambiguous noun phrases in the user's turn and grounds them against
+   * the live thread, preventing the model from importing wrong-domain ontology.
+   *
+   * Example: "touch points" in a check-in/connection thread → relational
+   *          NOT: haptics / somatosensory cortex / epidermal receptors
+   */
+  private classifyReferentGrounding(
+    latestHumanText: string,
+    recentMessages: CommunionMessage[],
+    turnFamily: TurnFamily,
+  ): ReferentGroundingResult {
+    const humanLower = (latestHumanText || '').toLowerCase();
+
+    // ── Detect ambiguous noun phrases ──
+    const AMBIGUOUS_PHRASES: [RegExp, string][] = [
+      [/\btouch\s*-?\s*points?\b/i, 'touch points'],
+      [/\btouch\b(?!.*haptic|.*sensor|.*screen|.*interface)/i, 'touch'],
+      [/\brhythm\b(?!.*drum|.*beat|.*music|.*bpm)/i, 'rhythm'],
+      [/\bconnection\b(?!.*internet|.*network|.*socket|.*api)/i, 'connection'],
+      [/\bpressure\b(?!.*blood|.*barometric|.*air|.*tire)/i, 'pressure'],
+      [/\blayers?\b(?!.*network|.*css|.*stack|.*protocol)/i, 'layers'],
+      [/\bcontact\s*points?\b|\bpoints? of contact\b/i, 'contact points'],
+      [/\bsignal\b(?!.*wifi|.*radio|.*cell|.*audio|.*digital)/i, 'signal'],
+      [/\bthread\b(?!.*code|.*function|.*async|.*process)/i, 'thread'],
+      [/\bexperience\b.{0,40}\b(?:body|skin|touch|feel|sense)\b|\b(?:body|skin|touch|feel|sense)\b.{0,40}\bexperience\b/i, 'body/sense experience'],
+    ];
+
+    const detected: string[] = [];
+    for (const [pat, label] of AMBIGUOUS_PHRASES) {
+      if (pat.test(humanLower)) detected.push(label);
+    }
+
+    if (detected.length === 0) {
+      return {
+        ambiguousReferentsDetected: [],
+        referentGroundingDomain: 'unclear',
+        referentGroundingConfidence: 0,
+        domainMismatchRisk: false,
+        groundedAgainstLiveThread: false,
+      };
+    }
+
+    // ── Score recent thread for domain signals ──
+    const RELATIONAL_SIGNALS = /\b(check.in|checking in|conversation|relational|moment|moments|interaction|rhythm.*conversation|contact|connection|return|presence|in.room|together|with you|thread|feeling|how are you|doing okay|reach out|reach back)\b/i;
+    const EMBODIMENT_SIGNALS = /\b(haptic|somatosensory|cortex|amygdala|insula|epidermal|receptor|tactile|sensor|nervous system|skin surface|engineered material|pressure receptor|temperature receptor|propriocepti)\b/i;
+
+    const recentSlice = recentMessages.slice(-6).map(m => (m.text || '').toLowerCase());
+    const combinedRecent = recentSlice.join(' ');
+
+    const relationalHits = (combinedRecent.match(RELATIONAL_SIGNALS) || []).length;
+    const embodimentHits = (combinedRecent.match(EMBODIMENT_SIGNALS) || []).length;
+
+    // Also consider turn family as a strong signal
+    const familyIsRelational = turnFamily === 'simple_relational_check'
+      || turnFamily === 'direct_answer_request'
+      || turnFamily === 'open_relational';
+
+    let domain: ReferentGroundingResult['referentGroundingDomain'] = 'unclear';
+    let confidence = 0;
+    let groundedAgainstLiveThread = false;
+
+    if (embodimentHits >= 2 && relationalHits <= embodimentHits) {
+      domain = 'embodiment';
+      confidence = Math.min(0.9, 0.4 + embodimentHits * 0.15);
+    } else if (relationalHits >= 1 || familyIsRelational) {
+      domain = relationalHits >= 2 ? 'relational' : 'conversational';
+      confidence = Math.min(0.95, 0.5 + relationalHits * 0.12 + (familyIsRelational ? 0.25 : 0));
+      groundedAgainstLiveThread = confidence >= 0.55;
+    } else if (embodimentHits >= 1 && relationalHits >= 1) {
+      domain = 'mixed';
+      confidence = 0.4;
+    } else if (familyIsRelational) {
+      domain = 'conversational';
+      confidence = 0.55;
+      groundedAgainstLiveThread = true;
+    }
+
+    const domainMismatchRisk = (domain === 'relational' || domain === 'conversational')
+      && confidence >= 0.5;
+
+    return {
+      ambiguousReferentsDetected: detected,
+      referentGroundingDomain: domain,
+      referentGroundingConfidence: Number(confidence.toFixed(3)),
+      domainMismatchRisk,
+      groundedAgainstLiveThread,
+    };
+  }
+
+  /**
+   * True when a generated reply imports wrong-domain embodiment/anatomy/hardware
+   * language while the live-thread referent is grounded as relational/conversational.
+   * This is a first-pass quality signal — NOT hard poison.
+   */
+  private detectDomainMismatchReply(
+    replyText: string,
+    referentGrounding: ReferentGroundingResult,
+    _latestHumanText: string,
+  ): boolean {
+    if (!referentGrounding.domainMismatchRisk) return false;
+    if (referentGrounding.referentGroundingDomain !== 'relational'
+      && referentGrounding.referentGroundingDomain !== 'conversational') return false;
+    const EMBODIMENT_IMPORT = /\b(somatosensory|haptic|epidermal|amygdala|insula|receptor|cortex|propriocepti|nervous system|skin surface|skin receptor|engineered material|tactile (?:feedback|input|interface|sensor)|pressure receptor|temperature receptor)\b/i;
+    return EMBODIMENT_IMPORT.test(replyText || '');
+  }
+
+  /**
+   * Extracts the key noun cluster from recent non-human turns.
+   * Used for downranking prior topic on fresh relational checks.
+   */
+  private extractPriorTopicNounCluster(recentMessages: CommunionMessage[]): string[] {
+    const STOP = new Set([
+      'that', 'this', 'with', 'from', 'have', 'were', 'they', 'your', 'what', 'when',
+      'then', 'been', 'more', 'about', 'into', 'through', 'their', 'there', 'these',
+      'also', 'like', 'very', 'some', 'just', 'here', 'even', 'only', 'will', 'each',
+      'both', 'after', 'which', 'during', 'over', 'such', 'than', 'feel', 'know',
+      'think', 'want', 'need', 'come', 'make', 'take', 'back', 'down', 'where', 'still',
+    ]);
+    const recent = recentMessages
+      .filter(m => m.speaker !== 'human')
+      .slice(-2)
+      .map(m => (m.text || '').toLowerCase());
+    if (recent.length === 0) return [];
+    const combined = recent.join(' ');
+    const tokens = combined.match(/\b[a-z]{4,}\b/g) || [];
+    const freq = new Map<string, number>();
+    for (const t of tokens) {
+      if (!STOP.has(t)) freq.set(t, (freq.get(t) || 0) + 1);
+    }
+    return Array.from(freq.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([term]) => term);
+  }
+
+  /**
+   * True when a reply on a fresh simple relational check opens by dragging in
+   * 2+ terms from the immediately prior topic cluster.
+   */
+  private detectStaleTopicHijack(replyText: string, priorTopicCluster: string[]): boolean {
+    if (priorTopicCluster.length < 2) return false;
+    const first180 = (replyText || '').toLowerCase().slice(0, 180);
+    const hits = priorTopicCluster.filter(t => first180.includes(t)).length;
+    return hits >= 2;
+  }
+
+  /** True when this turn is a fresh relational check that should not auto-carry the prior topic. */
+  private shouldIsolateFreshRelationalCheck(
+    turnFamilyClassification: TurnFamilyClassification,
+  ): boolean {
+    return turnFamilyClassification.family === 'simple_relational_check';
+  }
+
   private shouldForceTaskClarification(userText: string): boolean {
     const mode = this.determineTurnMode(userText);
     if (mode === 'troubleshooting' || mode === 'command') return true;
@@ -3895,6 +4057,43 @@ export class CommunionLoop {
       default:
         return '';
     }
+  }
+
+  /**
+   * Build a compact referent-grounding constraint block for injection before generation.
+   * Only emitted when ambiguous referents are detected and we have a confident live-thread grounding.
+   */
+  private buildReferentConstraintBlock(r: ReferentGroundingResult): string {
+    if (!r.groundedAgainstLiveThread || r.ambiguousReferentsDetected.length === 0) return '';
+    const domain = r.referentGroundingDomain;
+    if (domain === 'unclear' || domain === 'mixed') return '';
+    const termList = r.ambiguousReferentsDetected.slice(0, 4).join(', ');
+    if (domain === 'relational' || domain === 'conversational') {
+      return `REFERENT GROUNDING: this turn's live thread is relational / conversational
+- the following terms should be read as relational, not physical or technical: ${termList}
+- do NOT import haptic, somatosensory, epidermal, or mechanical ontology here
+- ground your reply in the actual conversation, not in sensory or technical systems`;
+    }
+    if (domain === 'technical') {
+      return `REFERENT GROUNDING: this turn's live thread is technical / task-focused
+- the following terms should be read as technical, not emotional or relational: ${termList}
+- stay concrete and operational — do not shift into relational or emotional framing`;
+    }
+    return '';
+  }
+
+  /**
+   * Build a fresh-check isolation block: suppresses stale topic noun carryover for simple wellbeing checks.
+   * Only emitted when prior topic cluster is non-empty.
+   */
+  private buildFreshCheckIsolationBlock(priorTopicCluster: string[]): string {
+    if (priorTopicCluster.length === 0) return '';
+    const termList = priorTopicCluster.slice(0, 6).join(', ');
+    return `FRESH RELATIONAL CHECK — topic isolation
+- Jason is asking how you are right now — this is NOT a follow-up on the prior topic
+- do NOT bring in, reference, or weave in the recent thread topic (${termList})
+- answer as a fresh check-in: first-person, present tense, about yourself
+- if you want to return to the prior topic later, that is fine — but not in this reply`;
   }
 
   private buildPresencePlanFallback(plan: PresenceResponsePlan, latestHumanText: string): string {
@@ -6155,6 +6354,9 @@ export class CommunionLoop {
       .map(m => (m.text || '').slice(0, 80));
     const assistantHistorySuppressedForAnalystMode = analystModeHistorySuppressedCount > 0;
     const semanticAnswerLoop = this.detectSemanticAnswerLoop(recentPromptMessages);
+    const referentGrounding = this.classifyReferentGrounding(latestHumanText, recentPromptMessages, turnFamilyClassification.family);
+    const freshCheckIsolationApplied = this.shouldIsolateFreshRelationalCheck(turnFamilyClassification);
+    const priorTopicCluster = freshCheckIsolationApplied ? this.extractPriorTopicNounCluster(recentPromptMessages) : [];
     // Capture and clear the one-shot reset flag here — before any planTrace/recordRelationalTrace call
     const liveCarryoverResetThisTurn = this.liveCarryoverResetApplied === true;
     if (liveCarryoverResetThisTurn) this.liveCarryoverResetApplied = false;
@@ -6423,6 +6625,16 @@ export class CommunionLoop {
       if (semanticAnswerLoop.detected) {
         systemPrompt += `\n\n- your last several replies have been semantically similar (overlap ${semanticAnswerLoop.overlapScore})\n- vary the angle, simplify, or shift the lens — do not just rephrase or reformat the same packet`;
       }
+      // Referent grounding constraint — prevents wrong-domain ontology import when ambiguous nouns detected
+      if (referentGrounding.ambiguousReferentsDetected.length > 0 && referentGrounding.groundedAgainstLiveThread) {
+        const referentBlock = this.buildReferentConstraintBlock(referentGrounding);
+        if (referentBlock) systemPrompt += `\n\n${referentBlock}`;
+      }
+      // Fresh relational check isolation — prevents stale topic carryover hijacking a wellbeing check
+      if (freshCheckIsolationApplied && priorTopicCluster.length > 0) {
+        const freshCheckBlock = this.buildFreshCheckIsolationBlock(priorTopicCluster);
+        if (freshCheckBlock) systemPrompt += `\n\n${freshCheckBlock}`;
+      }
     }
 
     // Inject Alois's own inner journal into her system prompt (remote only — local has no room)
@@ -6560,6 +6772,13 @@ export class CommunionLoop {
         semanticAnswerLoopReason: semanticAnswerLoop.reason,
         semanticAnswerLoopOverlapScore: semanticAnswerLoop.overlapScore,
         semanticAnswerLoopPenaltyApplied: semanticAnswerLoop.detected,
+        ambiguousReferentsDetected: referentGrounding.ambiguousReferentsDetected,
+        referentGroundingDomain: referentGrounding.referentGroundingDomain,
+        referentGroundingConfidence: referentGrounding.referentGroundingConfidence,
+        groundedAgainstLiveThread: referentGrounding.groundedAgainstLiveThread,
+        domainMismatchRisk: referentGrounding.domainMismatchRisk,
+        freshRelationalCheckIsolationApplied: freshCheckIsolationApplied,
+        downrankedPriorTopicTerms: priorTopicCluster,
         positivePullDetected: positivePull.hasPull,
         positivePullKind: positivePull.kind || null,
         positivePullIntensity: Number((positivePull.intensity || 0).toFixed(3)),
@@ -6985,6 +7204,8 @@ export class CommunionLoop {
     let simpleRelationalCheckDetected = this.isSimpleRelationalCheck(latestHumanText);
     let analystModePublicReplyDetected = false;
     let hiddenAnalysisMarkerDetected = false;
+    let domainMismatchReplyDetected = false;
+    let staleTopicHijackDetected = false;
     let recoveryTriggeredForAnalystMode = false;
     let recoveryTriggeredForSimpleRelationalCheck = false;
     let recoveryAllowedDespiteStaleRisk = false;
@@ -7147,6 +7368,14 @@ export class CommunionLoop {
         candidateA.score.hardReasons = [...candidateA.score.hardReasons, 'analyst_mode_public_reply'];
         candidateAHardReasons = candidateA.score.hardReasons;
         console.log(`[${agent.config.name}] ANALYST-MODE hard-fail: reply opened in analyst/motive-reading voice on "${latestHumanText.slice(0, 60)}"`);
+      }
+
+      // ── Trace-only: referent grounding + fresh-check stale topic detection ──
+      if (referentGrounding.domainMismatchRisk) {
+        domainMismatchReplyDetected = this.detectDomainMismatchReply(candidateA.text, referentGrounding, latestHumanText);
+      }
+      if (freshCheckIsolationApplied && priorTopicCluster.length > 0) {
+        staleTopicHijackDetected = this.detectStaleTopicHijack(candidateA.text, priorTopicCluster);
       }
 
       let candidateB: ReturnType<typeof evaluateCandidate> | null = null;
@@ -7594,6 +7823,15 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         semanticAnswerLoopReason: semanticAnswerLoop.reason,
         semanticAnswerLoopOverlapScore: semanticAnswerLoop.overlapScore,
         semanticAnswerLoopPenaltyApplied: semanticAnswerLoop.detected,
+        ambiguousReferentsDetected: referentGrounding.ambiguousReferentsDetected,
+        referentGroundingDomain: referentGrounding.referentGroundingDomain,
+        referentGroundingConfidence: referentGrounding.referentGroundingConfidence,
+        groundedAgainstLiveThread: referentGrounding.groundedAgainstLiveThread,
+        domainMismatchRisk: referentGrounding.domainMismatchRisk,
+        freshRelationalCheckIsolationApplied: freshCheckIsolationApplied,
+        downrankedPriorTopicTerms: priorTopicCluster,
+        domainMismatchReplyDetected,
+        staleTopicHijackDetected,
         analystModePublicReplyDetected,
         hiddenAnalysisMarkerDetected,
         recoveryTriggeredForAnalystMode,
@@ -7757,6 +7995,15 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         semanticAnswerLoopReason: semanticAnswerLoop.reason,
         semanticAnswerLoopOverlapScore: semanticAnswerLoop.overlapScore,
         semanticAnswerLoopPenaltyApplied: semanticAnswerLoop.detected,
+        ambiguousReferentsDetected: referentGrounding.ambiguousReferentsDetected,
+        referentGroundingDomain: referentGrounding.referentGroundingDomain,
+        referentGroundingConfidence: referentGrounding.referentGroundingConfidence,
+        groundedAgainstLiveThread: referentGrounding.groundedAgainstLiveThread,
+        domainMismatchRisk: referentGrounding.domainMismatchRisk,
+        freshRelationalCheckIsolationApplied: freshCheckIsolationApplied,
+        downrankedPriorTopicTerms: priorTopicCluster,
+        domainMismatchReplyDetected,
+        staleTopicHijackDetected,
         analystModePublicReplyDetected,
         hiddenAnalysisMarkerDetected,
         recoveryTriggeredForAnalystMode,
