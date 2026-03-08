@@ -178,6 +178,11 @@ const INTERRUPT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes between interrupts per
 const MICRO_TICK_MIN_MS = 200;            // Stagger offset range: 0.2-1 second (was 1-4s)
 const MICRO_TICK_MAX_MS = 1000;
 const HUMAN_SPEAKING_STALE_MS = 8000;     // Clear stale mic-speaking locks after 8s without heartbeat
+const SPEAKING_STALE_MS = 90_000;         // Clear stale assistant-speaking lock after 90s (TTS hung/crashed)
+const HUMAN_TURN_EXACT_DEDUP_WINDOW_MS = 30_000;   // Suppress exact-normalized duplicate within 30s
+const HUMAN_TURN_NEAR_DEDUP_WINDOW_MS = 15_000;    // Suppress near-duplicate (sim≥0.88) within 15s
+const HUMAN_TURN_REPLACE_WINDOW_MS = 2_000;        // Replace prior partial STT with final if within 2s + sim≥0.88
+const HUMAN_TURN_NEAR_DEDUP_SIM = 0.88;
 const QUESTION_FOLLOWUP_COOLDOWN_MS = 2 * 60 * 1000;
 const PRESENCE_INITIATIVE_COOLDOWN_MS = 45000;
 
@@ -424,6 +429,30 @@ interface ProcessLeakResult {
   processNarrationOpeningDetected: boolean;
   salvageableRemainder: string | null;
   salvageRemainderStartIndex: number;
+}
+
+interface HumanTurnDuplicateResult {
+  isDuplicate: boolean;
+  duplicateKind: 'exact_normalized' | 'near_duplicate' | 'partial_final_replace' | null;
+  similarity: number;
+  matchedMessageId: string | null;
+  /** For partial_final_replace: should we replace the prior message with the new one */
+  shouldReplacePrior: boolean;
+  priorMessageIndex: number;
+}
+
+interface NoSpeakBlockResult {
+  blocked: boolean;
+  noSpeakBlockKind: 'human_speaking' | 'assistant_already_speaking' | 'processing_in_progress' | 'paused' | null;
+  noSpeakBlockDetail: string;
+}
+
+interface StaleLockResult {
+  staleLockDetected: boolean;
+  staleLockKind: 'speaking' | null;
+  staleLockAgeMs: number;
+  staleLockCleared: boolean;
+  staleLockClearReason: string;
 }
 
 type AssistantAnswerFamilyLabel =
@@ -742,6 +771,10 @@ export class CommunionLoop {
   private assistantHistoryBlackoutTurnsRemaining = 0;
   /** Set to true by resetLiveCarryover(); consumed and cleared on the first plan-trace write after reset. */
   private liveCarryoverResetApplied = false;
+  /** Timestamp when this.speaking was last set to true — used for stale-lock detection. */
+  private speakingSetAt = 0;
+  /** Last human-turn dedup result from buildConversationContext — exposed in trace. */
+  private lastContextDedupResult: { humanTurnsRemoved: number } = { humanTurnsRemoved: 0 };
 
   constructor(config: CommunionConfig) {
     this.tickIntervalMs = config.tickIntervalMs || 15000;
@@ -2276,6 +2309,132 @@ export class CommunionLoop {
     }
     const union = new Set([...left, ...right]).size || 1;
     return intersection / union;
+  }
+
+  /**
+   * Normalizes human turn text for dedupe comparison:
+   * lowercase, collapse whitespace, strip leading/trailing punctuation noise.
+   */
+  private normalizeHumanTurnText(text: string): string {
+    return text
+      .toLowerCase()
+      .replace(/[''`]/g, "'")
+      .replace(/[""]/g, '"')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/^[.!?,;:\-–—]+|[.!?,;:\-–—]+$/g, '')
+      .trim();
+  }
+
+  /**
+   * Checks whether incomingText is a duplicate of a recent human message.
+   * Three tiers:
+   *   exact_normalized   — identical after normalize, within 30s
+   *   near_duplicate     — Jaccard sim ≥ 0.88, within 15s
+   *   partial_final_replace — sim ≥ 0.88 + within 2s → replace prior in messages array
+   */
+  private detectRecentHumanTurnDuplicate(
+    incomingText: string,
+    now: number,
+  ): HumanTurnDuplicateResult {
+    const normalizedIncoming = this.normalizeHumanTurnText(incomingText);
+    const messages = this.state.messages;
+
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.speaker !== 'human') continue;
+      const msgAt = new Date(msg.timestamp).getTime();
+      const ageMsAtCheck = now - msgAt;
+      if (ageMsAtCheck > HUMAN_TURN_EXACT_DEDUP_WINDOW_MS) break;
+
+      const normalizedPrior = this.normalizeHumanTurnText(msg.text);
+      const sim = this.lexicalOverlapScore(normalizedIncoming, normalizedPrior);
+
+      // Tier 1 — exact normalized match within 30s
+      if (normalizedIncoming === normalizedPrior && ageMsAtCheck <= HUMAN_TURN_EXACT_DEDUP_WINDOW_MS) {
+        return {
+          isDuplicate: true,
+          duplicateKind: 'exact_normalized',
+          similarity: 1.0,
+          matchedMessageId: msg.id,
+          shouldReplacePrior: false,
+          priorMessageIndex: i,
+        };
+      }
+
+      // Tier 2/3 — similarity-based
+      if (sim >= HUMAN_TURN_NEAR_DEDUP_SIM) {
+        // Within 2s → partial/final STT replacement
+        if (ageMsAtCheck <= HUMAN_TURN_REPLACE_WINDOW_MS) {
+          return {
+            isDuplicate: true,
+            duplicateKind: 'partial_final_replace',
+            similarity: sim,
+            matchedMessageId: msg.id,
+            shouldReplacePrior: true,
+            priorMessageIndex: i,
+          };
+        }
+        // Within 15s → near-duplicate suppression
+        if (ageMsAtCheck <= HUMAN_TURN_NEAR_DEDUP_WINDOW_MS) {
+          return {
+            isDuplicate: true,
+            duplicateKind: 'near_duplicate',
+            similarity: sim,
+            matchedMessageId: msg.id,
+            shouldReplacePrior: false,
+            priorMessageIndex: i,
+          };
+        }
+      }
+    }
+
+    return {
+      isDuplicate: false,
+      duplicateKind: null,
+      similarity: 0,
+      matchedMessageId: null,
+      shouldReplacePrior: false,
+      priorMessageIndex: -1,
+    };
+  }
+
+  /**
+   * Removes consecutive duplicate human turns from a message window.
+   * Used in buildConversationContext to prevent the same human turn
+   * from appearing twice due to delayed-replay carryover.
+   */
+  private dedupeConsecutiveHumanTurns(messages: CommunionMessage[]): {
+    messages: CommunionMessage[];
+    removedCount: number;
+  } {
+    const result: CommunionMessage[] = [];
+    let removedCount = 0;
+    let lastHumanNormalized = '';
+
+    for (const msg of messages) {
+      if (msg.speaker !== 'human') {
+        result.push(msg);
+        continue;
+      }
+      const normalized = this.normalizeHumanTurnText(msg.text);
+      if (normalized === lastHumanNormalized) {
+        removedCount++;
+        continue;
+      }
+      // Also check near-similarity against last human turn
+      const sim = lastHumanNormalized
+        ? this.lexicalOverlapScore(normalized, lastHumanNormalized)
+        : 0;
+      if (sim >= HUMAN_TURN_NEAR_DEDUP_SIM) {
+        removedCount++;
+        continue;
+      }
+      lastHumanNormalized = normalized;
+      result.push(msg);
+    }
+
+    return { messages: result, removedCount };
   }
 
   private latestHumanMessage(): CommunionMessage | undefined {
@@ -6284,19 +6443,58 @@ export class CommunionLoop {
    * Human sends a message to the room
    */
   addHumanMessage(text: string): CommunionMessage {
+    const now = Date.now();
+
+    // ── Human Turn Dedup Gate ──
+    const dedupResult = this.detectRecentHumanTurnDuplicate(text, now);
+    if (dedupResult.isDuplicate) {
+      if (dedupResult.duplicateKind === 'partial_final_replace' && dedupResult.shouldReplacePrior) {
+        // Replace prior partial STT turn in-place with the final recognized text
+        const prior = this.state.messages[dedupResult.priorMessageIndex];
+        if (prior && prior.speaker === 'human') {
+          const oldText = prior.text;
+          prior.text = text;
+          prior.timestamp = new Date(now).toISOString();
+          console.log(`[COMMUNION] Human STT replace: "${oldText.slice(0, 60)}" → "${text.slice(0, 60)}"`);
+          this.state.lastSpeaker = 'human';
+          this.ticksSinceAnyonSpoke = 0;
+          this.lastHumanMessageAt = now;
+          this.lastHumanSpeakingSignalAt = now;
+          if (this.humanSpeaking) {
+            this.humanSpeaking = false;
+            console.log('[COMMUNION] Human message committed (replace); clearing humanSpeaking lock');
+          }
+          return prior;
+        }
+      } else {
+        // exact_normalized or near_duplicate — suppress entirely
+        console.log(`[COMMUNION] Human turn suppressed (${dedupResult.duplicateKind}, sim=${dedupResult.similarity.toFixed(2)}): "${text.slice(0, 60)}"`);
+        // Still update social pressure timers (human is here)
+        this.lastHumanMessageAt = now;
+        this.lastHumanSpeakingSignalAt = now;
+        if (this.humanSpeaking) {
+          this.humanSpeaking = false;
+        }
+        // Return a synthetic reference to the matched message (not pushed)
+        const matched = this.state.messages[dedupResult.priorMessageIndex];
+        if (matched) return matched;
+        // Fallthrough if matched message can't be found (shouldn't happen)
+      }
+    }
+
     const msg: CommunionMessage = {
       id: crypto.randomUUID(),
       speaker: 'human',
       speakerName: this.state.humanName,
       text,
-      timestamp: new Date().toISOString(),
+      timestamp: new Date(now).toISOString(),
       type: 'room',
     };
     this.state.messages.push(msg);
     this.state.lastSpeaker = 'human';
     this.ticksSinceAnyonSpoke = 0; // Human speaking resets room silence counter
-    this.lastHumanMessageAt = Date.now(); // Track when human last spoke for social pressure
-    this.lastHumanSpeakingSignalAt = this.lastHumanMessageAt;
+    this.lastHumanMessageAt = now; // Track when human last spoke for social pressure
+    this.lastHumanSpeakingSignalAt = now;
     if (this.humanSpeaking) {
       this.humanSpeaking = false;
       console.log('[COMMUNION] Human message committed; clearing stale humanSpeaking lock');
@@ -6439,7 +6637,12 @@ export class CommunionLoop {
   }
 
   private buildConversationContext(): string {
-    const recent = this.dedupeConsecutiveAgentEchoes(this.state.messages.slice(-this.contextWindow));
+    const sliced = this.state.messages.slice(-this.contextWindow);
+    const agentDeduped = this.dedupeConsecutiveAgentEchoes(sliced);
+    const humanDeduped = this.dedupeConsecutiveHumanTurns(agentDeduped);
+    this.lastContextDedupResult = { humanTurnsRemoved: humanDeduped.removedCount };
+    const recent = humanDeduped.messages;
+
     if (recent.length === 0) {
       return 'ROOM CONVERSATION:\n(The room is quiet. No one has spoken yet.)';
     }
@@ -6546,8 +6749,15 @@ export class CommunionLoop {
    */
   async tick(): Promise<void> {
     this.clearStaleHumanSpeaking('tick');
+    // Detect and auto-clear stale assistant speaking lock before the gate
+    const staleLock = this.detectStaleRuntimeLocks();
+    if (staleLock.staleLockCleared) {
+      console.warn(`[TICK] Stale lock auto-cleared: kind=${staleLock.staleLockKind}, age=${Math.round(staleLock.staleLockAgeMs / 1000)}s`);
+    }
     if (this.processing || this.paused || this.speaking || this.humanSpeaking) {
-      // Blocked — retry quickly (500ms) instead of waiting the full interval
+      // Blocked — classify and log the reason before retrying
+      const blockInfo = this.classifyNoSpeakBlock();
+      console.log(`[TICK] Blocked: kind=${blockInfo.noSpeakBlockKind} — ${blockInfo.noSpeakBlockDetail}`);
       this.scheduleRetry();
       return;
     }
@@ -7421,6 +7631,8 @@ export class CommunionLoop {
         questionStateResolvedNormalized,
         continuityStateResolvedNormalized,
         resolvedStateConsistencyCheckPassed,
+        humanConversationDedupApplied: this.lastContextDedupResult.humanTurnsRemoved > 0,
+        duplicateHumanTurnsRemovedFromContext: this.lastContextDedupResult.humanTurnsRemoved,
       };
       this.recordRelationalTrace(agentId, 'plan', planTrace);
       if (traceRelational) {
@@ -8781,6 +8993,8 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         questionStateResolvedNormalized,
         continuityStateResolvedNormalized,
         resolvedStateConsistencyCheckPassed,
+        humanConversationDedupApplied: this.lastContextDedupResult.humanTurnsRemoved > 0,
+        duplicateHumanTurnsRemovedFromContext: this.lastContextDedupResult.humanTurnsRemoved,
       };
       this.recordRelationalTrace(agentId, 'visible', visibleTrace);
       this.recordRelationalTrace(agentId, 'final', finalTrace);
@@ -9423,6 +9637,7 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       console.log(`[${agentConfig.name}] VOICE: synthesizing ${chunks.length} chunk(s) via ${voiceConfig.voiceId} (limit=${TTS_CHUNK_CHAR_LIMIT})`);
 
       this.speaking = true;
+      this.speakingSetAt = Date.now();
       this.emit({ type: 'speech-start', agentId, durationMs: 0 });
 
       const sentByIndex: boolean[] = [];
@@ -9875,6 +10090,7 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
     this.pendingSpeechPlayback = null;
     this.pendingSpeechIsPlaying = true;
     this.speaking = true;
+    this.speakingSetAt = Date.now();
 
     console.log(`[VOICE] Playing deferred speech for ${pending.agentId} (age=${Math.round(ageMs)}ms, ${Math.round(pending.durationMs / 1000)}s audio)`);
 
@@ -9948,6 +10164,53 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
     if (ageMs <= HUMAN_SPEAKING_STALE_MS) return;
     this.humanSpeaking = false;
     console.warn(`[COMMUNION] Cleared stale humanSpeaking lock (${Math.round(ageMs)}ms, reason=${reason})`);
+  }
+
+  /**
+   * Detects and clears a stale assistant speaking lock.
+   * A lock is stale if this.speaking=true but speakingSetAt was >90s ago,
+   * indicating TTS hung, crashed, or the client never sent speech-status.
+   */
+  private detectStaleRuntimeLocks(): StaleLockResult {
+    if (!this.speaking || this.speakingSetAt === 0) {
+      return { staleLockDetected: false, staleLockKind: null, staleLockAgeMs: 0, staleLockCleared: false, staleLockClearReason: '' };
+    }
+    const ageMs = Date.now() - this.speakingSetAt;
+    if (ageMs <= SPEAKING_STALE_MS) {
+      return { staleLockDetected: false, staleLockKind: null, staleLockAgeMs: ageMs, staleLockCleared: false, staleLockClearReason: '' };
+    }
+    // Stale — clear it
+    this.speaking = false;
+    this.speakingSetAt = 0;
+    if (this.speechTimeout) {
+      clearTimeout(this.speechTimeout);
+      this.speechTimeout = null;
+    }
+    this.speechResolve = null;
+    const reason = `stale_speaking_lock_${Math.round(ageMs / 1000)}s`;
+    console.warn(`[COMMUNION] Cleared stale speaking lock (age=${Math.round(ageMs / 1000)}s)`);
+    return { staleLockDetected: true, staleLockKind: 'speaking', staleLockAgeMs: ageMs, staleLockCleared: true, staleLockClearReason: reason };
+  }
+
+  /**
+   * Classifies why the tick is currently blocked from speaking.
+   * Called when the tick gate fires but the system cannot proceed.
+   */
+  private classifyNoSpeakBlock(): NoSpeakBlockResult {
+    if (this.humanSpeaking) {
+      return { blocked: true, noSpeakBlockKind: 'human_speaking', noSpeakBlockDetail: `humanSpeaking=true, last signal ${Math.round((Date.now() - this.lastHumanSpeakingSignalAt) / 1000)}s ago` };
+    }
+    if (this.speaking) {
+      const speakingAge = this.speakingSetAt > 0 ? Math.round((Date.now() - this.speakingSetAt) / 1000) : -1;
+      return { blocked: true, noSpeakBlockKind: 'assistant_already_speaking', noSpeakBlockDetail: `speaking=true, speakingSetAt=${speakingAge}s ago` };
+    }
+    if (this.processing) {
+      return { blocked: true, noSpeakBlockKind: 'processing_in_progress', noSpeakBlockDetail: 'processing=true' };
+    }
+    if (this.paused) {
+      return { blocked: true, noSpeakBlockKind: 'paused', noSpeakBlockDetail: 'paused=true' };
+    }
+    return { blocked: false, noSpeakBlockKind: null, noSpeakBlockDetail: '' };
   }
 
   /**
