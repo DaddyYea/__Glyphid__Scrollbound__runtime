@@ -10571,8 +10571,9 @@ ${relayDetection.isDuplicateResend ? `- This appears to be a resend. Acknowledge
       lts.stages.journalAcceptedAtMs = Date.now();
       const originalJournalText = responseText;
       journalClass = this.classifyJournalContent(originalJournalText);
-      const needsVisibleReply = hasLatestHuman && (turnMode === 'relational' || !!directQuestionContract?.requiresAnswer);
-      visibleReplyNeededAfterJournal = needsVisibleReply;
+      // Journals are journals — never convert to speech. If Alois chose to journal, that is the action.
+      const needsVisibleReply = false;
+      visibleReplyNeededAfterJournal = false;
 
       if (needsVisibleReply) {
         journalRoutedAwayFromVisible = true;
