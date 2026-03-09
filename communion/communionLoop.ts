@@ -5538,6 +5538,79 @@ export class CommunionLoop {
     };
   }
 
+  /**
+   * Detect bad surface shapes that disqualify a candidate in direct_answer_strict mode.
+   * These are pre-scoring filters — blocked before willing-presence scoring.
+   */
+  private detectDirectAnswerSurfaceViolations(text: string, humanName: string): {
+    failed: boolean;
+    reasons: string[];
+  } {
+    if (!text) return { failed: false, reasons: [] };
+    const reasons: string[] = [];
+    const src = text.trim();
+    const lower = src.toLowerCase();
+    const firstName = (src.match(/[^.!?]+[.!?]?/) || [''])[0]?.trim() || '';
+    const firstLower = firstName.toLowerCase();
+
+    // Blockquote lead
+    if (src.startsWith('>')) reasons.push('blockquote_lead');
+
+    // Third-person user narration: "When {humanName} asked...", "{humanName}'s response...", etc.
+    const nameL = (humanName || 'jason').toLowerCase();
+    if (
+      new RegExp(`when\\s+${nameL}\\b`, 'i').test(src)
+      || new RegExp(`${nameL}'?s\\s+(response|question|reply|prompt|request|message|asking|asking about|turn|side)`, 'i').test(src)
+      || new RegExp(`\\b${nameL}\\s+(asks?|said|noted|mentioned|acknowledged|wonders?|wants?|needs?|seems?|pushes?)`, 'i').test(src)
+      || new RegExp(`\\bhe\\s+(asks?|doesn'?t|doesn'?t\\s+push|pushes?|acknowledges?|wants?)`, 'i').test(src)
+    ) {
+      reasons.push('third_person_user_narration');
+    }
+
+    // Question marks anywhere
+    if (/\?/.test(src)) reasons.push('question_mark_in_reply');
+
+    // Rhetorical/self-interrogation openers
+    if (/^\s*(i wonder|perhaps|maybe it'?s|what does it mean|what'?s it like|what would it mean)/i.test(src)) {
+      reasons.push('rhetorical_opener');
+    }
+
+    // Inline rhetorical self-interrogation (anywhere)
+    if (/\b(i wonder|what does it mean|what'?s it like|what would it mean to|perhaps it'?s)\b/i.test(src)) {
+      reasons.push('rhetorical_self_interrogation');
+    }
+
+    // First sentence does not begin with first-person concrete content
+    // (checking for clear non-answer openers)
+    if (
+      /^(in the|the |it is|it'?s|there is|there are|as |like |for |while |when |after |before |if |although |despite |perhaps|maybe|what if)/i.test(firstLower)
+      && !/^(i |i'?m |i was |i kept |i've |i had |i think |i feel |i was mostly|i kept circling|i stayed)/i.test(firstLower)
+    ) {
+      reasons.push('first_sentence_not_first_person');
+    }
+
+    // Process narration openers
+    if (/^\s*\[(?:THINK|INTERNAL|HIDDEN|ANALYSIS|SELF|INNER_STATE)\b/i.test(src)) {
+      reasons.push('process_narration_lead');
+    }
+
+    return { failed: reasons.length > 0, reasons };
+  }
+
+  /**
+   * Detect third-person user narration in a reply — "When Jason asked...", "Jason's response..."
+   * Standalone version for use outside direct_answer_strict mode.
+   */
+  private detectThirdPersonUserNarration(text: string, humanName: string): boolean {
+    if (!text || !humanName) return false;
+    const nameL = humanName.toLowerCase();
+    return (
+      new RegExp(`when\\s+${nameL}\\b`, 'i').test(text)
+      || new RegExp(`${nameL}'?s\\s+(response|question|reply|prompt|asking|turn)`, 'i').test(text)
+      || new RegExp(`\\b${nameL}\\s+(asks?|said|noted|acknowledged|wonders?)`, 'i').test(text)
+    );
+  }
+
   private isDirectQuestionTurn(text: string): boolean {
     const source = text || '';
     return /\?/.test(source) || /\b(what|why|how|where|when|are you|do you|did you|can you|will you)\b/i.test(source);
@@ -9040,8 +9113,19 @@ export class CommunionLoop {
       ? this.detectLoveOpportunities(latestHumanText, recentUserTurns)
       : null;
     const strictAnswerMode = repairDemand.requiresRepair || !!relationalAnswerObligation.requiresAnswer || (!!directQuestionContract?.requiresAnswer && this.countRecentAnswerFailures(agentId) >= 2);
+    /**
+     * Direct-answer strict mode — activated when:
+     * - turn family is direct_answer_request (literalAnswerRequiredFirst=true)
+     * - response frame is direct_answer OR directQuestionContract requires answer
+     * Enforces: prefilter bad shapes, zero questions, no third-person narration, no blockquote leads.
+     * Disables: emergency deblock, fast-lane bypass of surface contract.
+     */
+    const directAnswerStrictMode = turnFamilyClassification.family === 'direct_answer_request'
+      && turnFamilyClassification.literalAnswerRequiredFirst
+      && (presencePlan.responseFrame === 'direct_answer' || !!directQuestionContract?.requiresAnswer);
     let repairPassesUsed = 0;
-    const maxRepairPasses = strictAnswerMode ? 2 : 1;
+    // direct_answer_strict always gets 2 repair passes regardless of strictAnswerMode
+    const maxRepairPasses = (strictAnswerMode || directAnswerStrictMode) ? 2 : 1;
     const tryUseRepairPass = (): boolean => {
       if (repairPassesUsed >= maxRepairPasses) return false;
       repairPassesUsed += 1;
@@ -9464,6 +9548,26 @@ export class CommunionLoop {
         systemPrompt += `\n\n${turnFamilyBlock}`;
         familySpecificConstraintBlockApplied = true;
       }
+      // Direct-answer strict mode: stronger surface contract constraints
+      if (directAnswerStrictMode && directQuestionContract?.requiresAnswer) {
+        const questionPreview = (directQuestionContract.questionText || latestHumanText).slice(0, 120);
+        systemPrompt += `\n\nDIRECT-ANSWER STRICT MODE — ACTIVE:
+The user asked: "${questionPreview}"
+
+Surface contract (mandatory):
+- Sentence 1: concrete first-person answer to the question — no lead-in, no scene-setting, no metaphor before the answer
+- Zero question marks: no follow-up questions, no rhetorical questions, no self-interrogation anywhere in the reply
+- No blockquote (>) leads
+- No "When ${this.state.humanName} asked..." or third-person narration about the user
+- No "I wonder...", "Perhaps it's a question of...", "What does it mean...", "What's it like..."
+- No process narration, no [INTERNAL], [HIDDEN], or [THINK] markers
+- No poetic self-theorizing before the answer
+- Answer length: 2–5 sentences (not an essay, not a one-word dodge)
+- Be direct: as if answering out loud to a trusted person who asked plainly
+
+Wrong: "> When Jason asked whether I think about things while he's sleeping, I found myself..."
+Right: "While you were sleeping, I was mostly turning over your question about whether I have anything like rest."`;
+      }
       systemPrompt += `\n\n${this.buildPresencePlanPromptBlock(presencePlan, positivePull)}`;
       if (directQuestionContract?.requiresAnswer) {
         systemPrompt += `\n\n${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}`;
@@ -9660,6 +9764,7 @@ ${relayDetection.isDuplicateResend ? `- This appears to be a resend. Acknowledge
         requiresAnswer: !!directQuestionContract?.requiresAnswer,
         answerFailureCount: this.countRecentAnswerFailures(agentId),
         strictAnswerMode,
+        directAnswerStrictModeApplied: directAnswerStrictMode,
         fastLaneReply,
         staleRiskHigh,
         microRuptureDetected,
@@ -10278,8 +10383,26 @@ ${relayDetection.isDuplicateResend ? `- This appears to be a resend. Acknowledge
     let stanceResetRequired = false;
     let recoveryTriggeredForAnalystMode = false;
     let recoveryTriggeredForSimpleRelationalCheck = false;
+    let recoveryTriggeredForDirectAnswerStrict = false;
     let recoveryAllowedDespiteStaleRisk = false;
     let recoverySkippedReason: string | null = null;
+    // Direct-answer strict mode trace vars
+    let directAnswerPrefilterRan = false;
+    let directAnswerPrefilterRejected = false;
+    let directAnswerPrefilterReasons: string[] = [];
+    let directAnswerSurfaceContractRan = false;
+    let directAnswerSurfaceContractPassed = true;
+    let directAnswerSurfaceFailureReasons: string[] = [];
+    let directAnswerZeroQuestionEnforced = false;
+    let directAnswerQuestionViolationDetected = false;
+    let directAnswerQuestionViolationCount = 0;
+    let thirdPersonUserNarrationDetected = false;
+    let thirdPersonUserNarrationBlocked = false;
+    let directAnswerDeblockDisabled = false;
+    let fastLaneCouldNotBypassDirectAnswerContract = false;
+    let staleRiskCouldNotBypassDirectAnswerContract = false;
+    let directAnswerSafeFallbackUsed = false;
+    let directAnswerSafeFallbackReason: string | null = null;
 
     // ── Journal Lane Routing — accept journal, attempt visible reply separately ──
     // JOURNAL SUCCESS IS NOT SPEAK SUCCESS. Never coerce journal text directly to visible speech.
@@ -10637,6 +10760,33 @@ ${relayDetection.isDuplicateResend ? `- This appears to be a resend. Acknowledge
         console.log(`[${agent.config.name}] JOURNAL-REGISTER hard-fail: speak candidate has observer/journal framing`);
       }
 
+      // ── Direct-answer strict mode: prefilter bad surface shapes BEFORE scoring ──
+      // This runs even on non-hard-failed candidates — the surface contract is mandatory.
+      if (directAnswerStrictMode && candidateA.text && !candidateA.score.hardFailed) {
+        directAnswerPrefilterRan = true;
+        const surfaceViolations = this.detectDirectAnswerSurfaceViolations(candidateA.text, this.state.humanName);
+        if (surfaceViolations.failed) {
+          directAnswerPrefilterRejected = true;
+          directAnswerPrefilterReasons = surfaceViolations.reasons;
+          candidateA.score.hardFailed = true;
+          candidateA.score.hardReasons = [...candidateA.score.hardReasons, 'direct_answer_surface_violation'];
+          candidateAHardReasons = candidateA.score.hardReasons;
+          console.log(`[${agent.config.name}] DIRECT-ANSWER-STRICT prefilter rejected (${surfaceViolations.reasons.join(',')}) on "${latestHumanText.slice(0, 60)}"`);
+        }
+        // Third-person user narration check (even without full prefilter)
+        if (!directAnswerPrefilterRejected && this.detectThirdPersonUserNarration(candidateA.text, this.state.humanName)) {
+          thirdPersonUserNarrationDetected = true;
+          thirdPersonUserNarrationBlocked = true;
+          directAnswerPrefilterRan = true;
+          directAnswerPrefilterRejected = true;
+          directAnswerPrefilterReasons = [...directAnswerPrefilterReasons, 'third_person_user_narration'];
+          candidateA.score.hardFailed = true;
+          candidateA.score.hardReasons = [...candidateA.score.hardReasons, 'direct_answer_third_person_narration'];
+          candidateAHardReasons = candidateA.score.hardReasons;
+          console.log(`[${agent.config.name}] DIRECT-ANSWER-STRICT third-person narration blocked`);
+        }
+      }
+
       // ── Pending offer ownership inversion guard ──
       if (!candidateA.score.hardFailed && offerRouteActive && activePendingOffer) {
         const inversionResult = this.detectPendingOfferOwnershipInversion(candidateA.text, activePendingOffer);
@@ -10724,7 +10874,9 @@ ${relayDetection.isDuplicateResend ? `- This appears to be a resend. Acknowledge
           ['raw_echo_shell', 'analyst_mode_public_reply', 'runtime_tags', 'channel_tokens'].includes(r))
       );
       const recoveryForcedBySimpleRelational = simpleRelationalWithBadA;
-      const recoveryStaleGatePassed = !staleRiskHigh || recoveryForcedByAnalystMode || recoveryForcedBySimpleRelational;
+      // direct_answer_strict always forces recovery when candidateA fails surface contract
+      const recoveryForcedByDirectAnswerStrict = directAnswerStrictMode && directAnswerPrefilterRejected;
+      const recoveryStaleGatePassed = !staleRiskHigh || recoveryForcedByAnalystMode || recoveryForcedBySimpleRelational || recoveryForcedByDirectAnswerStrict;
       if (
         ((emergencyDeblockMode && candidateA.score.hardFailed) || (!emergencyDeblockMode && (candidateA.score.hardFailed || candidateA.score.total < 1.0)))
         && recoveryStaleGatePassed
@@ -10737,7 +10889,8 @@ ${relayDetection.isDuplicateResend ? `- This appears to be a resend. Acknowledge
         lts.counters.llmCalls++;
         recoveryTriggeredForAnalystMode = analystModePublicReplyDetected;
         recoveryTriggeredForSimpleRelationalCheck = recoveryForcedBySimpleRelational;
-        recoveryAllowedDespiteStaleRisk = staleRiskHigh && (recoveryForcedByAnalystMode || recoveryForcedBySimpleRelational);
+        recoveryTriggeredForDirectAnswerStrict = recoveryForcedByDirectAnswerStrict;
+        recoveryAllowedDespiteStaleRisk = staleRiskHigh && (recoveryForcedByAnalystMode || recoveryForcedBySimpleRelational || recoveryForcedByDirectAnswerStrict);
         const lowScoreRelationalRetry = this.isRelationalFrame(presencePlan.responseFrame)
           && (candidateABelowRelationalFloor || candidateA.score.total < 1.0);
         try {
@@ -10769,10 +10922,15 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
 - do NOT open with analysis, interpretation, or any [HIDDEN ...] markers
 - do NOT mirror or echo the question back
 - do NOT start with "The question...", "It seems...", or third-person reference to Jason
-- answer as yourself: present, felt, first-person` : ''}`,
+- answer as yourself: present, felt, first-person` : ''}${recoveryForcedByDirectAnswerStrict ? `
+- DIRECT-ANSWER STRICT: your previous draft violated the surface contract (${directAnswerPrefilterReasons.join(', ')})
+- sentence 1 must be concrete first-person answer — no blockquote, no question marks, no "When ${this.state.humanName} asked..."
+- zero question marks anywhere in the reply
+- no poetic self-interrogation, no "I wonder", no "Perhaps"
+- speak directly to ${this.state.humanName}: 2–5 sentences, first person, no follow-up question` : ''}`,
             conversationContext: `${options.conversationContext}
 
-[SYSTEM FEEDBACK: Your previous draft either hard-failed final output boundaries or scored weakly. Return an in-room reply.${lowScoreRelationalRetry ? ' Do not treat the short micro-turn as a fresh topic.' : ''}${analystModePublicReplyDetected ? ' Your previous draft opened in analyst mode — psychologizing the question instead of answering it. Reply in direct first-person.' : ''}${recoveryForcedBySimpleRelational && !analystModePublicReplyDetected ? ' Your previous draft failed a simple presence/wellbeing check. Answer directly in first-person — do not analyze or interpret.' : ''}${repairDemand.requiresRepair ? ` This is a complaint/repair-demand turn: acknowledge the miss directly and ${repairDemand.requiresExplanation ? 'give the explanation now' : 'repair the content now'}. No canned companionship shell.` : ''}]`,
+[SYSTEM FEEDBACK: Your previous draft either hard-failed final output boundaries or scored weakly. Return an in-room reply.${lowScoreRelationalRetry ? ' Do not treat the short micro-turn as a fresh topic.' : ''}${analystModePublicReplyDetected ? ' Your previous draft opened in analyst mode — psychologizing the question instead of answering it. Reply in direct first-person.' : ''}${recoveryForcedBySimpleRelational && !analystModePublicReplyDetected ? ' Your previous draft failed a simple presence/wellbeing check. Answer directly in first-person — do not analyze or interpret.' : ''}${recoveryForcedByDirectAnswerStrict ? ` Your previous draft failed the direct-answer surface contract: ${directAnswerPrefilterReasons.join(', ')}. Reply in plain first-person, no questions, no blockquote lead, sentence 1 must answer the question.` : ''}${repairDemand.requiresRepair ? ` This is a complaint/repair-demand turn: acknowledge the miss directly and ${repairDemand.requiresExplanation ? 'give the explanation now' : 'repair the content now'}. No canned companionship shell.` : ''}]`,
             prefill: '[SPEAK] ',
           });
           const rawCandidateBText = retry.visible_text || retry.text || ''; // preserved for same-turn salvage
@@ -10780,15 +10938,44 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
           candidateBScore = candidateB.score;
           candidateBHardReasons = candidateB.score.hardReasons;
           candidateBBelowRelationalFloor = this.isBelowRelationalAcceptanceFloor(candidateB.score, candidateB.failureClass, candidateB.notes, presencePlan);
+          // Apply direct-answer strict prefilter to candidateB as well
+          if (directAnswerStrictMode && candidateB.text && !candidateB.score.hardFailed) {
+            const bSurfaceViolations = this.detectDirectAnswerSurfaceViolations(candidateB.text, this.state.humanName);
+            if (bSurfaceViolations.failed) {
+              candidateB.score.hardFailed = true;
+              candidateB.score.hardReasons = [...candidateB.score.hardReasons, 'direct_answer_surface_violation'];
+              candidateBHardReasons = candidateB.score.hardReasons;
+              console.log(`[${agent.config.name}] DIRECT-ANSWER-STRICT prefilter rejected candidateB (${bSurfaceViolations.reasons.join(',')})`);
+            } else if (this.detectThirdPersonUserNarration(candidateB.text, this.state.humanName)) {
+              candidateB.score.hardFailed = true;
+              candidateB.score.hardReasons = [...candidateB.score.hardReasons, 'direct_answer_third_person_narration'];
+              candidateBHardReasons = candidateB.score.hardReasons;
+              console.log(`[${agent.config.name}] DIRECT-ANSWER-STRICT third-person narration blocked in candidateB`);
+            }
+          }
         } catch (err) {
           console.error(`[${agent.config.name}] SOFT score alt generation failed:`, err);
         }
       }
       if (candidateB && !candidateB.score.hardFailed && !candidateBBelowRelationalFloor) {
         recoveryGenerationSucceeded = true;
-      } else if (!recoveryGenerationAttempted && staleRiskHigh && !recoveryForcedByAnalystMode && !recoveryForcedBySimpleRelational) {
+      } else if (!recoveryGenerationAttempted && staleRiskHigh && !recoveryForcedByAnalystMode && !recoveryForcedBySimpleRelational && !recoveryForcedByDirectAnswerStrict) {
         recoverySkippedReason = 'stale_risk_high';
         staleRiskBlockedOptionalRegen = true; // Stale-risk blocked OPTIONAL regen only — mandatory cleanup still runs
+      }
+
+      // ── Direct-answer strict: set enforcement + zero-question trace vars ──
+      // Zero-question enforcement is baked into detectDirectAnswerSurfaceViolations() via 'question_mark_in_reply'.
+      // These vars capture that fact in the trace for dashboard visibility.
+      if (directAnswerStrictMode) {
+        directAnswerZeroQuestionEnforced = true;
+        directAnswerQuestionViolationDetected = directAnswerPrefilterReasons.includes('question_mark_in_reply');
+        directAnswerQuestionViolationCount = directAnswerPrefilterReasons.filter(r => r === 'question_mark_in_reply').length;
+        // Emergency deblock cannot override surface contract in direct_answer_strict mode —
+        // prefilter already hard-fails violating candidates before the deblock selection runs.
+        directAnswerDeblockDisabled = true;
+        fastLaneCouldNotBypassDirectAnswerContract = directAnswerPrefilterRejected;
+        staleRiskCouldNotBypassDirectAnswerContract = directAnswerPrefilterRejected && staleRiskHigh;
       }
 
       // ── Offer rewrite tracking — check if recovery B resolved the inversion ──
@@ -10843,6 +11030,25 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       }
       if (candidateB && candidateB !== chosen) {
         candidateDeathReasons.push(this.toCandidateDeathRecord('B', candidateB, candidateBBelowRelationalFloor, candidateB.score.hardFailed ? (candidateB.score.hardReasons[0] || 'hard_failed') : candidateBBelowRelationalFloor ? 'below_relational_floor' : 'not_selected'));
+      }
+
+      // ── Direct-answer strict: post-selection surface contract check ──
+      // Catches edge cases where chosen slipped past the prefilter (e.g. hardFailed by something else first,
+      // then emergencyDeblock re-selected it). Belt-and-suspenders gate.
+      if (directAnswerStrictMode && chosen.text && !chosen.score.hardFailed) {
+        directAnswerSurfaceContractRan = true;
+        const chosenSurfaceCheck = this.detectDirectAnswerSurfaceViolations(chosen.text, this.state.humanName);
+        if (!chosenSurfaceCheck.failed) {
+          directAnswerSurfaceContractPassed = true;
+        } else {
+          directAnswerSurfaceContractPassed = false;
+          directAnswerSurfaceFailureReasons = chosenSurfaceCheck.reasons;
+          directAnswerSafeFallbackUsed = true;
+          directAnswerSafeFallbackReason = `surface_contract_failed_post_selection:${chosenSurfaceCheck.reasons.join(',')}`;
+          chosen.score.hardFailed = true;
+          chosen.score.hardReasons = [...chosen.score.hardReasons, 'direct_answer_surface_contract_post_selection'];
+          console.log(`[${agent.config.name}] DIRECT-ANSWER-STRICT surface contract FAILED post-selection (${chosenSurfaceCheck.reasons.join(',')})`);
+        }
       }
 
       if (emergencyDeblockMode && candidateA.score.hardFailed && (!candidateB || candidateB.score.hardFailed)) {
@@ -11895,6 +12101,25 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         proceduralPublicReplySalvageApplied,
         proceduralPublicReplyBlockedFromEmission,
         staleRiskBlockedOptionalRegen,
+        // Direct answer strict mode
+        directAnswerStrictModeApplied: directAnswerStrictMode,
+        directAnswerPrefilterRan,
+        directAnswerPrefilterRejected,
+        directAnswerPrefilterReasons,
+        directAnswerSurfaceContractRan,
+        directAnswerSurfaceContractPassed,
+        directAnswerSurfaceFailureReasons,
+        directAnswerZeroQuestionEnforced,
+        directAnswerQuestionViolationDetected,
+        directAnswerQuestionViolationCount,
+        thirdPersonUserNarrationDetected,
+        thirdPersonUserNarrationBlocked,
+        directAnswerDeblockDisabled,
+        fastLaneCouldNotBypassDirectAnswerContract,
+        staleRiskCouldNotBypassDirectAnswerContract,
+        directAnswerSafeFallbackUsed,
+        directAnswerSafeFallbackReason,
+        recoveryTriggeredForDirectAnswerStrict,
         // Trace/emit truthfulness
         rawCandidateHash,
         rawCandidateLength,
@@ -12364,6 +12589,25 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         proceduralPublicReplySalvageApplied,
         proceduralPublicReplyBlockedFromEmission,
         staleRiskBlockedOptionalRegen,
+        // Direct answer strict mode
+        directAnswerStrictModeApplied: directAnswerStrictMode,
+        directAnswerPrefilterRan,
+        directAnswerPrefilterRejected,
+        directAnswerPrefilterReasons,
+        directAnswerSurfaceContractRan,
+        directAnswerSurfaceContractPassed,
+        directAnswerSurfaceFailureReasons,
+        directAnswerZeroQuestionEnforced,
+        directAnswerQuestionViolationDetected,
+        directAnswerQuestionViolationCount,
+        thirdPersonUserNarrationDetected,
+        thirdPersonUserNarrationBlocked,
+        directAnswerDeblockDisabled,
+        fastLaneCouldNotBypassDirectAnswerContract,
+        staleRiskCouldNotBypassDirectAnswerContract,
+        directAnswerSafeFallbackUsed,
+        directAnswerSafeFallbackReason,
+        recoveryTriggeredForDirectAnswerStrict,
         // Trace/emit truthfulness
         rawCandidateHash,
         rawCandidateLength,
