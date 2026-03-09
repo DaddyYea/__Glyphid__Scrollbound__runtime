@@ -620,9 +620,10 @@ export class OpenAICompatibleBackend implements AgentBackend {
     const llmPromptCharEstimate = finalMessages.reduce((sum, m) => sum + (m.content || '').length, 0);
 
     // Full-call timeout: covers both "no response headers" and "stream hangs after headers".
-    // Remote models (DeepSeek, OpenAI) get 120s; local models get 90s.
+    // Local thinking models (12B+) can take 3-5 min on CPU/mixed VRAM — give them 300s.
+    // Remote models (DeepSeek, OpenAI) get 120s.
     // AbortController is the only reliable way to kill a hung fetch in Node.js.
-    const FULL_CALL_TIMEOUT_MS = isLocalModel ? 90_000 : 120_000;
+    const FULL_CALL_TIMEOUT_MS = isLocalModel ? 300_000 : 120_000;
     const fetchAbort = new AbortController();
     const fetchAbortTimer = setTimeout(() => {
       console.warn(`[${this.agentName}] Full-call timeout (${FULL_CALL_TIMEOUT_MS / 1000}s) — aborting fetch`);
@@ -723,11 +724,12 @@ export class OpenAICompatibleBackend implements AgentBackend {
 
     // Safety: if the stream never closes (e.g. server keeps connection open after [DONE]),
     // cancel the reader so processAgent() doesn't hang forever.
+    // Uses FULL_CALL_TIMEOUT_MS so slow local thinking models get the same budget.
     const streamAbortTimer = setTimeout(() => {
       streamTimedOut = true;
-      console.warn(`[${this.agentName}] LLM stream timeout (90s) — cancelling reader`);
+      console.warn(`[${this.agentName}] LLM stream timeout (${FULL_CALL_TIMEOUT_MS / 1000}s) — cancelling reader`);
       reader.cancel(new Error('stream_timeout')).catch(() => {});
-    }, 90000);
+    }, FULL_CALL_TIMEOUT_MS);
 
     try {
       while (true) {
