@@ -8348,6 +8348,7 @@ export class CommunionLoop {
     const snapshotPromptValidation = this.validatePromptAgainstSnapshot(humanTurnSnapshot, recentPromptMessages, presencePlan);
     const snapshotPromptSyncPassed = snapshotPromptValidation.ok;
     const snapshotPromptSyncFailures = snapshotPromptValidation.failures;
+    let snapshotCandidateValidation: { ok: boolean; failure: string | null } = { ok: true, failure: null };
     if (!snapshotPromptSyncPassed) {
       console.warn(`[SNAPSHOT] Prompt sync failed: ${snapshotPromptSyncFailures.join(', ')} — snapshot=${humanTurnSnapshot.snapshotId}`);
     }
@@ -9256,7 +9257,7 @@ export class CommunionLoop {
 
       // ── Snapshot candidate validation ──
       // Reject if candidate answers a prior thread instead of the socially live turn.
-      const snapshotCandidateValidation = candidateA.text
+      snapshotCandidateValidation = candidateA.text
         ? this.validateCandidateAgainstSnapshot(candidateA.text, humanTurnSnapshot)
         : { ok: true, failure: null };
       if (!snapshotCandidateValidation.ok && !candidateA.score.hardFailed) {
