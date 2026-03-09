@@ -2988,10 +2988,13 @@
           speakingIndicator.classList.add('active');
           speakingName.textContent = name + ' speaking...';
         }
-        if (data.audioUrl || (data.audioBase64 && data.audioBase64.length > 0)) {
-          // skipDoneSignal=true for all but the final chunk — only final chunk triggers cleanup
+        if (data.audioBase64 && data.audioBase64.length > 0) {
+          // Prefer inline base64 for chunks — avoids HTTP fetch latency between chunks (audible gap).
           const isFinal = !!data.isFinalChunk;
-          playAudio(data.audioUrl || data.audioBase64, data.agentId, !!data.audioUrl, data.audioBase64 || null, !isFinal);
+          playAudio(data.audioBase64, data.agentId, false, null, !isFinal);
+        } else if (data.audioUrl) {
+          const isFinal = !!data.isFinalChunk;
+          playAudio(data.audioUrl, data.agentId, true, null, !isFinal);
         }
       } else if (data.type === 'speech-end') {
         chunkStreamActive = false;
@@ -3551,15 +3554,17 @@
 
       if (!skipDoneSignal) {
         // This is either the final chunk or a non-chunk (legacy) audio item — signal server done.
-        speakingIndicator.classList.remove('active');
         fetch('/speech-done', { method: 'POST' }).catch(() => {});
         if (audioQueue.length === 0) {
+          // Nothing more to play — full cleanup now.
+          speakingIndicator.classList.remove('active');
           audioPlaying = false;
           ttsHoldActive = false;
           chunkStreamActive = false;
           resumeRecognitionAfterTts();
           return;
         }
+        // More items queued (e.g. next turn's chunks already arrived) — don't remove indicator.
       }
 
       // Process next in queue
