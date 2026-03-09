@@ -1329,6 +1329,58 @@
       display: flex; align-items: center; justify-content: center;
       color: #405060; font-size: 14px;
     }
+
+    /* ── Latency pill + panel ── */
+    .latency-pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 0.6em; font-family: monospace; cursor: pointer;
+      padding: 1px 6px; border-radius: 10px; margin-left: 8px;
+      background: rgba(30,40,55,0.7); color: #5a7090;
+      border: 1px solid #1e2a38; user-select: none; vertical-align: middle;
+      transition: background 0.15s, color 0.15s;
+    }
+    .latency-pill:hover { background: rgba(40,55,75,0.9); color: #8aaac8; }
+    .latency-pill.slow { color: #c09040; border-color: #604820; }
+    .latency-pill.very-slow { color: #c05040; border-color: #602820; }
+    .latency-pill .pill-icon { font-size: 0.9em; }
+
+    .latency-panel {
+      display: none; margin-top: 6px; padding: 8px 10px;
+      background: rgba(8,12,18,0.95); border: 1px solid #1e2a38;
+      border-radius: 4px; font-family: monospace; font-size: 0.7em;
+      color: #7090a8; line-height: 1.7;
+    }
+    .latency-panel.open { display: block; }
+    .latency-panel .lp-row { display: flex; justify-content: space-between; gap: 16px; }
+    .latency-panel .lp-label { color: #506070; }
+    .latency-panel .lp-val { color: #90b8d0; }
+    .latency-panel .lp-hot { color: #c09040; }
+    .latency-panel .lp-section { font-size: 0.85em; color: #304050; margin: 4px 0 2px; text-transform: uppercase; letter-spacing: 1px; }
+    .latency-panel .lp-copy-row { margin-top: 6px; display: flex; gap: 6px; }
+    .latency-panel .lp-copy-btn {
+      font-size: 0.85em; padding: 2px 8px; border-radius: 3px; cursor: pointer;
+      background: rgba(30,50,70,0.7); border: 1px solid #2a4060; color: #7090b0;
+      transition: background 0.1s, color 0.1s;
+    }
+    .latency-panel .lp-copy-btn:hover { background: rgba(40,65,90,0.9); color: #a0c0d8; }
+    .latency-panel .lp-copy-btn.copied { color: #60c080; border-color: #30604040; }
+
+    /* ── Processing status widget ── */
+    #processingStatus {
+      display: none; align-items: center; gap: 6px;
+      padding: 4px 10px; font-size: 0.7em; font-family: monospace; color: #5a7090;
+      border-top: 1px solid #111820;
+    }
+    #processingStatus.active { display: flex; }
+    #processingStatus .ps-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: #3a5070;
+      animation: psDotBlink 1.2s ease-in-out infinite;
+    }
+    @keyframes psDotBlink {
+      0%, 100% { opacity: 0.3; } 50% { opacity: 1; }
+    }
+    #processingStatus .ps-label { flex: 1; }
+    #processingStatus .ps-elapsed { color: #304050; }
   </style>
 </head>
 <body>
@@ -1493,6 +1545,11 @@
       </div>
       <div class="room-messages" id="roomMessages">
         <div class="empty-state">The room is quiet. Waiting for the first voice...</div>
+      </div>
+      <div id="processingStatus">
+        <div class="ps-dot"></div>
+        <span class="ps-label" id="psLabel">thinking...</span>
+        <span class="ps-elapsed" id="psElapsed"></span>
       </div>
       <div class="chat-input-area">
         <input type="text" id="chatInput" class="chat-input" placeholder="Speak into the room..." autocomplete="off" />
@@ -2842,6 +2899,7 @@
 
       const div = document.createElement('div');
       div.className = 'room-message' + (isBackchannel ? ' backchannel' : '');
+      div.dataset.agentId = speaker;
 
       const speakerDiv = document.createElement('div');
       speakerDiv.className = 'speaker-name';
@@ -2966,6 +3024,11 @@
         }
       } else if (data.type === 'import-status') {
         handleImportStatus(data);
+      } else if (data.type === 'turn-latency' && data.latencyTrace) {
+        attachLatencyPill(data.agentId, data.latencyTrace);
+        hideProcessingStatus();
+      } else if (data.type === 'processing-status') {
+        showProcessingStatus(data.statusLabel, data.elapsedMs);
       } else if (data.type === 'error') {
         const div = document.createElement('div');
         div.className = 'error-message';
@@ -2974,6 +3037,148 @@
         roomMessages.scrollTop = roomMessages.scrollHeight;
       }
     };
+
+    // ── Processing status widget ──
+    const processingStatusEl = document.getElementById('processingStatus');
+    const psLabel = document.getElementById('psLabel');
+    const psElapsed = document.getElementById('psElapsed');
+    let processingStatusTimeout = null;
+    const PROCESSING_STATUS_LABELS = {
+      building_prompt: 'building prompt',
+      waiting_on_llm: 'waiting on LLM',
+      converting_journal: 'converting journal',
+      retrying_speak: 'retrying speak',
+      evaluating_candidates: 'evaluating reply',
+    };
+    function showProcessingStatus(label, elapsedMs) {
+      const friendly = PROCESSING_STATUS_LABELS[label] || label;
+      psLabel.textContent = friendly + '...';
+      psElapsed.textContent = elapsedMs ? `+${(elapsedMs / 1000).toFixed(1)}s` : '';
+      processingStatusEl.classList.add('active');
+      clearTimeout(processingStatusTimeout);
+      processingStatusTimeout = setTimeout(hideProcessingStatus, 12000);
+    }
+    function hideProcessingStatus() {
+      processingStatusEl.classList.remove('active');
+      clearTimeout(processingStatusTimeout);
+    }
+
+    // ── Latency pill attachment ──
+    // Maps agentId → most recent TurnLatencyTrace for copy
+    const latencyTraceByAgent = {};
+
+    function fmtMs(ms) {
+      if (ms === undefined || ms === null) return '—';
+      if (ms < 1000) return ms + 'ms';
+      return (ms / 1000).toFixed(1) + 's';
+    }
+
+    function attachLatencyPill(agentId, trace) {
+      latencyTraceByAgent[agentId] = trace;
+      // Find the last room-message from this agent by data-agent-id
+      const msgs = roomMessages.querySelectorAll(`.room-message:not(.backchannel)[data-agent-id="${CSS.escape(agentId)}"]`);
+      if (!msgs.length) return;
+      const target = msgs[msgs.length - 1];
+
+      // Remove any existing pill on this message first
+      const existing = target.querySelector('.latency-pill');
+      if (existing) existing.remove();
+      const existingPanel = target.querySelector('.latency-panel');
+      if (existingPanel) existingPanel.remove();
+
+      const d = trace.durationsMs || {};
+      const total = d.totalTurnWallClock;
+      const llm = d.llmGeneration;
+      const dominant = trace.outcome?.dominantLatencyStage;
+
+      const pill = document.createElement('span');
+      pill.className = 'latency-pill' + (total > 15000 ? ' very-slow' : total > 8000 ? ' slow' : '');
+      pill.innerHTML = `<span class="pill-icon">⏱</span> ${fmtMs(total)}`;
+      pill.title = `Total: ${fmtMs(total)} | LLM: ${fmtMs(llm)} | dominant: ${dominant || '—'}`;
+
+      // Panel (hidden until click)
+      const panel = document.createElement('div');
+      panel.className = 'latency-panel';
+
+      const c = trace.counters || {};
+      const o = trace.outcome || {};
+      const derived = trace.derived || {};
+
+      const rows = [
+        ['Total', fmtMs(total), total > 10000],
+        ['LLM gen', fmtMs(llm), llm > 6000],
+        ['Prompt assembly', fmtMs(d.promptAssembly), false],
+        ['Raw routing', fmtMs(d.rawRouting), false],
+        ['Jrnl→speak conv', fmtMs(d.journalToSpeakConversion), false],
+        ['Fresh speak retry', fmtMs(d.freshSpeakRetry), false],
+        ['Candidate build', fmtMs(d.visibleCandidateBuild), false],
+        ['TTS', fmtMs(d.ttsTotal), d.ttsTotal > 5000],
+      ];
+
+      let html = '<div class="lp-section">Durations</div>';
+      for (const [label, val, hot] of rows) {
+        if (val === '—' && label !== 'Total' && label !== 'LLM gen') continue;
+        html += `<div class="lp-row"><span class="lp-label">${label}</span><span class="${hot ? 'lp-hot' : 'lp-val'}">${val}</span></div>`;
+      }
+
+      html += '<div class="lp-section">Calls</div>';
+      html += `<div class="lp-row"><span class="lp-label">LLM calls</span><span class="lp-val">${c.llmCalls ?? 0}</span></div>`;
+      if (c.conversionCalls) html += `<div class="lp-row"><span class="lp-label">Conversion</span><span class="lp-val">${c.conversionCalls}</span></div>`;
+      if (c.retryCalls) html += `<div class="lp-row"><span class="lp-label">Retries</span><span class="lp-val">${c.retryCalls}</span></div>`;
+      if (c.stripAttempts) html += `<div class="lp-row"><span class="lp-label">Strip</span><span class="lp-val">${c.stripAttempts}</span></div>`;
+      if (c.salvageAttempts) html += `<div class="lp-row"><span class="lp-label">Salvage</span><span class="lp-val">${c.salvageAttempts}</span></div>`;
+
+      html += '<div class="lp-section">Outcome</div>';
+      html += `<div class="lp-row"><span class="lp-label">Action</span><span class="lp-val">${o.finalAction ?? '—'}</span></div>`;
+      html += `<div class="lp-row"><span class="lp-label">Delivered UI</span><span class="lp-val">${o.deliveredToUI ? 'yes' : 'no'}</span></div>`;
+      if (o.ttsQueued !== undefined) html += `<div class="lp-row"><span class="lp-label">TTS queued</span><span class="lp-val">${o.ttsQueued ? 'yes' : 'no'}</span></div>`;
+      if (o.ttsFailed) html += `<div class="lp-row"><span class="lp-label">TTS failed</span><span class="${'lp-hot'}">${o.ttsFailureReason ?? 'yes'}</span></div>`;
+      if (dominant) html += `<div class="lp-row"><span class="lp-label">Dominant stage</span><span class="lp-hot">${dominant}</span></div>`;
+      if (derived.orchestrationDominated) html += `<div class="lp-row"><span class="lp-label">Orchestration lag</span><span class="lp-hot">yes</span></div>`;
+
+      html += `<div class="lp-copy-row">
+        <button class="lp-copy-btn" onclick="copyLatencyJson('${agentId}', this)">Copy JSON</button>
+        <button class="lp-copy-btn" onclick="copyLatencySummary('${agentId}', this)">Copy Summary</button>
+      </div>`;
+      panel.innerHTML = html;
+
+      pill.addEventListener('click', () => { panel.classList.toggle('open'); });
+
+      const timeDiv = target.querySelector('.message-time');
+      if (timeDiv) {
+        timeDiv.appendChild(pill);
+      }
+      target.appendChild(panel);
+    }
+
+    function copyLatencyJson(agentId, btn) {
+      const trace = latencyTraceByAgent[agentId];
+      if (!trace) return;
+      navigator.clipboard.writeText(JSON.stringify(trace, null, 2)).then(() => {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Copy JSON'; btn.classList.remove('copied'); }, 1500);
+      });
+    }
+
+    function copyLatencySummary(agentId, btn) {
+      const trace = latencyTraceByAgent[agentId];
+      if (!trace) return;
+      const d = trace.durationsMs || {};
+      const c = trace.counters || {};
+      const o = trace.outcome || {};
+      const lines = [
+        `Turn ${trace.turnId?.slice(0, 8)} | ${o.finalAction} | total: ${fmtMs(d.totalTurnWallClock)}`,
+        `  llm: ${fmtMs(d.llmGeneration)} | prompt: ${fmtMs(d.promptAssembly)} | build: ${fmtMs(d.visibleCandidateBuild)} | tts: ${fmtMs(d.ttsTotal)}`,
+        `  calls: ${c.llmCalls ?? 0} llm, ${c.retryCalls ?? 0} retry, ${c.conversionCalls ?? 0} conv`,
+        `  dominant: ${o.dominantLatencyStage ?? '—'}`,
+      ];
+      navigator.clipboard.writeText(lines.join('\n')).then(() => {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Copy Summary'; btn.classList.remove('copied'); }, 1500);
+      });
+    }
 
     async function sendMessage() {
       const text = chatInput.value.trim();

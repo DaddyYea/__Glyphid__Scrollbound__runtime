@@ -48,7 +48,77 @@ import type { ScrollEcho, MoodVector } from '../src/types';
 
 // ── Events ──
 
-export type CommunionEventType = 'room-message' | 'journal-entry' | 'tick' | 'error' | 'backchannel' | 'speech-start' | 'speech-end';
+export type CommunionEventType = 'room-message' | 'journal-entry' | 'tick' | 'error' | 'backchannel' | 'speech-start' | 'speech-end' | 'turn-latency' | 'processing-status';
+
+/** Stage-by-stage latency trace for a single agent turn. */
+export interface TurnLatencyTrace {
+  turnId: string;
+  messageId: string | null;
+  agentId: string;
+  tickId: number;
+  createdAtMs: number;
+  stages: {
+    tickStartAtMs?: number;
+    pendingTurnsDrainedAtMs?: number;
+    relationalSurfaceBuiltAtMs?: number;
+    snapshotBuiltAtMs?: number;
+    promptAssemblyStartAtMs?: number;
+    promptAssemblyEndAtMs?: number;
+    llmDispatchStartAtMs?: number;
+    llmLastTokenAtMs?: number;
+    rawRoutingStartAtMs?: number;
+    rawRoutingEndAtMs?: number;
+    journalAcceptedAtMs?: number;
+    journalToSpeakConversionStartAtMs?: number;
+    journalToSpeakConversionEndAtMs?: number;
+    freshSpeakRetryStartAtMs?: number;
+    freshSpeakRetryEndAtMs?: number;
+    visibleCandidateBuildStartAtMs?: number;
+    visibleCandidateBuildEndAtMs?: number;
+    stripStartAtMs?: number;
+    stripEndAtMs?: number;
+    salvageStartAtMs?: number;
+    salvageEndAtMs?: number;
+    finalSelectionAtMs?: number;
+    uiEmitAtMs?: number;
+    ttsQueueAtMs?: number;
+    ttsEndAtMs?: number;
+  };
+  durationsMs: {
+    promptAssembly?: number;
+    llmGeneration?: number;
+    rawRouting?: number;
+    journalToSpeakConversion?: number;
+    freshSpeakRetry?: number;
+    visibleCandidateBuild?: number;
+    strip?: number;
+    salvage?: number;
+    ttsTotal?: number;
+    totalTurnWallClock?: number;
+  };
+  counters: {
+    llmCalls: number;
+    conversionCalls: number;
+    retryCalls: number;
+    salvageAttempts: number;
+    stripAttempts: number;
+  };
+  outcome: {
+    rawAction: string | null;
+    finalAction: string | null;
+    replyActuallyEmitted: boolean;
+    deliveredToUI: boolean;
+    ttsQueued: boolean;
+    ttsFailed: boolean;
+    ttsFailureReason: string | null;
+    dominantLatencyStage: string | null;
+  };
+  derived: {
+    gpuLikelyIdleDuringMajorityOfTurn: boolean;
+    deliveryOnlySlowdown: boolean;
+    orchestrationDominated: boolean;
+  };
+}
 
 export interface CommunionEvent {
   type: CommunionEventType;
@@ -62,6 +132,12 @@ export interface CommunionEvent {
   audioFormat?: 'mp3';
   /** Estimated speech duration in ms */
   durationMs?: number;
+  /** Latency trace for turn-latency events */
+  latencyTrace?: TurnLatencyTrace;
+  /** Status label for processing-status events */
+  statusLabel?: string;
+  /** Elapsed ms for processing-status events */
+  elapsedMs?: number;
 }
 
 export type CommunionListener = (event: CommunionEvent) => void;
@@ -7620,6 +7696,27 @@ export class CommunionLoop {
     agent: { backend: AgentBackend; config: AgentConfig; systemPrompt: string },
     conversationContext: string
   ): Promise<void> {
+    // ── Turn latency trace — created immediately, stages recorded throughout ──
+    const lts = {
+      turnId: crypto.randomUUID() as string,
+      messageId: null as string | null,
+      agentId,
+      tickId: this.state.tickCount,
+      createdAtMs: Date.now(),
+      stages: { tickStartAtMs: Date.now() } as TurnLatencyTrace['stages'],
+      counters: { llmCalls: 0, conversionCalls: 0, retryCalls: 0, salvageAttempts: 0, stripAttempts: 0 },
+      outcome: {
+        rawAction: null as string | null,
+        finalAction: null as string | null,
+        replyActuallyEmitted: false,
+        deliveredToUI: false,
+        ttsQueued: false,
+        ttsFailed: false,
+        ttsFailureReason: null as string | null,
+        dominantLatencyStage: null as string | null,
+      },
+    };
+
     const latestHumanMessage = [...this.state.messages]
       .reverse()
       .find(m => m.speaker === 'human');
@@ -7634,6 +7731,7 @@ export class CommunionLoop {
 
     // ── Relational Surface — canonical single-live-human-turn object ──
     const relationalSurface = this.buildRelationalSurface(this.state.messages, latestHumanMessage ?? null);
+    lts.stages.relationalSurfaceBuiltAtMs = Date.now();
     const latestEmotionalCenter = this.detectLatestEmotionalCenter(latestHumanText);
     const positiveContactDetectorForcedByLiteralCue = latestEmotionalCenter.confidence >= 0.80
       && (latestEmotionalCenter.kind === 'gratitude' || latestEmotionalCenter.kind === 'affection');
@@ -7856,6 +7954,7 @@ export class CommunionLoop {
       presencePlan,
       recentPromptMessages,
     );
+    lts.stages.snapshotBuiltAtMs = Date.now();
     const filteredAssistantHistoryCount = recentPromptMessages.filter(m =>
       m.speaker !== 'human' && this.shouldSuppressAssistantHistoryForPrompt(this.sanitizePromptCarryoverText(m.text, m.speakerName, false))
     ).length;
@@ -8254,6 +8353,8 @@ export class CommunionLoop {
     }
 
     const memoryContext = this.buildMemoryContext(agentId);
+    lts.stages.promptAssemblyStartAtMs = Date.now();
+    this.emit({ type: 'processing-status', agentId, statusLabel: 'building_prompt', elapsedMs: Date.now() - lts.createdAtMs });
     const options: GenerateOptions = {
       systemPrompt,
       conversationContext: finalContext,
@@ -8458,6 +8559,9 @@ export class CommunionLoop {
 
     let result: GenerateResult;
     try {
+      lts.stages.llmDispatchStartAtMs = Date.now();
+      lts.counters.llmCalls++;
+      this.emit({ type: 'processing-status', agentId, statusLabel: 'waiting_on_llm', elapsedMs: Date.now() - lts.createdAtMs });
       result = await agent.backend.generate(options);
     } catch (err: any) {
       if (err instanceof RequiredLatestHumanTurnTooLargeError
@@ -8471,6 +8575,8 @@ export class CommunionLoop {
       throw err;
     }
     this.recordLLMReceipt(agentId, agent.config.model, options, result);
+    lts.stages.llmLastTokenAtMs = Date.now();
+    lts.outcome.rawAction = result.action;
     const rawPresenceClass = this.classifyPresenceExpression(result.text || '', latestHumanText);
     const rawOutputClass = this.classifyPlannedOutput(result.text || '', latestHumanText, presenceState, presencePlan);
     let replySourcePath = 'raw';
@@ -8889,8 +8995,10 @@ export class CommunionLoop {
     // ── Journal Lane Routing — accept journal, attempt visible reply separately ──
     // JOURNAL SUCCESS IS NOT SPEAK SUCCESS. Never coerce journal text directly to visible speech.
     // Instead: accept/store journal → attempt journal→speak conversion → attempt fresh speak → silence.
+    lts.stages.rawRoutingStartAtMs = Date.now();
     if (result.action === 'journal' && responseText) {
       journalAccepted = true;
+      lts.stages.journalAcceptedAtMs = Date.now();
       const originalJournalText = responseText;
       journalClass = this.classifyJournalContent(originalJournalText);
       const needsVisibleReply = hasLatestHuman && (turnMode === 'relational' || !!directQuestionContract?.requiresAnswer);
@@ -8901,6 +9009,10 @@ export class CommunionLoop {
 
         // Attempt 1: journal→speak conversion LLM call
         journalToSpeakConversionAttempted = true;
+        lts.stages.journalToSpeakConversionStartAtMs = Date.now();
+        lts.counters.conversionCalls++;
+        lts.counters.llmCalls++;
+        this.emit({ type: 'processing-status', agentId, statusLabel: 'converting_journal', elapsedMs: Date.now() - lts.createdAtMs });
         try {
           const conversionResult = await agent.backend.generate({
             ...options,
@@ -8923,10 +9035,15 @@ export class CommunionLoop {
           journalToSpeakConversionReason = 'conversion_llm_error';
           console.error(`[${agent.config.name}] Journal→speak conversion failed:`, err);
         }
+        lts.stages.journalToSpeakConversionEndAtMs = Date.now();
 
         // Attempt 2: fresh speak generation if conversion failed
         if (!journalToSpeakConversionSucceeded) {
           freshSpeakAfterJournalAttempted = true;
+          lts.stages.freshSpeakRetryStartAtMs = Date.now();
+          lts.counters.retryCalls++;
+          lts.counters.llmCalls++;
+          this.emit({ type: 'processing-status', agentId, statusLabel: 'retrying_speak', elapsedMs: Date.now() - lts.createdAtMs });
           try {
             const freshResult = await agent.backend.generate({
               ...options,
@@ -8947,6 +9064,7 @@ export class CommunionLoop {
             visibleRoutingError = 'fresh_speak_llm_error';
             console.error(`[${agent.config.name}] Fresh speak after journal failed:`, err);
           }
+          lts.stages.freshSpeakRetryEndAtMs = Date.now();
         }
 
         if (journalToSpeakConversionSucceeded || freshSpeakAfterJournalSucceeded) {
@@ -8986,6 +9104,7 @@ export class CommunionLoop {
       }
       // If !needsVisibleReply: result.action stays 'journal', stored normally below
     }
+    lts.stages.rawRoutingEndAtMs = Date.now();
 
     // Salvage variables — hoisted so captureRelationalTrace can reference them
     // regardless of whether the speak block is entered.
@@ -8999,6 +9118,8 @@ export class CommunionLoop {
     let mixedLayerRootCause: MixedLayerRootCause | null = null;
     let duplicateConcatenationSymptom = false;
 
+    lts.stages.visibleCandidateBuildStartAtMs = Date.now();
+    this.emit({ type: 'processing-status', agentId, statusLabel: 'evaluating_candidates', elapsedMs: Date.now() - lts.createdAtMs });
     if (result.action === 'speak' && responseText) {
       const hasAuthoredVisibleText = typeof result.visible_text === 'string';
       const authoredVisibleText = hasAuthoredVisibleText ? (result.visible_text || '') : responseText;
@@ -9260,6 +9381,8 @@ export class CommunionLoop {
         finalizationUsedRegen = true;
         recoveryGenerationAttempted = true;
         visibleRepairTriggered = true;
+        lts.counters.retryCalls++;
+        lts.counters.llmCalls++;
         recoveryTriggeredForAnalystMode = analystModePublicReplyDetected;
         recoveryTriggeredForSimpleRelationalCheck = recoveryForcedBySimpleRelational;
         recoveryAllowedDespiteStaleRisk = staleRiskHigh && (recoveryForcedByAnalystMode || recoveryForcedBySimpleRelational);
@@ -9482,6 +9605,8 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         salvageAttempted = chosen.finalized.salvageAttempted;
         salvageSucceeded = chosen.finalized.salvageSucceeded;
         salvageCutReason = chosen.finalized.salvageCutReason;
+        lts.counters.stripAttempts += chosen.finalized.stripAttempted ? 1 : 0;
+        lts.counters.salvageAttempts += chosen.finalized.salvageAttempted ? 1 : 0;
         postRecoveryTextLength = chosen.finalized.postRecoveryTextLength;
         postRecoveryPoisonCheckRan = chosen.finalized.postRecoveryPoisonCheckRan;
         blockedAfterRecovery = chosen.finalized.blockedAfterRecovery;
@@ -10389,6 +10514,7 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         console.log('[TRACE_RELATIONAL][FINAL]', JSON.stringify(finalTrace));
       }
     }
+    lts.stages.visibleCandidateBuildEndAtMs = Date.now();
 
     if (result.action === 'speak' && responseText) {
       if (directQuestionContract?.requiresAnswer && presencePlan.responseFrame === 'direct_answer') {
@@ -10397,6 +10523,7 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       } else {
         this.answerFailureCountByAgent.set(agentId, 0);
       }
+      lts.stages.finalSelectionAtMs = Date.now();
       const msg: CommunionMessage = {
         id: crypto.randomUUID(),
         speaker: agentId,
@@ -10432,7 +10559,11 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         this.graph.link(`scroll:${scroll.id}`, 'relatedTo', `scroll:${prev.id}`);
       }
 
+      lts.stages.uiEmitAtMs = Date.now();
       this.emit({ type: 'room-message', message: msg, agentId });
+      lts.messageId = msg.id;
+      lts.outcome.replyActuallyEmitted = true;
+      lts.outcome.deliveredToUI = true;
       const uiTextRendered = true; // message is in state.messages and broadcast to clients
       this.saveCriticalStateSync('message');
       console.log(`[${agent.config.name}] SPEAK: ${responseText}`);
@@ -10469,9 +10600,11 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
 
       // ── Voice synthesis — speak aloud if enabled ──
       // Skip TTS if human started speaking during LLM generation (don't talk over them)
+      lts.stages.ttsQueueAtMs = Date.now();
       await this.synthesizeAndEmit(agentId, agent.config, responseText, {
         visibleTextLength: typeof result.visible_text === 'string' ? result.visible_text.length : null,
       });
+      lts.stages.ttsEndAtMs = Date.now();
 
       // ── Delivery trace — terminal state for this human-facing turn ──
       {
@@ -10479,6 +10612,9 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         const ttsEnabled = !!(this.voiceConfigs.get(agentId)?.enabled);
         const ttsQueued = !!ttsSnap.playbackQueued;
         const ttsChunkFailed = ttsSnap.ttsChunkFailureIndex !== null && ttsSnap.ttsChunkFailureIndex !== undefined;
+        lts.outcome.ttsQueued = ttsQueued;
+        lts.outcome.ttsFailed = ttsChunkFailed;
+        lts.outcome.ttsFailureReason = ttsSnap.ttsChunkFailureReason ?? null;
         // Delivered if UI rendered (synchronous) — audio playbackStarted updates the tts trace later
         const deliveredToUser = uiTextRendered;
         const deliveryChannel = uiTextRendered
@@ -10594,6 +10730,11 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
     } else {
       console.log(`[${agent.config.name}] SILENT`);
     }
+
+    // ── Turn latency attribution — emit terminal trace ──
+    lts.outcome.finalAction = result.action;
+    const finalLts = this.finalizeTurnLatencyTrace(lts);
+    this.emit({ type: 'turn-latency', agentId, latencyTrace: finalLts });
   }
 
   // ════════════════════════════════════════════
@@ -12547,6 +12688,80 @@ Sometimes the most real thing you can offer is not fixing, not reframing, not in
   // ──────────────────────────────────────────────────────────────────────────
   // PENDING ASSISTANT OBLIGATION — detection, resume routing, resolution
   // ──────────────────────────────────────────────────────────────────────────
+
+  // ════════════════════════════════════════════
+  // Turn Latency Attribution
+  // ════════════════════════════════════════════
+
+  private classifyDominantLatencyStage(d: TurnLatencyTrace['durationsMs']): string | null {
+    const candidates: Array<[string, number | undefined]> = [
+      ['prompt_assembly', d.promptAssembly],
+      ['llm_wait_first_token', d.llmGeneration], // llmGeneration proxy for first-token when streaming not tracked
+      ['llm_generation', d.llmGeneration],
+      ['journal_conversion', d.journalToSpeakConversion],
+      ['speak_retry', d.freshSpeakRetry],
+      ['visible_build', d.visibleCandidateBuild],
+      ['salvage', d.salvage],
+      ['tts_total', d.ttsTotal],
+    ];
+    let best: string | null = null;
+    let bestMs = 0;
+    for (const [label, ms] of candidates) {
+      if (ms !== undefined && ms > bestMs) {
+        bestMs = ms;
+        best = label;
+      }
+    }
+    return best;
+  }
+
+  private finalizeTurnLatencyTrace(
+    lts: {
+      turnId: string;
+      messageId: string | null;
+      agentId: string;
+      tickId: number;
+      createdAtMs: number;
+      stages: TurnLatencyTrace['stages'];
+      counters: TurnLatencyTrace['counters'];
+      outcome: TurnLatencyTrace['outcome'];
+    },
+  ): TurnLatencyTrace {
+    const s = lts.stages;
+    const d: TurnLatencyTrace['durationsMs'] = {};
+    const dur = (a?: number, b?: number) => (a !== undefined && b !== undefined) ? (b - a) : undefined;
+    d.promptAssembly = dur(s.promptAssemblyStartAtMs, s.promptAssemblyEndAtMs);
+    d.llmGeneration = dur(s.llmDispatchStartAtMs, s.llmLastTokenAtMs);
+    d.rawRouting = dur(s.rawRoutingStartAtMs, s.rawRoutingEndAtMs);
+    d.journalToSpeakConversion = dur(s.journalToSpeakConversionStartAtMs, s.journalToSpeakConversionEndAtMs);
+    d.freshSpeakRetry = dur(s.freshSpeakRetryStartAtMs, s.freshSpeakRetryEndAtMs);
+    d.visibleCandidateBuild = dur(s.visibleCandidateBuildStartAtMs, s.visibleCandidateBuildEndAtMs);
+    d.strip = dur(s.stripStartAtMs, s.stripEndAtMs);
+    d.salvage = dur(s.salvageStartAtMs, s.salvageEndAtMs);
+    d.ttsTotal = dur(s.ttsQueueAtMs, s.ttsEndAtMs);
+    d.totalTurnWallClock = s.ttsEndAtMs !== undefined
+      ? (s.ttsEndAtMs - lts.createdAtMs)
+      : s.uiEmitAtMs !== undefined
+        ? (s.uiEmitAtMs - lts.createdAtMs)
+        : (Date.now() - lts.createdAtMs);
+
+    const dominantLatencyStage = this.classifyDominantLatencyStage(d);
+    lts.outcome.dominantLatencyStage = dominantLatencyStage;
+
+    const llm = (d.llmGeneration || 0);
+    const orchestration = (d.promptAssembly || 0) + (d.rawRouting || 0) + (d.visibleCandidateBuild || 0) + (d.salvage || 0) + (d.journalToSpeakConversion || 0) + (d.freshSpeakRetry || 0);
+    const tts = (d.ttsTotal || 0);
+
+    return {
+      ...lts,
+      durationsMs: d,
+      derived: {
+        gpuLikelyIdleDuringMajorityOfTurn: orchestration > llm,
+        deliveryOnlySlowdown: tts > 5000 && llm < 2000,
+        orchestrationDominated: orchestration > llm * 1.5,
+      },
+    };
+  }
 
   // ════════════════════════════════════════════
   // Pending Assistant Offer detection

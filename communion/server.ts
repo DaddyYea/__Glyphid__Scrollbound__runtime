@@ -358,6 +358,10 @@ async function main() {
         audioBase64,
         durationMs: event.durationMs,
       });
+    } else if (event.type === 'turn-latency' && event.latencyTrace) {
+      broadcast({ type: 'turn-latency', agentId: event.agentId, latencyTrace: event.latencyTrace });
+    } else if (event.type === 'processing-status') {
+      broadcast({ type: 'processing-status', agentId: event.agentId, statusLabel: event.statusLabel, elapsedMs: event.elapsedMs });
     } else if (event.type === 'error') {
       broadcast({ type: 'error', agentId: event.agentId, error: event.error });
     }
