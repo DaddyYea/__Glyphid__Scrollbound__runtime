@@ -698,13 +698,23 @@ export class OpenAICompatibleBackend implements AgentBackend {
     // ── Streaming SSE response reader ──
     // Reads token-by-token delta stream to capture TTFT + first-byte timing.
     // Accumulates full text for action parsing / prefill path.
-    const reader = response.body!.getReader();
+    if (!response.body) throw new Error(`${this.agentName}: response body is null (stream unavailable)`);
+    const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let llmFirstByteMs: number | undefined;
     let llmFirstTokenMs: number | undefined;
     let llmOutputTokenCount: number | undefined;
     let accumulatedText = '';
     let sseBuffer = ''; // handles SSE lines split across read() chunks
+    let streamTimedOut = false;
+
+    // Safety: if the stream never closes (e.g. server keeps connection open after [DONE]),
+    // cancel the reader so processAgent() doesn't hang forever.
+    const streamAbortTimer = setTimeout(() => {
+      streamTimedOut = true;
+      console.warn(`[${this.agentName}] LLM stream timeout (90s) — cancelling reader`);
+      reader.cancel(new Error('stream_timeout')).catch(() => {});
+    }, 90000);
 
     try {
       while (true) {
@@ -715,11 +725,12 @@ export class OpenAICompatibleBackend implements AgentBackend {
         // Process complete SSE lines
         const lines = sseBuffer.split('\n');
         sseBuffer = lines.pop() ?? ''; // last partial line back to buffer
+        let doneSeen = false;
         for (const line of lines) {
           const trimmed = line.trim();
           if (!trimmed.startsWith('data:')) continue;
           const payload = trimmed.slice(5).trim();
-          if (payload === '[DONE]') break;
+          if (payload === '[DONE]') { doneSeen = true; break; }
           try {
             const chunk = JSON.parse(payload) as any;
             const delta = chunk.choices?.[0]?.delta?.content;
@@ -734,9 +745,18 @@ export class OpenAICompatibleBackend implements AgentBackend {
             // Malformed SSE chunk — skip
           }
         }
+        // Exit outer loop as soon as [DONE] is seen — don't wait for server to close connection.
+        if (doneSeen) {
+          reader.cancel().catch(() => {}); // release server-side resources
+          break;
+        }
       }
     } finally {
+      clearTimeout(streamAbortTimer);
       reader.releaseLock();
+    }
+    if (streamTimedOut) {
+      console.warn(`[${this.agentName}] Stream timed out — partial text (${accumulatedText.length} chars) will be used`);
     }
 
     const text = accumulatedText;
