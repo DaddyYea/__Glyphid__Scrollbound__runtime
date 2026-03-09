@@ -1566,6 +1566,8 @@
 
   <script>
     const eventSource = new EventSource('/events');
+    // Track rendered message IDs to prevent duplicates on SSE reconnect (server replays all messages)
+    const renderedMessageIds = new Set();
     const mainLayout = document.getElementById('mainLayout');
     const roomPanel = document.getElementById('roomPanel');
     const roomMessages = document.getElementById('roomMessages');
@@ -2956,6 +2958,9 @@
       if (data.type === 'config') {
         buildLayout(data);
       } else if (data.type === 'room-message') {
+        // ID-based dedup: prevents double-render on SSE reconnect (server replays all messages)
+        if (data.id && renderedMessageIds.has(data.id)) return;
+        if (data.id) renderedMessageIds.add(data.id);
         if (data.speaker === 'human' && consumePendingHumanMessage(data.text || '')) {
           return;
         }
@@ -2973,16 +2978,34 @@
         speakingName.textContent = name + ' synthesizing...';
         ttsHoldActive = true;
         pauseRecognitionForTts();
-      } else if (data.type === 'speech-end') {
+      } else if (data.type === 'speech-chunk') {
+        // Streaming TTS: each chunk arrives as it's synthesized — play immediately.
+        if (!chunkStreamActive) {
+          chunkStreamActive = true;
+          ttsHoldActive = true;
+          pauseRecognitionForTts();
+          const name = config ? (config.agentNames[data.agentId] || data.agentId) : data.agentId;
+          speakingIndicator.classList.add('active');
+          speakingName.textContent = name + ' speaking...';
+        }
         if (data.audioUrl || (data.audioBase64 && data.audioBase64.length > 0)) {
-          playAudio(data.audioUrl || data.audioBase64, data.agentId, !!data.audioUrl, data.audioBase64 || null);
-        } else {
-          // No audio (synthesis failed) — signal done immediately
+          // skipDoneSignal=true for all but the final chunk — only final chunk triggers cleanup
+          const isFinal = !!data.isFinalChunk;
+          playAudio(data.audioUrl || data.audioBase64, data.agentId, !!data.audioUrl, data.audioBase64 || null, !isFinal);
+        }
+      } else if (data.type === 'speech-end') {
+        chunkStreamActive = false;
+        if (data.audioUrl || (data.audioBase64 && data.audioBase64.length > 0)) {
+          // Legacy non-streaming path: full audio arrived in speech-end
+          playAudio(data.audioUrl || data.audioBase64, data.agentId, !!data.audioUrl, data.audioBase64 || null, false);
+        } else if (audioQueue.length === 0 && !audioPlaying) {
+          // No chunks queued or playing — synthesis failed or zero audio; release lock now
           speakingIndicator.classList.remove('active');
           ttsHoldActive = false;
           resumeRecognitionAfterTts();
           fetch('/speech-done', { method: 'POST' }).catch(() => {});
         }
+        // else: chunks are still queued/playing — cleanup fires when final chunk ends
       } else if (data.type === 'voice-config') {
         // Update local voice config state
         if (data.agentId && voiceConfigs[data.agentId]) {
@@ -3094,7 +3117,9 @@
       const pill = document.createElement('span');
       pill.className = 'latency-pill' + (total > 15000 ? ' very-slow' : total > 8000 ? ' slow' : '');
       pill.innerHTML = `<span class="pill-icon">⏱</span> ${fmtMs(total)}`;
-      pill.title = `Total: ${fmtMs(total)} | LLM: ${fmtMs(llm)} | dominant: ${dominant || '—'}`;
+      const ttft = d.llmTtftMs != null ? ` | TTFT: ${fmtMs(d.llmTtftMs)}` : '';
+      const tokStr = trace.llmOutputTokenCount != null ? ` | tokens: ${trace.llmOutputTokenCount}` : '';
+      pill.title = `Total: ${fmtMs(total)} | LLM: ${fmtMs(llm)}${ttft}${tokStr} | dominant: ${dominant || '—'}`;
 
       // Panel (hidden until click)
       const panel = document.createElement('div');
@@ -3109,6 +3134,10 @@
       const rows = [
         ['Total', fmtMs(total), total > 10000],
         ['LLM gen', fmtMs(llm), llm > 6000],
+        ['  TTFT', fmtMs(d.llmTtftMs), (d.llmTtftMs || 0) > 3000],
+        ['  transport', fmtMs(d.llmTransportMs), false],
+        ['  decode', fmtMs(d.llmDecodeMs), false],
+        ['  stream gap', fmtMs(d.llmStreamStartGapMs), false],
         ['Orch', fmtMs(orchMs), orchMs > 4000],
         ['  prompt', fmtMs(d.promptAssembly), false],
         ['  routing', fmtMs(d.rawRouting), false],
@@ -3172,9 +3201,17 @@
       const o = trace.outcome || {};
       const orch = (d.promptAssembly || 0) + (d.rawRouting || 0) + (d.visibleCandidateBuild || 0)
         + (d.journalToSpeakConversion || 0) + (d.freshSpeakRetry || 0) + (d.salvage || 0);
+      const ttftLine = d.llmTtftMs != null
+        ? `  llm ttft: ${fmtMs(d.llmTtftMs)} | transport: ${fmtMs(d.llmTransportMs)} | decode: ${fmtMs(d.llmDecodeMs)} | stream-gap: ${fmtMs(d.llmStreamStartGapMs)}`
+        : null;
+      const tokenLine = trace.llmOutputTokenCount != null
+        ? `  tokens out: ${trace.llmOutputTokenCount} | prompt chars: ${trace.llmPromptCharEstimate ?? '—'}`
+        : null;
       const lines = [
         `Turn ${trace.turnId?.slice(0, 8)} | ${o.finalAction} | total: ${fmtMs(d.totalTurnWallClock)}`,
         `  llm: ${fmtMs(d.llmGeneration)} | orch: ${fmtMs(orch)} | tts: ${fmtMs(d.ttsTotal)}`,
+        ...(ttftLine ? [ttftLine] : []),
+        ...(tokenLine ? [tokenLine] : []),
         `  orch breakdown: prompt ${fmtMs(d.promptAssembly)} | build ${fmtMs(d.visibleCandidateBuild)} | routing ${fmtMs(d.rawRouting)}`,
         `  calls: ${c.llmCalls ?? 0} llm, ${c.retryCalls ?? 0} retry, ${c.conversionCalls ?? 0} conv`,
         `  dominant: ${o.dominantLatencyStage ?? '—'}`,
@@ -3358,6 +3395,7 @@
     let audioQueue = [];
     let audioPlaying = false;
     let ttsHoldActive = false;
+    let chunkStreamActive = false; // true while speech-chunk events are being queued/played
     let currentAudio = null; // Reference to currently playing Audio element for barge-in
     let pauseRecognitionForTts = () => {};
     let resumeRecognitionAfterTts = () => {};
@@ -3369,8 +3407,8 @@
       }).catch(() => {});
     }
 
-    function playAudio(audioSource, agentId, isUrl = false, fallbackBase64 = null) {
-      audioQueue.push({ audioSource, agentId, isUrl, fallbackBase64 });
+    function playAudio(audioSource, agentId, isUrl = false, fallbackBase64 = null, skipDoneSignal = false) {
+      audioQueue.push({ audioSource, agentId, isUrl, fallbackBase64, skipDoneSignal });
       reportSpeechStatus(agentId, 'queued');
       if (!audioPlaying) processAudioQueue();
     }
@@ -3397,7 +3435,7 @@
         return;
       }
       audioPlaying = true;
-      const { audioSource, agentId, isUrl, fallbackBase64 } = audioQueue.shift();
+      const { audioSource, agentId, isUrl, fallbackBase64, skipDoneSignal } = audioQueue.shift();
 
       // Pause mic recognition before playback starts. During longer synthesis
       // the server may otherwise see stale human-speaking state and drop audio.
@@ -3496,13 +3534,13 @@
 
       currentAudio = null;
 
-      // Signal server that this audio is done
-      speakingIndicator.classList.remove('active');
-      fetch('/speech-done', { method: 'POST' }).catch(() => {});
-
       if (bargedIn) {
         audioPlaying = false;
         ttsHoldActive = false;
+        chunkStreamActive = false;
+        audioQueue.length = 0;
+        speakingIndicator.classList.remove('active');
+        fetch('/speech-done', { method: 'POST' }).catch(() => {});
         console.log('[VOICE] Barge-in complete — yielding to human');
         // Restart mic so human can speak
         if (recognition && micListening) {
@@ -3511,12 +3549,17 @@
         return;
       }
 
-      // Resume mic after playback if no more queued audio
-      if (audioQueue.length === 0) {
-        audioPlaying = false;
-        ttsHoldActive = false;
-        resumeRecognitionAfterTts();
-        return;
+      if (!skipDoneSignal) {
+        // This is either the final chunk or a non-chunk (legacy) audio item — signal server done.
+        speakingIndicator.classList.remove('active');
+        fetch('/speech-done', { method: 'POST' }).catch(() => {});
+        if (audioQueue.length === 0) {
+          audioPlaying = false;
+          ttsHoldActive = false;
+          chunkStreamActive = false;
+          resumeRecognitionAfterTts();
+          return;
+        }
       }
 
       // Process next in queue

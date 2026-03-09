@@ -339,6 +339,25 @@ async function main() {
       broadcast({ type: 'tick', tickCount: event.tickCount });
     } else if (event.type === 'speech-start') {
       broadcast({ type: 'speech-start', agentId: event.agentId });
+    } else if (event.type === 'speech-chunk') {
+      // Cache each chunk under its own ID for URL-based delivery; also include inline base64 fallback.
+      let chunkAudioUrl: string | undefined;
+      if (event.audioBase64 && event.audioBase64.length > 0) {
+        const chunkId = `${event.agentId || 'agent'}-chunk${event.chunkIndex ?? 0}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const chunkBuffer = Buffer.from(event.audioBase64, 'base64');
+        speechAudioCache.set(chunkId, { audio: chunkBuffer, createdAt: Date.now() });
+        chunkAudioUrl = `/speech-audio/${chunkId}`;
+      }
+      broadcast({
+        type: 'speech-chunk',
+        agentId: event.agentId,
+        audioUrl: chunkAudioUrl,
+        audioBase64: event.audioBase64,
+        chunkIndex: event.chunkIndex,
+        chunkCount: event.chunkCount,
+        isFinalChunk: event.isFinalChunk,
+        durationMs: event.durationMs,
+      });
     } else if (event.type === 'speech-end') {
       let audioUrl: string | undefined;
       let audioBase64: string | undefined;

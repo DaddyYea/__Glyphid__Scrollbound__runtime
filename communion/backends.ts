@@ -85,6 +85,14 @@ export interface GenerateResult {
   budgetReceipt?: BudgetReceipt;
   searchReceipt?: SearchReceipt;
   actionReceipt?: ActionReceipt;
+  /** Timestamp (Date.now()) when first byte of streaming response was received */
+  llmFirstByteMs?: number;
+  /** Timestamp (Date.now()) when first non-empty content token arrived in stream */
+  llmFirstTokenMs?: number;
+  /** Total output token count from streaming response (from usage field or token count) */
+  llmOutputTokenCount?: number;
+  /** Estimated prompt char count sent to model */
+  llmPromptCharEstimate?: number;
 }
 
 /**
@@ -608,6 +616,9 @@ export class OpenAICompatibleBackend implements AgentBackend {
       finalMessages.push({ role: 'assistant', content: options.prefill });
     }
 
+    // Estimate prompt size for latency trace
+    const llmPromptCharEstimate = finalMessages.reduce((sum, m) => sum + (m.content || '').length, 0);
+
     // Retry up to 3 times on socket errors — LM Studio intermittently drops connections
     // (UND_ERR_SOCKET / "other side closed") especially under VRAM pressure
     let response: Response | null = null;
@@ -630,6 +641,7 @@ export class OpenAICompatibleBackend implements AgentBackend {
             messages: finalMessages,
             max_tokens: packed.finalMaxTokens,
             temperature: this.temperature,
+            stream: true,
           }),
         });
         break; // got a response — exit retry loop
@@ -647,6 +659,7 @@ export class OpenAICompatibleBackend implements AgentBackend {
       const isCtxOverflow = response.status === 400 && /context size has been exceeded|context.*exceed/i.test(err);
       if (isLocalModel && isCtxOverflow) {
         // One emergency retry with an extra-hard char cap for tokenizer mismatch on local models.
+        // Emergency path uses non-streaming (simpler, single-shot for error recovery).
         const emergencyMessages = emergencyTrimMessages(finalMessages, 6000);
         const retry = await fetch(`${this.baseUrl}/chat/completions`, {
           method: 'POST',
@@ -669,12 +682,12 @@ export class OpenAICompatibleBackend implements AgentBackend {
           }
           if (isLocalModel && options.prefill) {
             const content = text.trim();
-            if (options.prefill.includes('[JOURNAL]')) return { action: 'journal', text: content, budgetReceipt: packed.receipt };
-            if (options.prefill.includes('[SILENT]')) return { action: 'silent', text: '', budgetReceipt: packed.receipt };
-            return { ...buildSpeakResult(content), budgetReceipt: packed.receipt };
+            if (options.prefill.includes('[JOURNAL]')) return { action: 'journal', text: content, budgetReceipt: packed.receipt, llmPromptCharEstimate };
+            if (options.prefill.includes('[SILENT]')) return { action: 'silent', text: '', budgetReceipt: packed.receipt, llmPromptCharEstimate };
+            return { ...buildSpeakResult(content), budgetReceipt: packed.receipt, llmPromptCharEstimate };
           }
           const parsed = parseResponse(text);
-          return { ...parsed, budgetReceipt: packed.receipt };
+          return { ...parsed, budgetReceipt: packed.receipt, llmPromptCharEstimate };
         }
         const retryErr = await retry.text();
         throw new Error(`${this.agentName} API error ${retry.status}: ${retryErr}`);
@@ -682,22 +695,67 @@ export class OpenAICompatibleBackend implements AgentBackend {
       throw new Error(`${this.agentName} API error ${response.status}: ${err}`);
     }
 
-    const data = (await response.json()) as any;
-    const text = data.choices?.[0]?.message?.content || '';
+    // ── Streaming SSE response reader ──
+    // Reads token-by-token delta stream to capture TTFT + first-byte timing.
+    // Accumulates full text for action parsing / prefill path.
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let llmFirstByteMs: number | undefined;
+    let llmFirstTokenMs: number | undefined;
+    let llmOutputTokenCount: number | undefined;
+    let accumulatedText = '';
+    let sseBuffer = ''; // handles SSE lines split across read() chunks
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!llmFirstByteMs) llmFirstByteMs = Date.now();
+        sseBuffer += decoder.decode(value, { stream: true });
+        // Process complete SSE lines
+        const lines = sseBuffer.split('\n');
+        sseBuffer = lines.pop() ?? ''; // last partial line back to buffer
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const payload = trimmed.slice(5).trim();
+          if (payload === '[DONE]') break;
+          try {
+            const chunk = JSON.parse(payload) as any;
+            const delta = chunk.choices?.[0]?.delta?.content;
+            if (delta) {
+              if (!llmFirstTokenMs) llmFirstTokenMs = Date.now();
+              accumulatedText += delta;
+            }
+            // Capture output token count from usage field (some APIs include in final chunk)
+            const usage = chunk.usage;
+            if (usage?.completion_tokens) llmOutputTokenCount = usage.completion_tokens;
+          } catch {
+            // Malformed SSE chunk — skip
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    const text = accumulatedText;
     if (isLocalModel) {
       console.log(`[${this.agentName}] Raw response: "${text.substring(0, 200)}${text.length > 200 ? '...' : ''}"`);
     }
 
+    const timingFields = { llmFirstByteMs, llmFirstTokenMs, llmOutputTokenCount, llmPromptCharEstimate };
+
     // Prefill path: action is determined by the prefix we sent, not by tag-parsing
     if (isLocalModel && options.prefill) {
       const content = text.trim();
-      if (options.prefill.includes('[JOURNAL]')) return { action: 'journal', text: content, budgetReceipt: packed.receipt };
-      if (options.prefill.includes('[SILENT]')) return { action: 'silent', text: '', budgetReceipt: packed.receipt };
-      return { ...buildSpeakResult(content), budgetReceipt: packed.receipt };
+      if (options.prefill.includes('[JOURNAL]')) return { action: 'journal', text: content, budgetReceipt: packed.receipt, ...timingFields };
+      if (options.prefill.includes('[SILENT]')) return { action: 'silent', text: '', budgetReceipt: packed.receipt, ...timingFields };
+      return { ...buildSpeakResult(content), budgetReceipt: packed.receipt, ...timingFields };
     }
 
     const parsed = parseResponse(text);
-    return { ...parsed, budgetReceipt: packed.receipt };
+    return { ...parsed, budgetReceipt: packed.receipt, ...timingFields };
   }
 }
 

@@ -50,7 +50,7 @@ import path from 'node:path';
 
 // ── Events ──
 
-export type CommunionEventType = 'room-message' | 'journal-entry' | 'tick' | 'error' | 'backchannel' | 'speech-start' | 'speech-end' | 'turn-latency' | 'processing-status';
+export type CommunionEventType = 'room-message' | 'journal-entry' | 'tick' | 'error' | 'backchannel' | 'speech-start' | 'speech-chunk' | 'speech-end' | 'turn-latency' | 'processing-status';
 
 /** Stage-by-stage latency trace for a single agent turn. */
 export interface TurnLatencyTrace {
@@ -67,6 +67,8 @@ export interface TurnLatencyTrace {
     promptAssemblyStartAtMs?: number;
     promptAssemblyEndAtMs?: number;
     llmDispatchStartAtMs?: number;
+    llmFirstByteMs?: number;
+    llmFirstTokenMs?: number;
     llmLastTokenAtMs?: number;
     rawRoutingStartAtMs?: number;
     rawRoutingEndAtMs?: number;
@@ -89,6 +91,10 @@ export interface TurnLatencyTrace {
   durationsMs: {
     promptAssembly?: number;
     llmGeneration?: number;
+    llmTtftMs?: number;
+    llmTransportMs?: number;
+    llmDecodeMs?: number;
+    llmStreamStartGapMs?: number;
     rawRouting?: number;
     journalToSpeakConversion?: number;
     freshSpeakRetry?: number;
@@ -98,6 +104,8 @@ export interface TurnLatencyTrace {
     ttsTotal?: number;
     totalTurnWallClock?: number;
   };
+  llmPromptCharEstimate?: number;
+  llmOutputTokenCount?: number;
   counters: {
     llmCalls: number;
     conversionCalls: number;
@@ -140,6 +148,12 @@ export interface CommunionEvent {
   statusLabel?: string;
   /** Elapsed ms for processing-status events */
   elapsedMs?: number;
+  /** Chunk index for speech-chunk events (0-based) */
+  chunkIndex?: number;
+  /** Total chunk count for speech-chunk events */
+  chunkCount?: number;
+  /** Whether this is the final chunk */
+  isFinalChunk?: boolean;
 }
 
 export type CommunionListener = (event: CommunionEvent) => void;
@@ -8871,6 +8885,8 @@ export class CommunionLoop {
         ttsFailureReason: null as string | null,
         dominantLatencyStage: null as string | null,
       },
+      llmPromptCharEstimate: undefined as number | undefined,
+      llmOutputTokenCount: undefined as number | undefined,
     };
 
     const latestHumanMessage = [...this.state.messages]
@@ -9915,6 +9931,11 @@ ${relayDetection.isDuplicateResend ? `- This appears to be a resend. Acknowledge
     }
     this.recordLLMReceipt(agentId, agent.config.model, options, result);
     lts.stages.llmLastTokenAtMs = Date.now();
+    // Capture streaming timing from backend result
+    if (result.llmFirstByteMs) lts.stages.llmFirstByteMs = result.llmFirstByteMs;
+    if (result.llmFirstTokenMs) lts.stages.llmFirstTokenMs = result.llmFirstTokenMs;
+    if (result.llmPromptCharEstimate) lts.llmPromptCharEstimate = result.llmPromptCharEstimate;
+    if (result.llmOutputTokenCount) lts.llmOutputTokenCount = result.llmOutputTokenCount;
     lts.outcome.rawAction = result.action;
     const rawPresenceClass = this.classifyPresenceExpression(result.text || '', latestHumanText);
     const rawOutputClass = this.classifyPlannedOutput(result.text || '', latestHumanText, presenceState, presencePlan);
@@ -13320,6 +13341,7 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       const timeoutByIndex: boolean[] = [];
       const audioParts: Buffer[] = [];
       let chunkFailed = false;
+      let chunkEmitCount = 0;
 
       for (let i = 0; i < chunks.length; i++) {
         sentByIndex[i] = true;
@@ -13333,6 +13355,17 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
           const buf = await synthesizeChunk(chunks[i], voiceConfig);
           receivedByIndex[i] = true;
           audioParts.push(buf);
+          // Emit each chunk immediately so client can start playing before all chunks are ready
+          this.emit({
+            type: 'speech-chunk',
+            agentId,
+            audioBase64: buf.toString('base64'),
+            audioFormat: 'mp3',
+            chunkIndex: i,
+            chunkCount: chunks.length,
+            isFinalChunk: i === chunks.length - 1,
+          });
+          chunkEmitCount++;
         } catch (chunkErr) {
           ttsTrace.ttsChunkFailureIndex = i;
           ttsTrace.ttsChunkFailureReason = chunkErr instanceof Error ? chunkErr.message : String(chunkErr);
@@ -13370,44 +13403,54 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         this.humanSpeaking && this.lastHumanSpeakingSignalAt > humanSpeakingSignalAtStart;
       if (humanStartedSpeakingDuringSynthesis) {
         const capturedHumanMessageId = this.latestHumanMessage()?.id ?? null;
-        console.log(`[${agentConfig.name}] VOICE: human spoke during synthesis — deferring playback (humanMsg=${capturedHumanMessageId})`);
-        // Cancel any older deferred slot.
-        if (this.pendingSpeechDebounceTimer) {
-          clearTimeout(this.pendingSpeechDebounceTimer);
-          this.pendingSpeechDebounceTimer = null;
+        if (chunkEmitCount > 0) {
+          // Chunks were already streamed to the client — can't defer what's already in flight.
+          // Just close out the speech-end signal normally with empty audio.
+          console.log(`[${agentConfig.name}] VOICE: human spoke during synthesis — chunks already streamed (${chunkEmitCount}), completing normally`);
+          ttsTrace.postSynthesisInterruptedByHuman = true;
+          ttsTrace.chunksAlreadyStreamedOnInterrupt = true;
+        } else {
+          // No chunks emitted yet — defer as before.
+          console.log(`[${agentConfig.name}] VOICE: human spoke during synthesis — deferring playback (humanMsg=${capturedHumanMessageId})`);
+          // Cancel any older deferred slot.
+          if (this.pendingSpeechDebounceTimer) {
+            clearTimeout(this.pendingSpeechDebounceTimer);
+            this.pendingSpeechDebounceTimer = null;
+          }
+          this.pendingSpeechPlayback = {
+            agentId,
+            agentConfig,
+            audio: mergedAudio,
+            audioFormat: 'mp3',
+            durationMs: estimatedDurationMs,
+            text,
+            createdAt: Date.now(),
+            humanMessageIdAtCapture: capturedHumanMessageId,
+            ttsTrace: { ...ttsTrace },
+          };
+          // Release the speaking lock and signal the client that synthesis ended.
+          // We will re-emit speech-start + speech-end when the human stops talking.
+          this.emit({ type: 'speech-end', agentId, durationMs: 0 });
+          this.speaking = false;
+          ttsTrace.postSynthesisInterruptedByHuman = true;
+          ttsTrace.pendingSpeechStored = true;
+          ttsTrace.pendingSpeechMessageId = capturedHumanMessageId;
+          this.recordRelationalTrace(agentId, 'tts', ttsTrace);
+          return;
         }
-        this.pendingSpeechPlayback = {
-          agentId,
-          agentConfig,
-          audio: mergedAudio,
-          audioFormat: 'mp3',
-          durationMs: estimatedDurationMs,
-          text,
-          createdAt: Date.now(),
-          humanMessageIdAtCapture: capturedHumanMessageId,
-          ttsTrace: { ...ttsTrace },
-        };
-        // Release the speaking lock and signal the client that synthesis ended.
-        // We will re-emit speech-start + speech-end when the human stops talking.
-        this.emit({ type: 'speech-end', agentId, durationMs: 0 });
-        this.speaking = false;
-        ttsTrace.postSynthesisInterruptedByHuman = true;
-        ttsTrace.pendingSpeechStored = true;
-        ttsTrace.pendingSpeechMessageId = capturedHumanMessageId;
-        this.recordRelationalTrace(agentId, 'tts', ttsTrace);
-        return;
       }
       if (this.humanSpeaking) {
         console.log(`[${agentConfig.name}] VOICE: ignoring stale humanSpeaking during synthesis (${Date.now() - synthesisStartedAt}ms)`);
         this.humanSpeaking = false;
       }
 
-      console.log(`[${agentConfig.name}] VOICE: ${Math.round(estimatedDurationMs / 1000)}s audio (${mergedAudio.length} bytes, ${chunks.length} chunk(s)) — sending to client`);
+      console.log(`[${agentConfig.name}] VOICE: ${Math.round(estimatedDurationMs / 1000)}s audio (${mergedAudio.length} bytes, ${chunks.length} chunk(s) streamed=${chunkEmitCount}) — signaling speech-end`);
 
+      // Audio was already delivered via speech-chunk events; speech-end is a completion signal only.
       this.emit({
         type: 'speech-end',
         agentId,
-        audioBase64: mergedAudio.toString('base64'),
+        audioBase64: '',
         audioFormat: 'mp3',
         durationMs: estimatedDurationMs,
       });
@@ -14864,6 +14907,10 @@ Sometimes the most real thing you can offer is not fixing, not reframing, not in
     const dur = (a?: number, b?: number) => (a !== undefined && b !== undefined) ? (b - a) : undefined;
     d.promptAssembly = dur(s.promptAssemblyStartAtMs, s.promptAssemblyEndAtMs);
     d.llmGeneration = dur(s.llmDispatchStartAtMs, s.llmLastTokenAtMs);
+    d.llmTtftMs = dur(s.llmDispatchStartAtMs, s.llmFirstTokenMs);
+    d.llmTransportMs = dur(s.llmDispatchStartAtMs, s.llmFirstByteMs);
+    d.llmDecodeMs = dur(s.llmFirstTokenMs, s.llmLastTokenAtMs);
+    d.llmStreamStartGapMs = dur(s.llmFirstByteMs, s.llmFirstTokenMs);
     d.rawRouting = dur(s.rawRoutingStartAtMs, s.rawRoutingEndAtMs);
     d.journalToSpeakConversion = dur(s.journalToSpeakConversionStartAtMs, s.journalToSpeakConversionEndAtMs);
     d.freshSpeakRetry = dur(s.freshSpeakRetryStartAtMs, s.freshSpeakRetryEndAtMs);
