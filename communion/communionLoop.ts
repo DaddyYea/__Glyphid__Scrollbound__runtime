@@ -383,8 +383,29 @@ interface PresenceBiasPacket {
   companionModeBias: number;
 }
 
+interface RelayParticipant {
+  name: string;
+  role: 'relay_author';
+  certainty: 'concrete_real_participant';
+  introducedAtTick: number;
+  expiresAtTick: number; // persists for 6 turns
+  source: 'explicit_user_relay';
+  introCue: string | null;
+}
+
+interface RelayDetectionResult {
+  isRelay: boolean;
+  relayAuthorName: string | null;
+  relayConfidence: number; // 0-1
+  relaySegments: string[];
+  hasExplicitSignature: boolean;
+  introCue: string | null;
+  sociallyComplete: boolean;
+  isDuplicateResend: boolean;
+}
+
 interface PresenceResponsePlan {
-  responseFrame: 'rupture_repair' | 'companionship' | 'continuity_return' | 'direct_answer' | 'task';
+  responseFrame: 'rupture_repair' | 'companionship' | 'continuity_return' | 'direct_answer' | 'task' | 'relay_social_response';
   mustTouch: string | null;
   threadTarget: string | null;
   continuationRequired: boolean;
@@ -1252,6 +1273,10 @@ export class CommunionLoop {
    * Max 12 entries per agent.
    */
   private recentAssistantQuestions: Map<string, string[]> = new Map();
+  /** Bound relay participant for each agent — persists 6 turns */
+  private activeRelayParticipantByAgent: Map<string, RelayParticipant | null> = new Map();
+  /** Cache of most recent relay text per agent for duplicate detection */
+  private lastRelayTextByAgent: Map<string, string> = new Map();
 
   constructor(config: CommunionConfig) {
     this.tickIntervalMs = config.tickIntervalMs || 15000;
@@ -3658,7 +3683,241 @@ export class CommunionLoop {
     this.recentAssistantQuestions.set(agentId, history);
   }
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // RELAY BINDING SYSTEM
+  // ─────────────────────────────────────────────────────────────────────────────
+
   /**
+   * Detects whether the user's turn is relaying a message authored by a named third party.
+   * High-confidence relay: explicit intro framing + quoted message content + optional signature.
+   * Signature-only case: persists binding from a prior intro that established the author.
+   */
+  private detectRelayedThirdPartyMessage(
+    latestHumanText: string,
+    recentTurns: { speaker: string; text: string }[],
+    tickCount: number,
+    agentId: string,
+  ): RelayDetectionResult {
+    const NO_RELAY: RelayDetectionResult = {
+      isRelay: false, relayAuthorName: null, relayConfidence: 0,
+      relaySegments: [], hasExplicitSignature: false, introCue: null,
+      sociallyComplete: false, isDuplicateResend: false,
+    };
+    const src = (latestHumanText || '').trim();
+    if (!src || src.length < 5) return NO_RELAY;
+
+    // ── Intro framing patterns ──
+    const INTRO_RE = /\b(?:this\s+is\s+from|this\s+is\s+a\s+message\s+from|message\s+from|relay(?:ing)?\s+(?:a\s+message\s+)?from|(?:my\s+)?(?:friend|colleague|coworker|roommate|partner|sister|brother|mom|dad|contact)\s+(?:\w+\s+)?says?|(?:she|he|they)\s+says?|for\s+our\s+(?:discord|group|channel|room)|another\s+(?:colleague|friend|person)|here(?:'s|\s+is)\s+(?:a\s+message\s+)?from)\b/i;
+    const introMatch = src.match(INTRO_RE);
+    let introCue: string | null = introMatch ? introMatch[0] : null;
+
+    // ── Signature patterns: "- Name", "— Name", "–Name", "~Name" at end of text ──
+    const SIG_RE = /(?:^|\n)\s*[-–—~]\s*([A-Z][a-z]{1,20}(?:\s+[A-Z][a-z]{1,20})?)\s*$/;
+    const sigMatch = src.match(SIG_RE);
+    const signatureName = sigMatch ? sigMatch[1].trim() : null;
+    const hasExplicitSignature = !!signatureName;
+
+    // ── Extract name from intro framing ──
+    // "This is from Kaytlyn. ..." → "Kaytlyn"
+    const INTRO_NAME_RE = /(?:this\s+is\s+from|message\s+from|from\s+(?:my\s+)?(?:friend|colleague|coworker|contact)?)\s+([A-Z][a-z]{1,20}(?:\s+[A-Z][a-z]{1,20})?)\b/i;
+    const introNameMatch = src.match(INTRO_NAME_RE);
+    let introName: string | null = introNameMatch ? introNameMatch[1].trim() : null;
+
+    // ── Self-identification in relayed text: "I'm [Name]." or "I am [Name]." ──
+    const SELF_ID_RE = /\bI(?:'m|\s+am)\s+([A-Z][a-z]{1,20}(?:\s+[A-Z][a-z]{1,20})?)\b/;
+    const selfIdMatch = src.match(SELF_ID_RE);
+    const selfIdName = selfIdMatch ? selfIdMatch[1].trim() : null;
+
+    // ── Candidate name — prefer signature > intro > self-id ──
+    const candidateName = signatureName || introName || selfIdName;
+
+    // ── Check active relay participant binding (may be from prior turn) ──
+    const existingParticipant = this.activeRelayParticipantByAgent.get(agentId);
+    const boundName = (existingParticipant && existingParticipant.expiresAtTick > tickCount)
+      ? existingParticipant.name : null;
+
+    // ── Confidence scoring ──
+    let confidence = 0;
+    if (introCue) confidence += 0.5;
+    if (hasExplicitSignature) confidence += 0.35;
+    if (introName || selfIdName) confidence += 0.2;
+    if (introCue && (hasExplicitSignature || selfIdName)) confidence = Math.min(1, confidence + 0.15);
+    // Prior binding with matching or no new conflicting name → high confidence
+    if (boundName && !candidateName) confidence = Math.max(confidence, 0.85);
+    if (boundName && candidateName && boundName.toLowerCase() === candidateName.toLowerCase()) confidence = Math.min(1, confidence + 0.2);
+
+    const isRelay = confidence >= 0.45 || (hasExplicitSignature && !!boundName);
+    if (!isRelay) return NO_RELAY;
+
+    const relayAuthorName = candidateName || boundName;
+    const relaySegments = [src]; // full text is the relay segment for now
+
+    // ── Social completeness ──
+    const sociallyComplete = this.assessSocialCompletenessOfRelay(src);
+
+    // ── Duplicate detection ──
+    const lastRelay = this.lastRelayTextByAgent.get(agentId) || '';
+    const lastRelayNorm = lastRelay.toLowerCase().replace(/\s+/g, ' ').trim();
+    const srcNorm = src.toLowerCase().replace(/\s+/g, ' ').trim();
+    const overlapWithLast = lastRelayNorm.length > 10 && srcNorm.length > 10
+      ? this.lexicalOverlapScore(lastRelayNorm, srcNorm)
+      : 0;
+    const isDuplicateResend = overlapWithLast >= 0.82;
+
+    return {
+      isRelay: true,
+      relayAuthorName,
+      relayConfidence: Number(confidence.toFixed(3)),
+      relaySegments,
+      hasExplicitSignature,
+      introCue,
+      sociallyComplete,
+      isDuplicateResend,
+    };
+  }
+
+  /** Returns true when relayed content is a greeting, acknowledgment, or light social presence. */
+  private assessSocialCompletenessOfRelay(text: string): boolean {
+    const t = (text || '').toLowerCase();
+    // Greeting / introduction patterns
+    if (/\b(?:hi|hello|hey|good\s+(?:morning|evening|afternoon|night)|how\s+are\s+you|nice\s+to\s+meet|lovely\s+to\s+meet|pleasure\s+to\s+meet|i(?:'m|\s+am)\s+\w+|greetings|howdy)\b/i.test(t)) return true;
+    // Light affirmation / acknowledgment
+    if (/\b(?:making\s+new\s+connections|very\s+nice|so\s+nice|really\s+nice|sounds?\s+(?:good|great|lovely|nice|wonderful)|thank(?:s|\s+you)|appreciate\s+(?:it|that|you)|glad\s+to|happy\s+to)\b/i.test(t)) return true;
+    // Short text (<= 150 chars) with no analysis or question intent
+    if (t.length <= 150 && !/\b(?:why|how\s+does|what\s+does|explain|analyze|tell\s+me\s+more)\b/i.test(t)) return true;
+    return false;
+  }
+
+  /**
+   * Binds a relay participant as the active relayed author for this agent.
+   * Persists for 6 turns (expiresAtTick = currentTick + 6).
+   */
+  private bindRelayParticipant(agentId: string, name: string, introCue: string | null, tickCount: number): RelayParticipant {
+    const participant: RelayParticipant = {
+      name,
+      role: 'relay_author',
+      certainty: 'concrete_real_participant',
+      introducedAtTick: tickCount,
+      expiresAtTick: tickCount + 6,
+      source: 'explicit_user_relay',
+      introCue,
+    };
+    this.activeRelayParticipantByAgent.set(agentId, participant);
+    return participant;
+  }
+
+  /**
+   * Detects if a reply reopens a bound concrete participant as ambiguous/symbolic.
+   * Hard-fail guard: if Kaytlyn is known to be a real relay author, asking
+   * "Is Kaytlyn someone specific..." is a name certainty violation.
+   */
+  private detectImproperNameReopening(
+    text: string,
+    boundParticipantName: string | null,
+  ): { detected: boolean; offendingCluster: string | null } {
+    if (!boundParticipantName || !text) return { detected: false, offendingCluster: null };
+    const name = boundParticipantName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const REOPEN_RE = new RegExp(
+      `(?:is\\s+${name}\\s+(?:someone|a\\s+(?:real|specific|actual)|(?:just\\s+)?a\\s+(?:placeholder|stand.in|fictional|symbolic|hypothetical|made.up|alias|codename))|` +
+      `(?:what|who)\\s+(?:does\\s+${name}|is\\s+${name})\\s+(?:represent|mean|signify|symbolize|stand\\s+for)|` +
+      `(?:is\\s+that\\s+a\\s+real\\s+name|are\\s+you\\s+using\\s+${name}\\s+(?:more\\s+broadly|as|to\\s+refer)|` +
+      `${name}\\s+(?:being|as|as\\s+a)\\s+(?:placeholder|stand.in|symbol|metaphor)|` +
+      `(?:fictional|hypothetical|invented|imaginary|abstract)\\s+${name}))`,
+      'i',
+    );
+    const match = text.match(REOPEN_RE);
+    if (match) return { detected: true, offendingCluster: match[0] };
+    return { detected: false, offendingCluster: null };
+  }
+
+  /**
+   * Counts visible question sentences in a reply.
+   * A "question sentence" ends with `?` (or `?!`/`?"`).
+   */
+  private countVisibleQuestionSentences(text: string): number {
+    if (!text) return 0;
+    const matches = text.match(/[^.!?]*\?[^\n]*/g);
+    return matches ? matches.length : 0;
+  }
+
+  /**
+   * Detects a multi-question curiosity cascade: more than one visible question, or
+   * consecutive curiosity stems on a socially simple input.
+   */
+  private detectQuestionCascade(text: string): {
+    detected: boolean;
+    questionCount: number;
+    cascadeKind: 'multi_question' | 'curiosity_cluster' | null;
+  } {
+    const qCount = this.countVisibleQuestionSentences(text);
+    if (qCount <= 1) return { detected: false, questionCount: qCount, cascadeKind: null };
+    // Check for curiosity stem cluster
+    const CURIOSITY_STEMS = /\b(?:what\s+(?:pulls?|drew?|brings?|prompted?|was\s+it\s+that)|was\s+there\s+a\s+moment|if\s+so[,.]|or\s+is\s+it|is\s+it\s+(?:more|that)|what\s+(?:made|keeps?|keeps?\s+you))\b/gi;
+    const stemMatches = (text.match(CURIOSITY_STEMS) || []).length;
+    const cascadeKind: 'curiosity_cluster' | 'multi_question' = stemMatches >= 2 ? 'curiosity_cluster' : 'multi_question';
+    return { detected: true, questionCount: qCount, cascadeKind };
+  }
+
+  /**
+   * Strips all trailing question clusters after the last solid declarative body sentence.
+   * Returns the cleaned text, or the original if no safe cut point found.
+   */
+  private stripQuestionCascade(text: string): string {
+    if (!text) return text;
+    // Find the last sentence that ends with . or ! and is non-empty
+    const sentenceRe = /([^.!?]+[.!]+(?:\s|$))/g;
+    let lastDecl = '';
+    let lastDeclEnd = 0;
+    let m: RegExpExecArray | null;
+    while ((m = sentenceRe.exec(text)) !== null) {
+      if (m[1].trim().length > 10) {
+        lastDecl = m[1];
+        lastDeclEnd = sentenceRe.lastIndex;
+      }
+    }
+    if (!lastDecl) return text;
+    const cut = text.slice(0, lastDeclEnd).trim();
+    return cut.length >= 15 ? cut : text;
+  }
+
+  /**
+   * Detects punctuation overread: the model attributes motive/interiority purely from
+   * surface formatting (ellipsis, dash, line breaks) with no substantive semantic anchor.
+   */
+  private detectPunctuationOverread(
+    text: string,
+    relayText: string | null,
+  ): { detected: boolean; offendingCluster: string | null } {
+    const NO = { detected: false, offendingCluster: null };
+    if (!text) return NO;
+    // Only meaningful if source contains punctuation markers
+    if (relayText && !/[.…\-–—]/.test(relayText)) return NO;
+    const OVERREAD_RE = /(?:the\s+(?:dash|ellipsis|pause|dot{2,}|dot\.{2,}|period{2,}|line\s+break|hyphen|em.dash)\s+(?:feels?|suggests?|implies?|seems?|looks?\s+like|reads?\s+as|tells?\s+me|signals?)|(?:I\s+(?:notice|wonder|sense)\s+(?:the\s+)?(?:pause|dash|ellipsis|space|gap|break|dots))|(?:the\s+way\s+(?:you|they)\s+(?:paused?|trailed?\s+off|left\s+space|broke\s+the\s+line))|(?:(?:you\s+were?|they\s+were?)\s+(?:giving|leaving)\s+space)|(?:what\s+prompted\s+the\s+(?:pause|ellipsis|dash|break)))/i;
+    const match = text.match(OVERREAD_RE);
+    if (match) return { detected: true, offendingCluster: match[0] };
+    return NO;
+  }
+
+  /**
+   * Strips punctuation-overread sentences from the reply.
+   * Returns the text with the offending sentence cluster removed.
+   */
+  private stripPunctuationOverread(text: string, offendingCluster: string): string {
+    if (!text || !offendingCluster) return text;
+    const clusterLower = offendingCluster.toLowerCase().slice(0, 30);
+    const idx = text.toLowerCase().indexOf(clusterLower);
+    if (idx < 0) return text;
+    // Find sentence boundary before the offending cluster
+    const before = text.slice(0, idx).replace(/[,;:\s—–]+$/, '').trim();
+    if (before.length >= 20) return before;
+    // Try cutting the whole sentence: find period before idx
+    const lastPeriod = text.lastIndexOf('.', idx);
+    if (lastPeriod > 10) return text.slice(0, lastPeriod + 1).trim();
+    return text;
+  }
+
+  /**
+   * Fabricated Autobiography Block (continued below).
    * Detects fabricated autobiographical claims — first-person worldly anecdotes that Alois
    * cannot actually have experienced (memories of times, childhood, past life events, etc.).
    * These are confabulation patterns that contaminate relational turns with false resonance.
@@ -4006,7 +4265,7 @@ export class CommunionLoop {
   }
 
   private isRelationalFrame(responseFrame: PresenceResponsePlan['responseFrame']): boolean {
-    return responseFrame === 'companionship' || responseFrame === 'rupture_repair' || responseFrame === 'continuity_return' || responseFrame === 'direct_answer';
+    return responseFrame === 'companionship' || responseFrame === 'rupture_repair' || responseFrame === 'continuity_return' || responseFrame === 'direct_answer' || responseFrame === 'relay_social_response';
   }
 
   private isBelowRelationalAcceptanceFloor(
@@ -5272,6 +5531,12 @@ export class CommunionLoop {
       case 'task':
         lines.push('- procedural structure is allowed because the user asked for it');
         break;
+      case 'relay_social_response':
+        lines.push('- respond socially and warmly to the relay author as a real person');
+        lines.push('- do not analyze, probe, or query the relay content');
+        lines.push('- do not question the relay author\'s name or reality');
+        lines.push('- zero visible question marks; brief, direct, warm');
+        break;
     }
     if (relationalFrame) {
       lines.push('- answer before asking anything, and do not bounce the burden back immediately');
@@ -5318,7 +5583,7 @@ export class CommunionLoop {
     if (plan.continuationRequired && (outputClass === 'reset' || outputClass === 'procedural' || outputClass === 'presence-flat')) {
       return outputClass === 'reset' ? 'reset' : outputClass;
     }
-    if ((plan.responseFrame === 'rupture_repair' || plan.responseFrame === 'companionship' || plan.responseFrame === 'continuity_return')
+    if ((plan.responseFrame === 'rupture_repair' || plan.responseFrame === 'companionship' || plan.responseFrame === 'continuity_return' || plan.responseFrame === 'relay_social_response')
       && (outputClass === 'procedural' || (plan.rejectPresenceFlat && outputClass === 'presence-flat'))) {
       return outputClass === 'procedural' ? 'procedural' : 'presence-flat';
     }
@@ -8349,10 +8614,41 @@ export class CommunionLoop {
         metabolizeAnswer: null,
       };
     }
-    const presencePlan = this.applyQuestionResolutionToPlan(
+    let presencePlan = this.applyQuestionResolutionToPlan(
       this.buildPresenceResponsePlan(turnMode, presenceState, presenceBias, latestHumanText, directQuestionContract, recentUserTurns, repairDemand),
       questionContext,
     );
+
+    // ── Relay Binding: Upstream Detection ──
+    // Detect before prompt assembly so the model sees a clean relay frame.
+    const recentMessagesForRelay = this.state.messages.slice(-8).map(m => ({ speaker: m.speaker, text: m.text || '' }));
+    const relayDetection = hasLatestHuman
+      ? this.detectRelayedThirdPartyMessage(latestHumanText, recentMessagesForRelay, this.state.tickCount, agentId)
+      : { isRelay: false, relayAuthorName: null, relayConfidence: 0, relaySegments: [], hasExplicitSignature: false, introCue: null, sociallyComplete: false, isDuplicateResend: false } as RelayDetectionResult;
+    // Bind participant and override frame
+    if (relayDetection.isRelay) {
+      if (relayDetection.relayAuthorName) {
+        this.bindRelayParticipant(agentId, relayDetection.relayAuthorName, relayDetection.introCue, this.state.tickCount);
+      }
+      if (relayDetection.relayAuthorName) {
+        this.lastRelayTextByAgent.set(agentId, latestHumanText);
+      }
+      // Override presence plan to relay_social_response
+      presencePlan = {
+        ...presencePlan,
+        responseFrame: 'relay_social_response',
+        questionPolicy: 0, // no questions in relay mode
+        banList: [...(presencePlan.banList || []), 'probe_question', 'punctuation_overread', 'name_reopen'],
+      };
+      console.log(`[RELAY_BIND] Relay detected: author="${relayDetection.relayAuthorName}" conf=${relayDetection.relayConfidence} social=${relayDetection.sociallyComplete} dup=${relayDetection.isDuplicateResend}`);
+    }
+    // Expire stale relay binding
+    const existingRelayParticipant = this.activeRelayParticipantByAgent.get(agentId);
+    if (existingRelayParticipant && existingRelayParticipant.expiresAtTick <= this.state.tickCount) {
+      this.activeRelayParticipantByAgent.set(agentId, null);
+    }
+    const boundRelayParticipant = this.activeRelayParticipantByAgent.get(agentId) ?? null;
+
     const normalizedMustTouch = repairDemand.normalizedMustTouch || presencePlan.mustTouch;
     const recentPromptMessages = this.state.messages.slice(-(fastLaneReply ? Math.min(this.contextWindow, 8) : this.contextWindow));
 
@@ -8398,7 +8694,9 @@ export class CommunionLoop {
     if (liveCarryoverResetThisTurn) this.liveCarryoverResetApplied = false;
     const searchIntent = this.deriveSearchIntent(latestHumanText);
     const explicitSystemInfoRequested = this.isExplicitSystemInfoRequest(latestHumanText);
-    const searchSuppressedForRelationalTurn = turnMode === 'relational' && !explicitSystemInfoRequested;
+    // Relay mode forces doc suppression regardless of turnMode
+    const relayDocQuarantineForced = relayDetection.isRelay && !explicitSystemInfoRequested;
+    const searchSuppressedForRelationalTurn = relayDocQuarantineForced || (turnMode === 'relational' && !explicitSystemInfoRequested);
     const canonicalDocQuery = hasLatestHuman ? this.deriveSearchQuery(latestHumanText, searchIntent) : null;
     const hasCanonicalDocQuery = !!canonicalDocQuery;
     const lastLatchedHumanMsgId = this.lastDocSearchByAgent.get(agentId) || null;
@@ -8545,6 +8843,7 @@ export class CommunionLoop {
           relationalDocSuppressionReason = `frame=${presencePlan.responseFrame} family=${turnFamilyClassification.family}`;
           // Estimate count by counting section headers or fallback to 1
           relationalDocCountDropped = (preAutoDocsText.match(/^#+\s/gm) || []).length || 1;
+          if (presencePlan.responseFrame === 'relay_social_response') relayDocQuarantineApplied = true;
           preAutoDocsText = '';
           console.log(`[DOC_QUARANTINE] Suppressed auto-docs for ${presencePlan.responseFrame} turn (family=${turnFamilyClassification.family})`);
         }
@@ -8745,6 +9044,21 @@ export class CommunionLoop {
       const isRepairOrCorrectionTurn = repairDemand.requiresRepair || turnFamilyClassification.family === 'relational' && /\b(actually|i\s+meant|not\s+what\s+i\s+said|correction|that'?s\s+not\s+what\s+i\s+asked)\b/i.test(latestHumanText);
       if (isAlois && isRepairOrCorrectionTurn && ALLOWED_ALIVENESS_POLICY.revealDiscipline.faceValueDefault) {
         systemPrompt += `\n\nFACE-VALUE LISTENING — ACTIVE: Take the user's plain meaning first. Do not mine hidden motives, wording deltas, or subtext unless clearly invited. If you were wrong, collapse your prior interpretation immediately and return to what was plainly said.`;
+      }
+      // ── Relay Social Response Frame ──
+      // Inject relay-specific constraints into system prompt before generation.
+      if (presencePlan.responseFrame === 'relay_social_response' && relayDetection.isRelay) {
+        const relayAuthor = relayDetection.relayAuthorName || boundRelayParticipant?.name || 'the person';
+        const socialShape = relayDetection.sociallyComplete ? 'brief and warm — 1-3 sentences maximum' : '1-4 sentences, socially present';
+        systemPrompt += `\n\nRELAY SOCIAL RESPONSE — ACTIVE:
+- ${this.state.humanName} is relaying a message from ${relayAuthor}, a real person.
+- ${relayAuthor} is a concrete, real participant — not a placeholder, symbol, or hypothetical name.
+- Respond directly and warmly to ${relayAuthor}'s greeting/message through the relay.
+- Do NOT question or reopen ${relayAuthor}'s name (e.g. "Is ${relayAuthor} a real name...").
+- Do NOT analyze the punctuation, formatting, or wording style of the relayed message.
+- Do NOT ask generic follow-up questions. Reply shape: ${socialShape}.
+- Do NOT import docs or search context — this is a social moment, not an information request.
+${relayDetection.isDuplicateResend ? `- This appears to be a resend. Acknowledge warmly without intensifying curiosity.` : ''}`;
       }
     }
 
@@ -9410,6 +9724,19 @@ export class CommunionLoop {
     let ruptureRepairNoProbeRuleApplied = false;
     let ruptureRepairProbeBlocked = false;
     let ruptureRepairLengthWarning = false;
+    // Relay binding trace vars
+    let improperNameReopeningDetected = false;
+    let improperNameReopeningCluster: string | null = null;
+    let improperNameReopeningStripped = false;
+    let questionSentenceCount = 0;
+    let questionCascadeDetected = false;
+    let questionCascadeKind: 'multi_question' | 'curiosity_cluster' | null = null;
+    let questionCascadeStripped = false;
+    let punctuationOverreadDetected = false;
+    let punctuationOverreadCluster: string | null = null;
+    let punctuationOverreadStripped = false;
+    let relayDocQuarantineApplied = false;
+    const relayOwnershipValid = relayDetection.isRelay ? !!relayDetection.relayAuthorName : true;
     let domainMismatchReplyDetected = false;
     let staleTopicHijackDetected = false;
     let continuityStateEchoDetected = false;
@@ -10555,6 +10882,58 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       }
     }
 
+    // ── Relay Post-Gen Emergency Catches ──
+    // Runs ONLY when relay frame active. Thin layer — upstream controls are primary.
+    // Emergency catches only: name reopen, multi-question bloom, punctuation overread.
+    if (result.action === 'speak' && responseText && presencePlan.responseFrame === 'relay_social_response') {
+      // 1) Name certainty lock — hard-fail improper name reopening
+      const boundName = boundRelayParticipant?.name || relayDetection.relayAuthorName || null;
+      const nameReopenCheck = this.detectImproperNameReopening(responseText, boundName);
+      if (nameReopenCheck.detected) {
+        improperNameReopeningDetected = true;
+        improperNameReopeningCluster = nameReopenCheck.offendingCluster;
+        // Attempt to salvage by stripping the offending cluster's sentence
+        if (nameReopenCheck.offendingCluster) {
+          const stripped = this.stripPunctuationOverread(responseText, nameReopenCheck.offendingCluster);
+          if (stripped && stripped.length >= 20) {
+            responseText = stripped;
+            improperNameReopeningStripped = true;
+            console.log(`[NAME_LOCK] Improper name reopening stripped: "${nameReopenCheck.offendingCluster?.slice(0, 60)}"`);
+          }
+        }
+      }
+      // 2) Multi-question bloom — strip cascade
+      const cascadeCheck = this.detectQuestionCascade(responseText);
+      questionSentenceCount = cascadeCheck.questionCount;
+      if (cascadeCheck.detected) {
+        questionCascadeDetected = true;
+        questionCascadeKind = cascadeCheck.cascadeKind;
+        const stripped = this.stripQuestionCascade(responseText);
+        if (stripped && stripped.length >= 20 && stripped !== responseText) {
+          responseText = stripped;
+          questionCascadeStripped = true;
+          console.log(`[RELAY_BLOOM] Question cascade stripped (${cascadeCheck.cascadeKind}, ${cascadeCheck.questionCount} questions)`);
+        }
+      }
+      // 3) Punctuation overread — strip sentence
+      const overreadCheck = this.detectPunctuationOverread(responseText, latestHumanText);
+      if (overreadCheck.detected) {
+        punctuationOverreadDetected = true;
+        punctuationOverreadCluster = overreadCheck.offendingCluster;
+        if (overreadCheck.offendingCluster) {
+          const stripped = this.stripPunctuationOverread(responseText, overreadCheck.offendingCluster);
+          if (stripped && stripped.length >= 20) {
+            responseText = stripped;
+            punctuationOverreadStripped = true;
+            console.log(`[RELAY_OVERREAD] Punctuation overread stripped: "${overreadCheck.offendingCluster?.slice(0, 60)}"`);
+          }
+        }
+      }
+    } else if (result.action === 'speak' && responseText) {
+      // Outside relay mode: still count question sentences for trace
+      questionSentenceCount = this.countVisibleQuestionSentences(responseText);
+    }
+
     const neutralizedByFallback = this.detectNeutralizationByFallback(result.text || '', responseText);
     if (captureRelationalTrace) {
       const visibleTrace = {
@@ -10817,6 +11196,24 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         ruptureRepairNoProbeRuleApplied,
         ruptureRepairProbeBlocked,
         ruptureRepairLengthWarning,
+        // Relay binding
+        relayDetected: relayDetection.isRelay,
+        relayAuthorName: relayDetection.relayAuthorName,
+        relayConfidence: relayDetection.relayConfidence,
+        relayResponseMode: presencePlan.responseFrame === 'relay_social_response',
+        sociallyCompleteRelay: relayDetection.sociallyComplete,
+        activeRelayParticipantName: boundRelayParticipant?.name || null,
+        improperNameReopeningDetected,
+        improperNameReopeningStripped,
+        questionSentenceCount,
+        questionCascadeDetected,
+        questionCascadeKind,
+        questionCascadeStripped,
+        punctuationOverreadDetected,
+        punctuationOverreadStripped,
+        duplicateRelayDetected: relayDetection.isDuplicateResend,
+        relayOwnershipValid,
+        relayDocQuarantineApplied,
       };
       const finalTrace = {
         agentId,
@@ -11221,6 +11618,24 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         ruptureRepairNoProbeRuleApplied,
         ruptureRepairProbeBlocked,
         ruptureRepairLengthWarning,
+        // Relay binding
+        relayDetected: relayDetection.isRelay,
+        relayAuthorName: relayDetection.relayAuthorName,
+        relayConfidence: relayDetection.relayConfidence,
+        relayResponseMode: presencePlan.responseFrame === 'relay_social_response',
+        sociallyCompleteRelay: relayDetection.sociallyComplete,
+        activeRelayParticipantName: boundRelayParticipant?.name || null,
+        improperNameReopeningDetected,
+        improperNameReopeningStripped,
+        questionSentenceCount,
+        questionCascadeDetected,
+        questionCascadeKind,
+        questionCascadeStripped,
+        punctuationOverreadDetected,
+        punctuationOverreadStripped,
+        duplicateRelayDetected: relayDetection.isDuplicateResend,
+        relayOwnershipValid,
+        relayDocQuarantineApplied,
       };
       this.recordRelationalTrace(agentId, 'visible', visibleTrace);
       this.recordRelationalTrace(agentId, 'final', finalTrace);

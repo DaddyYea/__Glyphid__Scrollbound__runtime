@@ -543,9 +543,12 @@ export class SessionPersistence {
   }
 
   private async writeJsonAtomic(filePath: string, payload: string): Promise<void> {
-    const tempPath = `${filePath}.tmp`;
+    // Use a unique temp path per call to avoid races between concurrent saves
+    const tempPath = `${filePath}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
     const backupPath = `${filePath}.bak`;
 
+    // Ensure parent directory exists (Windows rename fails with ENOENT if dir missing)
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(tempPath, payload, 'utf-8');
 
     let hadOriginal = false;
