@@ -1209,11 +1209,54 @@ export class CommunionChamber {
 
   /**
    * Save brain state to a file.
+   * Uses chunked fs.writeSync to avoid V8's string-length limit on large brain JSON.
+   * Writes to a .tmp file then atomically renames to prevent corruption.
    */
   saveToFile(filePath: string): void {
-    const state = this.serialize();
-    fs.writeFileSync(filePath, JSON.stringify(state));
-    console.log(`[ALOIS] Brain saved to ${filePath}`);
+    const state = this.serialize() as Record<string, any>;
+    const tmpPath = filePath + '.tmp';
+    const fd = fs.openSync(tmpPath, 'w');
+    try {
+      // Pull out the graph separately — it contains the bulk of the data
+      const { graph: graphData, ...rest } = state;
+      // Serialize the non-graph fields (small: tick, dreamHistory ≤20, recentContext ≤20, etc.)
+      const restJson = JSON.stringify(rest);
+      // Merge with graph inline: { ...rest, "graph": { "neurons": {...}, "edges": [...] } }
+      // Write: restJson without closing brace + ,"graph":
+      fs.writeSync(fd, restJson.slice(0, -1) + ',"graph":{"neurons":{');
+
+      // Stream neurons key-by-key to avoid building one giant string
+      const neurons = (graphData?.neurons || {}) as Record<string, unknown>;
+      const neuronKeys = Object.keys(neurons);
+      for (let i = 0; i < neuronKeys.length; i++) {
+        const key = neuronKeys[i];
+        const entry = JSON.stringify(key) + ':' + JSON.stringify(neurons[key]);
+        fs.writeSync(fd, entry);
+        if (i < neuronKeys.length - 1) fs.writeSync(fd, ',');
+      }
+
+      // Write edges array
+      fs.writeSync(fd, '},"edges":[');
+      const edges = (graphData?.edges || []) as Array<{ source: string; target: string }>;
+      for (let i = 0; i < edges.length; i++) {
+        fs.writeSync(fd, JSON.stringify(edges[i]));
+        if (i < edges.length - 1) fs.writeSync(fd, ',');
+      }
+
+      // Close graph + root object
+      fs.writeSync(fd, ']}}');
+      fs.closeSync(fd);
+
+      // Atomic rename — replaces the target file in one OS operation
+      fs.renameSync(tmpPath, filePath);
+      const neuronCount = neuronKeys.length;
+      const axonCount = edges.length;
+      console.log(`[ALOIS] Brain saved to ${filePath} (${neuronCount} neurons, ${axonCount} axons)`);
+    } catch (err) {
+      try { fs.closeSync(fd); } catch {}
+      try { fs.unlinkSync(tmpPath); } catch {}
+      throw err;
+    }
   }
 
   /**
