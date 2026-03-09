@@ -119,8 +119,15 @@ export class DendriticGraph {
     for (let i = 0; i < n; i++) {
       const [id, neuron] = entries[i];
       ids[i] = id;
-      packedMeans.set(neuron.getMeanEmbedding(), i * DIM);
-      importanceScores[i] = neuron.getImportanceScore();
+      // Use cached lastState — O(1), already computed during the last tick().
+      // Falls back to all-zeros for unactivated neurons; the bloom worker skips
+      // those (zero-magnitude vectors are filtered before cosine similarity).
+      // Avoids recomputing spine KV mean vectors, which cost ~2s at 3700+ neurons.
+      const state = neuron.getLastState();
+      if (state.length === DIM) packedMeans.set(state, i * DIM);
+      // Cheap importance proxy — avoids getDiversity/getActivityLevel spine
+      // traversal that was blocking the event loop for 3+ seconds every 20s.
+      importanceScores[i] = neuron.getCheapImportanceScore();
     }
     return { ids, packedMeans, importanceScores };
   }

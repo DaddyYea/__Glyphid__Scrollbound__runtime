@@ -17,6 +17,7 @@ import { CognitiveCore } from "./cognitiveCore";
 import { WorkerBridge } from "./workers/workerBridge";
 import fs from "node:fs";
 import path from "node:path";
+import { serialize as v8Serialize } from "node:v8";
 
 export interface TissueState {
   tick: number;
@@ -1329,21 +1330,26 @@ export class CommunionChamber {
     if (this.saveBusy) return; // Skip — a save is already in flight
     this.saveBusy = true;
     try {
-      // JSON.stringify is synchronous and briefly blocks the event loop (~500ms),
-      // but it only holds one copy of the data. Using a worker requires postMessage
-      // structured-clone, which temporarily duplicates the full object tree in the heap —
-      // at 3700+ neurons that spike OOMs the process.
-      const state = this.serialize() as Record<string, any>;
-      const json = JSON.stringify(state);
-      const neuronCount = Object.keys(state.graph?.neurons || {}).length;
-      const axonCount = (state.graph?.edges || []).length;
-      // File write is async — no event loop blocking
-      const tmpPath = `${filePath}.${Date.now()}.tmp`;
-      await fs.promises.writeFile(tmpPath, json, 'utf-8');
-      await fs.promises.rename(tmpPath, filePath);
-      console.log(`[ALOIS] Brain saved to ${filePath} (${neuronCount} neurons, ${axonCount} axons)`);
+      // v8.serialize() encodes the plain object to a compact binary buffer without
+      // the number→string conversion overhead of JSON.stringify (~2-5x faster).
+      // The buffer is then TRANSFERRED (zero-copy) to the brain worker which does
+      // v8.deserialize() + JSON.stringify + atomic file write — all off-thread.
+      // No structured-clone of the object tree occurs on the main thread.
+      const state = this.serialize();
+      const v8buf = v8Serialize(state);
+      // v8 Buffer may sit inside a larger shared ArrayBuffer — slice to own it
+      const transferable = v8buf.buffer.slice(v8buf.byteOffset, v8buf.byteOffset + v8buf.byteLength);
+      const result = await this.getBrainWorker().send(
+        { op: 'save', filePath },
+        [transferable],
+      ) as any;
+      if (!result.ok) throw new Error(result.error ?? 'unknown save error');
+      console.log(`[ALOIS] Brain saved to ${filePath} (${result.neuronCount} neurons, ${result.axonCount} axons)`);
     } catch (err) {
-      console.error('[ALOIS] Brain async save failed:', (err as Error).message);
+      console.error('[ALOIS] Brain worker save failed — falling back to sync:', (err as Error).message);
+      try { this.saveToFile(filePath); } catch (e2) {
+        console.error('[ALOIS] Brain sync save fallback also failed:', e2);
+      }
     } finally {
       this.saveBusy = false;
     }

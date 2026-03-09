@@ -128,6 +128,18 @@ export class DendriticCell {
     return sum.map(v => v / vecs.length);
   }
 
+  /**
+   * Fast importance approximation using only already-cached fields.
+   * Used in getMeanEmbeddingSnapshot() hot path — avoids getDiversity/getActivityLevel
+   * spine traversal that blocks the event loop for 3+ seconds at 3700+ neurons.
+   */
+  getCheapImportanceScore(): number {
+    const affectMag = Math.sqrt(this.affect.reduce((s, v) => s + v * v, 0)); // O(8)
+    const resonanceRatio = this.resonanceMemory.length / 64;                 // O(1)
+    const activity = Math.min(1, this.activationDecay / 20);                 // O(1)
+    return affectMag * 0.4 + activity * 0.3 + resonanceRatio * 0.3;
+  }
+
   /** Get importance score: combines affect intensity, resonance depth, and spine diversity */
   getImportanceScore(): number {
     const affectMag = this.affectMagnitude();
