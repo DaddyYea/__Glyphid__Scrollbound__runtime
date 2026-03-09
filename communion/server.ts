@@ -623,6 +623,7 @@ async function main() {
 
     // Human message (also accepts /transcript from Whisper STT bridge)
     if ((url === '/message' || url === '/transcript') && req.method === 'POST') {
+      const messageSource: 'voice' | 'keyboard' = url === '/transcript' ? 'voice' : 'keyboard';
       let body = '';
       req.on('data', chunk => { body += chunk.toString(); });
       req.on('end', () => {
@@ -655,7 +656,7 @@ async function main() {
 
           const normalized = (text || '').trim();
           if (normalized) {
-            communion.addHumanMessage(normalized);
+            communion.addHumanMessage(normalized, messageSource);
             const requestImmediateTick = (communion as any).requestImmediateTick;
             if (typeof requestImmediateTick === 'function') {
               requestImmediateTick.call(communion, 'human');
@@ -668,7 +669,7 @@ async function main() {
         } catch (err) {
           const fallback = (body || '').trim();
           if (fallback) {
-            communion.addHumanMessage(fallback);
+            communion.addHumanMessage(fallback, messageSource);
             const requestImmediateTick = (communion as any).requestImmediateTick;
             if (typeof requestImmediateTick === 'function') {
               requestImmediateTick.call(communion, 'human');

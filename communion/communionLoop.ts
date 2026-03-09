@@ -130,6 +130,34 @@ export interface TurnLatencyTrace {
   };
 }
 
+// ── Turn Bridge Packet — Shadow schema for per-turn mode/contract packaging ──
+
+export interface TurnBridgePacket {
+  meta: {
+    turnId: string;
+    agentId: string;
+    packetProfile: 'shadow_v1';
+  };
+  mode: {
+    primaryMode: TurnFamily;
+    responseFrame: string;
+    /** 0–1 confidence derived from classification signal strength */
+    modeConfidence: number;
+  };
+  responseContract: {
+    lengthBand: 'tiny' | 'short' | 'medium' | 'full';
+    questionPermission: boolean;
+    mustAddress: string | null;
+    avoidPatterns: string[];
+    directnessBand: 'high' | 'medium' | 'low';
+  };
+  speechState: {
+    channelMode: 'text' | 'voice' | 'mixed';
+    speakabilityBand: 'high' | 'medium' | 'low';
+    ttsActive: boolean;
+  };
+}
+
 export interface CommunionEvent {
   type: CommunionEventType;
   message?: CommunionMessage;
@@ -1210,6 +1238,8 @@ export class CommunionLoop {
 
   // Voice — per-agent TTS configuration
   private voiceConfigs: Map<string, AgentVoiceConfig> = new Map();
+  // Channel source for the most recent human message ('voice' = STT/transcript, 'keyboard' = typed)
+  private lastHumanMessageSource: 'voice' | 'keyboard' = 'keyboard';
   // Custom instructions — per-agent extra instructions from the user
   private customInstructions: Map<string, string> = new Map();
   // Background archive ingestion into Alois brain
@@ -5685,6 +5715,90 @@ export class CommunionLoop {
     };
   }
 
+  private assembleTurnBridgePacket(params: {
+    turnId: string;
+    agentId: string;
+    turnFamily: TurnFamily;
+    responseFrame: string;
+    literalAnswerRequiredFirst: boolean;
+    questionAskingAllowed: boolean;
+    questionPolicy: number;
+    mustTouch: string | null;
+    banList: string[];
+    directAnswerStrictMode: boolean;
+    simpleAckMode: boolean;
+    ttsEnabled: boolean;
+  }): TurnBridgePacket {
+    const {
+      turnId, agentId, turnFamily, responseFrame, literalAnswerRequiredFirst,
+      questionAskingAllowed, questionPolicy, mustTouch, banList,
+      directAnswerStrictMode, simpleAckMode, ttsEnabled,
+    } = params;
+
+    // modeConfidence: stronger signal = higher confidence
+    let modeConfidence = 0.5;
+    if (turnFamily === 'direct_answer_request' && literalAnswerRequiredFirst) modeConfidence = 0.9;
+    else if (turnFamily === 'troubleshooting') modeConfidence = 0.85;
+    else if (turnFamily === 'task_planning') modeConfidence = 0.8;
+    else if (turnFamily === 'simple_relational_check') modeConfidence = 0.75;
+    else if (turnFamily === 'open_relational') modeConfidence = 0.6;
+
+    // lengthBand: derived from mode + strict flags
+    let lengthBand: TurnBridgePacket['responseContract']['lengthBand'];
+    if (simpleAckMode || turnFamily === 'simple_relational_check') {
+      lengthBand = 'short';
+    } else if (directAnswerStrictMode) {
+      lengthBand = 'medium';
+    } else if (turnFamily === 'direct_answer_request' || turnFamily === 'task_planning' || turnFamily === 'troubleshooting') {
+      lengthBand = 'full';
+    } else {
+      lengthBand = 'medium';
+    }
+
+    // directnessBand: how direct the expected reply should be
+    let directnessBand: TurnBridgePacket['responseContract']['directnessBand'];
+    if (directAnswerStrictMode || literalAnswerRequiredFirst) {
+      directnessBand = 'high';
+    } else if (simpleAckMode || turnFamily === 'simple_relational_check') {
+      directnessBand = 'high';
+    } else if (turnFamily === 'open_relational') {
+      directnessBand = 'low';
+    } else {
+      directnessBand = 'medium';
+    }
+
+    // speakabilityBand: how TTS-friendly the response shape should be
+    let speakabilityBand: TurnBridgePacket['speechState']['speakabilityBand'];
+    if (!ttsEnabled) {
+      speakabilityBand = 'low';
+    } else if (turnFamily === 'troubleshooting' || turnFamily === 'task_planning') {
+      speakabilityBand = 'medium'; // may have code/lists
+    } else {
+      speakabilityBand = 'high';
+    }
+
+    // channelMode: voice input + tts output = mixed; voice only one side = voice or text
+    const inputIsVoice = this.lastHumanMessageSource === 'voice';
+    let channelMode: TurnBridgePacket['speechState']['channelMode'];
+    if (inputIsVoice && ttsEnabled) channelMode = 'mixed';
+    else if (inputIsVoice) channelMode = 'voice';
+    else if (ttsEnabled) channelMode = 'mixed';
+    else channelMode = 'text';
+
+    return {
+      meta: { turnId, agentId, packetProfile: 'shadow_v1' },
+      mode: { primaryMode: turnFamily, responseFrame, modeConfidence },
+      responseContract: {
+        lengthBand,
+        questionPermission: questionAskingAllowed && questionPolicy > 0,
+        mustAddress: mustTouch || null,
+        avoidPatterns: banList || [],
+        directnessBand,
+      },
+      speechState: { channelMode, speakabilityBand, ttsActive: ttsEnabled },
+    };
+  }
+
   private buildPresenceResponsePlan(
     turnMode: 'relational' | 'task' | 'troubleshooting' | 'command',
     state: PresenceState,
@@ -8296,8 +8410,10 @@ export class CommunionLoop {
 
   /**
    * Human sends a message to the room
+   * @param source 'voice' = STT/transcript endpoint, 'keyboard' = typed message (default)
    */
-  addHumanMessage(text: string): CommunionMessage {
+  addHumanMessage(text: string, source: 'voice' | 'keyboard' = 'keyboard'): CommunionMessage {
+    this.lastHumanMessageSource = source;
     const now = Date.now();
 
     // ── Human Turn Dedup Gate ──
@@ -9761,6 +9877,26 @@ ${relayDetection.isDuplicateResend ? `- This appears to be a resend. Acknowledge
       const conversationChars = segmentTrace.find(seg => seg.id === 'conversation')?.chars || 0;
       const contextMainChars = segmentTrace.find(seg => seg.id === 'context-main')?.chars || 0;
       const duplicateHistorySuppressed = includedConversationSegment && (!includedContextMain || contextMainChars < conversationChars * 0.35);
+      const ttsEnabledForPacket = !!(this.voiceConfigs.get(agentId)?.enabled);
+      let bridgePacket: TurnBridgePacket | null = null;
+      try {
+        bridgePacket = this.assembleTurnBridgePacket({
+          turnId: lts.turnId,
+          agentId,
+          turnFamily: turnFamilyClassification.family,
+          responseFrame: presencePlan.responseFrame,
+          literalAnswerRequiredFirst: turnFamilyClassification.literalAnswerRequiredFirst,
+          questionAskingAllowed: turnFamilyClassification.questionAskingAllowed,
+          questionPolicy: presencePlan.questionPolicy,
+          mustTouch: presencePlan.mustTouch || null,
+          banList: presencePlan.banList || [],
+          directAnswerStrictMode,
+          simpleAckMode,
+          ttsEnabled: ttsEnabledForPacket,
+        });
+      } catch (e) {
+        console.warn('[BRIDGE_PACKET] Assembly failed (non-fatal):', e instanceof Error ? e.message : e);
+      }
       const planTrace = {
         agentId,
         latestHumanMessageId,
@@ -9899,6 +10035,7 @@ ${relayDetection.isDuplicateResend ? `- This appears to be a resend. Acknowledge
         topContactMode: contactOpportunities?.topMode || null,
         anyContactOpportunityDetected: contactOpportunities?.anyContactOpportunity ?? false,
         faceValueListeningApplied: ALLOWED_ALIVENESS_POLICY.revealDiscipline.faceValueDefault,
+        bridgePacket,
       };
       this.recordRelationalTrace(agentId, 'plan', planTrace);
       if (traceRelational) {
