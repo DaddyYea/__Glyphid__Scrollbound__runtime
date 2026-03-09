@@ -101,6 +101,31 @@ export class DendriticGraph {
   }
 
   /**
+   * Produces a packed snapshot of all neuron mean embeddings and importance scores
+   * for transfer to the bloom worker. ArrayBuffers are newly allocated — safe to
+   * transfer (zero-copy) via postMessage without affecting live neuron data.
+   */
+  getMeanEmbeddingSnapshot(): {
+    ids: string[];
+    packedMeans: Float64Array;      // ids.length × 768 floats
+    importanceScores: Float64Array; // ids.length floats
+  } {
+    const entries = Array.from(this.neurons.entries());
+    const n = entries.length;
+    const DIM = 768;
+    const ids: string[] = new Array(n);
+    const packedMeans = new Float64Array(n * DIM);
+    const importanceScores = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const [id, neuron] = entries[i];
+      ids[i] = id;
+      packedMeans.set(neuron.getMeanEmbedding(), i * DIM);
+      importanceScores[i] = neuron.getImportanceScore();
+    }
+    return { ids, packedMeans, importanceScores };
+  }
+
+  /**
    * Dream pruning: prune all neurons' dormant spines and trim resonance memory.
    * Returns stats about what was pruned.
    */

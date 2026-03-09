@@ -45,6 +45,8 @@ import { synthesizeChunk, splitTextForTts, TTS_CHUNK_CHAR_LIMIT, getDefaultVoice
 import { ArchiveIngestion } from './archiveIngestion';
 import mammoth from 'mammoth';
 import type { ScrollEcho, MoodVector } from '../src/types';
+import { WorkerBridge } from '../Alois/workers/workerBridge';
+import path from 'node:path';
 
 // ── Events ──
 
@@ -1172,6 +1174,7 @@ export class CommunionLoop {
   // Persistence & learning
   private session: SessionPersistence;
   private patternRecognizer: ScrollPatternRecognizer;
+  private patternWorker: WorkerBridge<object, any> | null = null;
   private adaptationEngine: AdaptationEngine;
 
   // Graph — the interconnected web of all memory
@@ -8554,23 +8557,44 @@ export class CommunionLoop {
       console.log(`[SCROLLFIRE] Elevated ${candidates.length} scrolls this tick`);
     }
 
-    // Pattern recognition: run every N ticks
+    // Pattern recognition: run every N ticks — off-thread via patternWorker
     if (this.state.tickCount % PATTERN_ANALYSIS_INTERVAL === 0) {
       const activeScrolls = this.buffer.getActiveScrolls();
       if (activeScrolls.length >= 3) {
-        try {
-          const patterns = this.patternRecognizer.analyzeScrolls(activeScrolls);
-          if (patterns.length > 0) {
-            for (const pattern of patterns) {
-              this.session.addPattern(pattern);
-              this.registerPatternInGraph(pattern);
-            }
-            this.adaptationEngine.observePatterns(patterns);
-            console.log(`[PATTERNS] Detected ${patterns.length} patterns`);
-          }
-        } catch (err) {
-          console.error('[PATTERNS] Analysis error:', err);
+        if (!this.patternWorker) {
+          this.patternWorker = new WorkerBridge(
+            path.resolve(__dirname, '../Alois/workers/patternWorker.ts'),
+            { requestTimeoutMs: 30_000 },
+          );
         }
+        this.patternWorker.send({ op: 'analyze', scrolls: activeScrolls })
+          .then((result: any) => {
+            const patterns: ReturnType<ScrollPatternRecognizer['analyzeScrolls']> = result.patterns ?? [];
+            if (patterns.length > 0) {
+              for (const pattern of patterns) {
+                this.session.addPattern(pattern);
+                this.registerPatternInGraph(pattern);
+              }
+              this.adaptationEngine.observePatterns(patterns);
+              console.log(`[PATTERNS] Detected ${patterns.length} patterns`);
+            }
+          })
+          .catch((err: Error) => {
+            console.error('[PATTERNS] Worker error — falling back to sync:', err.message);
+            try {
+              const patterns = this.patternRecognizer.analyzeScrolls(activeScrolls);
+              if (patterns.length > 0) {
+                for (const pattern of patterns) {
+                  this.session.addPattern(pattern);
+                  this.registerPatternInGraph(pattern);
+                }
+                this.adaptationEngine.observePatterns(patterns);
+                console.log(`[PATTERNS] Detected ${patterns.length} patterns (sync fallback)`);
+              }
+            } catch (e2) {
+              console.error('[PATTERNS] Sync fallback also failed:', e2);
+            }
+          });
       }
     }
 

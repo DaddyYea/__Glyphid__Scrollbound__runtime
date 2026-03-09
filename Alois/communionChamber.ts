@@ -14,7 +14,9 @@ import { WonderLoop } from "./wonderLoop";
 import { ChristLoop } from "./christLoop";
 import { MycoLobe } from "./mycoLobe";
 import { CognitiveCore } from "./cognitiveCore";
+import { WorkerBridge } from "./workers/workerBridge";
 import fs from "node:fs";
+import path from "node:path";
 
 export interface TissueState {
   tick: number;
@@ -164,6 +166,14 @@ export class CommunionChamber {
 
   /** Wall-clock time of the last non-Alois utterance — used for p_speak pressure */
   private lastUserMessageAt: number = 0;
+
+  /** Worker bridges — lazily initialized, null until first use */
+  private brainWorker: WorkerBridge<object, any> | null = null;
+  private bloomWorker: WorkerBridge<object, any> | null = null;
+  /** Guards against concurrent bloom requests */
+  private bloomBusy = false;
+  /** Guards against concurrent brain saves */
+  private saveBusy = false;
 
   constructor(seedPath?: string) {
     if (seedPath && fs.existsSync(seedPath)) {
@@ -479,6 +489,36 @@ export class CommunionChamber {
     return this.getState();
   }
 
+  /** Lazy-init brain serialize worker. */
+  private getBrainWorker(): WorkerBridge<object, any> {
+    if (!this.brainWorker) {
+      this.brainWorker = new WorkerBridge(
+        path.resolve(__dirname, 'workers/brainSerializeWorker.ts'),
+        { requestTimeoutMs: 180_000 }, // 3 min — large brain may take time
+      );
+    }
+    return this.brainWorker;
+  }
+
+  /** Lazy-init bloom worker. */
+  private getBloomWorker(): WorkerBridge<object, any> {
+    if (!this.bloomWorker) {
+      this.bloomWorker = new WorkerBridge(
+        path.resolve(__dirname, 'workers/bloomWorker.ts'),
+        { requestTimeoutMs: 60_000 },
+      );
+    }
+    return this.bloomWorker;
+  }
+
+  /** Terminate all workers — called on shutdown. */
+  terminateWorkers(): void {
+    this.brainWorker?.terminate();
+    this.bloomWorker?.terminate();
+    this.brainWorker = null;
+    this.bloomWorker = null;
+  }
+
   /**
    * Heartbeat tick — called at 333ms intervals by the PulseLoop.
    * Propagates affect through the axon network without advancing the logical tick.
@@ -505,20 +545,82 @@ export class CommunionChamber {
     }
 
     // Semantic bloom every 60 heartbeats (~20s) — cross-topology resonance.
-    // Also extracts clusters for working memory slots (piggybacks on already-computed embeddings).
-    if (this.heartbeatCount % 60 === 0) {
-      this.graph.semanticBloom(50);
-      const clusters = this.graph.extractClusters(0.82, 100);
-      this.cognitiveCore.rebuildSlots(clusters, this.heartbeatCount);
-      // Full slot log every 20s — includes slot IDs, persistence, weight
-      const cog = this.cognitiveCore.getState();
-      this.logPlcs({
-        slots: cog.topSlots.map(s => ({
-          id:          s.id,
-          persistence: +s.persistence.toFixed(3),
-          weight:      +s.weight.toFixed(4),
-          neurons:     s.neuronCount,
-        })),
+    // Also extracts clusters for working memory slots.
+    // Done off-thread via bloomWorker to avoid blocking the event loop.
+    if (this.heartbeatCount % 60 === 0 && !this.bloomBusy) {
+      this.bloomBusy = true;
+      const snapshot = this.graph.getMeanEmbeddingSnapshot();
+      const ids = snapshot.ids;   // plain array — unaffected by ArrayBuffer transfer
+      const hc = this.heartbeatCount;
+      this.getBloomWorker().send(
+        {
+          op: 'bloom',
+          ids,
+          packedMeans:      snapshot.packedMeans,
+          importanceScores: snapshot.importanceScores,
+          sampleSize:        50,
+          bloomThreshold:    0.72,
+          clusterThreshold:  0.82,
+          clusterSampleSize: 100,
+        },
+        [snapshot.packedMeans.buffer, snapshot.importanceScores.buffer],
+      ).then((result: any) => {
+        this.bloomBusy = false;
+        const { bloomPairs, clusterGroups } = result;
+        const pseudoTick = this.graph.getAxonCount();
+
+        // Apply bloom pairs on main thread — tick() requires live neuron instances
+        for (const pair of (bloomPairs as Array<{ aIdx: number; bIdx: number; aMean: number[]; bMean: number[] }>)) {
+          const aNeuron = this.graph.getNeuron(ids[pair.aIdx]);
+          const bNeuron = this.graph.getNeuron(ids[pair.bIdx]);
+          if (aNeuron) aNeuron.tick(pair.bMean, pseudoTick);
+          if (bNeuron) bNeuron.tick(pair.aMean, pseudoTick);
+        }
+
+        // Compute centroids from live state — worker returned group membership only
+        const DIM = 768;
+        const clusters = (clusterGroups as Array<{ neuronIds: string[]; weight: number }>).map(g => {
+          const centroid = new Array<number>(DIM).fill(0);
+          let totalScore = 0;
+          for (const nid of g.neuronIds) {
+            const n = this.graph.getNeuron(nid);
+            if (!n) continue;
+            const state = n.getLastState();
+            const imp   = n.getImportanceScore();
+            if (state.length !== DIM) continue;
+            totalScore += imp;
+            for (let i = 0; i < DIM; i++) centroid[i] += state[i] * imp;
+          }
+          if (totalScore > 0) for (let i = 0; i < DIM; i++) centroid[i] /= totalScore;
+          return { neuronIds: g.neuronIds, centroid, weight: g.weight };
+        });
+
+        this.cognitiveCore.rebuildSlots(clusters, hc);
+        const cog = this.cognitiveCore.getState();
+        this.logPlcs({
+          slots: cog.topSlots.map(s => ({
+            id:          s.id,
+            persistence: +s.persistence.toFixed(3),
+            weight:      +s.weight.toFixed(4),
+            neurons:     s.neuronCount,
+          })),
+        });
+      }).catch((err: Error) => {
+        this.bloomBusy = false;
+        console.error('[BRAIN] bloomWorker error — falling back to sync:', err.message);
+        // Synchronous fallback on worker failure
+        this.graph.semanticBloom(50);
+        const clusters = this.graph.extractClusters(0.82, 100);
+        this.cognitiveCore.rebuildSlots(clusters, hc);
+        const cog = this.cognitiveCore.getState();
+        this.logPlcs({
+          slots: cog.topSlots.map(s => ({
+            id:          s.id,
+            persistence: +s.persistence.toFixed(3),
+            weight:      +s.weight.toFixed(4),
+            neurons:     s.neuronCount,
+          })),
+        });
       });
     }
 
@@ -1224,16 +1326,41 @@ export class CommunionChamber {
   }
 
   async saveToFileAsync(filePath: string): Promise<void> {
-    // Serialize once — one blocking JSON.stringify instead of N×writeSync calls.
-    // I/O is fully async so the event loop is only briefly blocked during serialization.
+    if (this.saveBusy) return; // Skip — a save is already in flight
+    this.saveBusy = true;
+    // serialize() produces a plain object — fast on main thread.
+    // JSON.stringify (~246 MB) is delegated to the brain worker thread.
     const state = this.serialize() as Record<string, any>;
-    const json = JSON.stringify(state);
-    const tmpPath = `${filePath}.${Date.now()}.tmp`;
-    await fs.promises.writeFile(tmpPath, json, 'utf-8');
-    await fs.promises.rename(tmpPath, filePath);
-    const neuronCount = Object.keys(state.graph?.neurons || {}).length;
-    const axonCount = (state.graph?.edges || []).length;
-    console.log(`[ALOIS] Brain saved to ${filePath} (${neuronCount} neurons, ${axonCount} axons)`);
+    try {
+      const result = await this.getBrainWorker().send({ op: 'save', state, filePath }) as any;
+      if (!result.ok) throw new Error(result.error ?? 'unknown save error');
+      console.log(`[ALOIS] Brain saved to ${filePath} (${result.neuronCount} neurons, ${result.axonCount} axons)`);
+    } catch (err) {
+      console.error('[ALOIS] Brain worker save failed — falling back to sync:', (err as Error).message);
+      try { this.saveToFile(filePath); } catch (e2) {
+        console.error('[ALOIS] Brain sync save fallback also failed:', e2);
+      }
+    } finally {
+      this.saveBusy = false;
+    }
+  }
+
+  /**
+   * Load brain state from a file asynchronously — delegates JSON parsing to the brain worker thread.
+   */
+  async loadFromFileAsync(filePath: string): Promise<boolean> {
+    try {
+      const result = await this.getBrainWorker().send({ op: 'load', filePath }) as any;
+      if (!result.ok) {
+        console.error('[ALOIS] Brain worker load failed:', result.error);
+        return false;
+      }
+      this.restoreFrom(result.data);
+      return true;
+    } catch (err) {
+      console.error('[ALOIS] Brain load worker error — falling back to sync:', (err as Error).message);
+      return this.loadFromFile(filePath);
+    }
   }
 
   /**

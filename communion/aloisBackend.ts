@@ -516,4 +516,9 @@ export class AloisBackend implements AgentBackend {
   loadBrain(filePath: string): boolean {
     return this.chamber.loadFromFile(filePath);
   }
+
+  /** Load brain state from disk asynchronously (JSON parse off-thread). Returns true if loaded. */
+  async loadBrainAsync(filePath: string): Promise<boolean> {
+    return this.chamber.loadFromFileAsync(filePath);
+  }
 }
