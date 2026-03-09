@@ -649,7 +649,9 @@ export class OpenAICompatibleBackend implements AgentBackend {
             'Authorization': `Bearer ${this.apiKey}`,
           },
           body: JSON.stringify({
-            model: this.model,
+            // Empty model string = "use whatever LM Studio currently has loaded" (no auto-swap).
+            // Non-empty = LM Studio will load that specific model if not already loaded.
+            ...(this.model ? { model: this.model } : {}),
             messages: finalMessages,
             max_tokens: packed.finalMaxTokens,
             temperature: this.temperature,
