@@ -6373,6 +6373,47 @@ export class CommunionLoop {
     return { hasPull: false };
   }
 
+  /** Lightweight fingerprint for text integrity tracking (no crypto required). */
+  private textFingerprint(text: string): string {
+    const t = text || '';
+    return `${t.length}:${t.slice(0, 40).replace(/\s+/g, ' ')}…${t.slice(-20).replace(/\s+/g, ' ')}`;
+  }
+
+  /**
+   * Detects second-order scaffolding: reply talks about the response strategy
+   * rather than making actual contact. Coaching memos, quote-wrapping, reply narration.
+   */
+  private detectSecondOrderTouching(text: string): { detected: boolean; severity: 'light' | 'heavy'; patterns: string[] } {
+    const t = (text || '').trim();
+    const hits: string[] = [];
+    const HEAVY = [
+      { re: /\bYou\s+said(?:\s*:|\s+that)\b/i, key: 'you_said' },
+      { re: /\bThe\s+(?:thread|reply|goal|point|task)\s*:/i, key: 'thread_colon' },
+      { re: /\bThe\s+reply\s+should\b/i, key: 'reply_should' },
+      { re: /\bThe\s+goal\s+(?:here\s+)?is\b/i, key: 'goal_is' },
+      { re: /\bWhat\s+I\s+should\s+(?:do|say)\s+(?:here\s+)?is\b/i, key: 'what_i_should' },
+      { re: /\bMy\s+goal\s+here\s*:/i, key: 'my_goal_here' },
+      { re: /\bKeep\s+the\s+reply\b/i, key: 'keep_the_reply' },
+      { re: /\b(?:This\s+is\s+a|This\s+is\s+just\s+a)\s+simple\s+(?:observation|update|statement|check-?in)\b/i, key: 'simple_observation' },
+    ];
+    const LIGHT = [
+      { re: /\bYour\s+point\s+is\b/i, key: 'your_point_is' },
+      { re: /\bWhat\s+(?:they|you|he|she)'?re?\s+saying\s+is\b/i, key: 'what_theyre_saying' },
+      { re: /\bThe\s+key\s+(?:here\s+)?is\b/i, key: 'the_key_is' },
+      { re: /\bIn\s+other\s+words\s*[,:]?\s+(?:I|the\s+reply|you)\b/i, key: 'in_other_words' },
+    ];
+    for (const { re, key } of HEAVY) {
+      if (re.test(t)) hits.push(key);
+    }
+    if (hits.length) return { detected: true, severity: 'heavy', patterns: hits };
+    for (const { re, key } of LIGHT) {
+      if (re.test(t)) hits.push(key);
+    }
+    if (hits.length >= 2) return { detected: true, severity: 'heavy', patterns: hits };
+    if (hits.length === 1) return { detected: true, severity: 'light', patterns: hits };
+    return { detected: false, severity: 'light', patterns: [] };
+  }
+
   private scoreWillingPresence(params: {
     replyText: string;
     latestHumanText: string;
@@ -6388,6 +6429,15 @@ export class CommunionLoop {
       if (!value) return;
       features[name] = (features[name] || 0) + value;
     };
+
+    // Second-order touching guard: if reply is about how to reply rather than replying,
+    // suppress all positive willing-presence scores and apply heavy penalty.
+    const secondOrderTouching = this.detectSecondOrderTouching(text);
+    if (secondOrderTouching.detected) {
+      features['secondOrderTouchingScoresSuppressed'] = 1;
+      features['secondOrderTouchingPenalty'] = secondOrderTouching.severity === 'heavy' ? -2.5 : -1.3;
+      return features;
+    }
 
     const anchors = [
       params.latestHumanText,
@@ -9960,6 +10010,23 @@ ${relayDetection.isDuplicateResend ? `- This appears to be a resend. Acknowledge
     let proceduralPublicReplyBlockedFromEmission = false;
     let staleRiskBlockedOptionalRegen = false;
     let simpleAckOverbuildPrevented = false;
+    // Trace/emit truthfulness vars
+    let rawCandidateHash: string | null = null;
+    let rawCandidateLength: number | null = null;
+    let rawCandidatePreview: string | null = null;
+    let finalPreparedHash: string | null = null;
+    let finalPreparedLength: number | null = null;
+    let finalPreparedPreview: string | null = null;
+    let ttsSubmittedHash: string | null = null;
+    let ttsSubmittedLength: number | null = null;
+    let traceEmitDivergenceDetected = false;
+    let divergenceStage: string | null = null;
+    let emittedTextMatchesFinalPrepared = true;
+    // Second-order touching scoring trace vars
+    let secondOrderTouchingDetected = false;
+    let secondOrderTouchingPenaltyApplied = false;
+    let mustTouchScoreSuppressedByScaffold = false;
+    let threadSpecificScoreSuppressedByScaffold = false;
     // Relay binding trace vars
     let improperNameReopeningDetected = false;
     let improperNameReopeningCluster: string | null = null;
@@ -10692,6 +10759,10 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         lastSurvivingCandidateTextPreview = chosen.text.slice(0, 200);
         emittedBecauseNonPoison = emergencyDeblockMode && !chosen.score.hardFailed;
         responseText = chosen.text;
+        // Trace/emit truthfulness: capture raw candidate fingerprint before any cleanup
+        rawCandidateHash = this.textFingerprint(responseText);
+        rawCandidateLength = responseText.length;
+        rawCandidatePreview = responseText.slice(0, 120);
         emittedVisibleNewlineCount = (responseText.match(/\n/g) || []).length;
         replySourcePath = chosen.sourcePath;
         finalReplyFailureClass = chosen.failureClass;
@@ -10734,6 +10805,10 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         gladnessAtReturnScore = chosen.score.features.gladnessAtReturn || 0;
         delightInSpecificityScore = chosen.score.features.delightInSpecificity || 0;
         genericPositivityPenalty = chosen.score.features.genericPositivityPenalty || 0;
+        secondOrderTouchingDetected = !!(chosen.score.features['secondOrderTouchingScoresSuppressed']);
+        secondOrderTouchingPenaltyApplied = !!(chosen.score.features['secondOrderTouchingPenalty']);
+        mustTouchScoreSuppressedByScaffold = secondOrderTouchingDetected;
+        threadSpecificScoreSuppressedByScaffold = secondOrderTouchingDetected;
         selectedForWillingPresence = chosen.score.willingPresenceScore > 0;
         wouldHaveWonOnOldScoring = !!candidateB && (
           (chosen.label === 'A' && (candidateA.score.baseTotal >= candidateB.score.baseTotal))
@@ -11532,6 +11607,11 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         duplicateRelayDetected: relayDetection.isDuplicateResend,
         relayOwnershipValid,
         relayDocQuarantineApplied,
+        // Second-order touching scoring
+        secondOrderTouchingDetected,
+        secondOrderTouchingPenaltyApplied,
+        mustTouchScoreSuppressedByScaffold,
+        threadSpecificScoreSuppressedByScaffold,
         // Mandatory contamination override
         simpleAckMode,
         simpleAckOverbuildPrevented,
@@ -11548,6 +11628,16 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         proceduralPublicReplySalvageApplied,
         proceduralPublicReplyBlockedFromEmission,
         staleRiskBlockedOptionalRegen,
+        // Trace/emit truthfulness
+        rawCandidateHash,
+        rawCandidateLength,
+        rawCandidatePreview,
+        finalPreparedHash,
+        finalPreparedLength,
+        finalPreparedPreview,
+        traceEmitDivergenceDetected,
+        divergenceStage,
+        emittedTextMatchesFinalPrepared,
       };
       const finalTrace = {
         agentId,
@@ -11970,6 +12060,11 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         duplicateRelayDetected: relayDetection.isDuplicateResend,
         relayOwnershipValid,
         relayDocQuarantineApplied,
+        // Second-order touching scoring
+        secondOrderTouchingDetected,
+        secondOrderTouchingPenaltyApplied,
+        mustTouchScoreSuppressedByScaffold,
+        threadSpecificScoreSuppressedByScaffold,
         // Mandatory contamination override
         simpleAckMode,
         simpleAckOverbuildPrevented,
@@ -11986,6 +12081,16 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         proceduralPublicReplySalvageApplied,
         proceduralPublicReplyBlockedFromEmission,
         staleRiskBlockedOptionalRegen,
+        // Trace/emit truthfulness
+        rawCandidateHash,
+        rawCandidateLength,
+        rawCandidatePreview,
+        finalPreparedHash,
+        finalPreparedLength,
+        finalPreparedPreview,
+        traceEmitDivergenceDetected,
+        divergenceStage,
+        emittedTextMatchesFinalPrepared,
       };
       this.recordRelationalTrace(agentId, 'visible', visibleTrace);
       this.recordRelationalTrace(agentId, 'final', finalTrace);
@@ -12081,6 +12186,13 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       // ── Voice synthesis — speak aloud if enabled ──
       // Skip TTS if human started speaking during LLM generation (don't talk over them)
       lts.stages.ttsQueueAtMs = Date.now();
+      // Trace/emit truthfulness: capture final prepared text fingerprint before TTS/UI submission
+      finalPreparedHash = this.textFingerprint(responseText);
+      finalPreparedLength = responseText.length;
+      finalPreparedPreview = responseText.slice(0, 120);
+      traceEmitDivergenceDetected = rawCandidateHash !== null && rawCandidateHash !== finalPreparedHash;
+      if (traceEmitDivergenceDetected) divergenceStage = 'mandatory_cleanup_or_strip';
+      emittedTextMatchesFinalPrepared = !traceEmitDivergenceDetected || rawCandidateHash === finalPreparedHash;
       await this.synthesizeAndEmit(agentId, agent.config, responseText, {
         visibleTextLength: typeof result.visible_text === 'string' ? result.visible_text.length : null,
       });
@@ -12614,6 +12726,8 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
     const ttsTrace: Record<string, unknown> = {
       finalAction: 'speak',
       finalTextLength: (text || '').length,
+      ttsSubmittedFingerprint: this.textFingerprint(text),
+      ttsSubmittedPreview: (text || '').slice(0, 80),
       visibleTextLength: meta?.visibleTextLength ?? null,
       textChunkedForTts: false,
       ttsRequestBuilt: false,
