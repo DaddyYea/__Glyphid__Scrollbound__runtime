@@ -3979,6 +3979,210 @@ export class CommunionLoop {
     return text;
   }
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // MANDATORY CONTAMINATION OVERRIDE SYSTEM
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Detects process-narration / coaching-memo style content leaking into a visible reply.
+   * "The thread:", "The goal is", "You said:", "keep the reply warm", etc.
+   */
+  private detectProceduralPublicReply(text: string): {
+    detected: boolean;
+    patterns: string[];
+    severity: 'light' | 'heavy';
+  } {
+    const NO = { detected: false, patterns: [] as string[], severity: 'light' as const };
+    if (!text) return NO;
+    const PROC_PATTERNS: Array<{ re: RegExp; key: string }> = [
+      { re: /\bThe\s+thread[\s:]/i, key: 'thread_ref' },
+      { re: /\bYou\s+said[\s:]["""]/i, key: 'you_said_quoted' },
+      { re: /^You\s+said[\s:]/im, key: 'you_said_linestart' },
+      { re: /\bThis\s+is\s+a\s+simple\s+observation\b/i, key: 'simple_observation' },
+      { re: /\bThe\s+reply\s+should\b/i, key: 'reply_should' },
+      { re: /\bYou\s+might\s+acknowledge\b/i, key: 'you_might_acknowledge' },
+      { re: /\bThe\s+goal\s+(?:is|here)\b/i, key: 'the_goal' },
+      { re: /\bMy\s+goal\s+here[\s:]/i, key: 'my_goal_here' },
+      { re: /\bkeep\s+the\s+reply\b/i, key: 'keep_the_reply' },
+      { re: /\bmatch\s+this\s+level\s+of\s+directness\b/i, key: 'match_directness' },
+      { re: /\bframed\s+in\s+first.person\b/i, key: 'framed_fp' },
+      { re: /\bthis\s+doesn'?t\s+need\s+(?:analysis|explanation|commentary|unpacking)\b/i, key: 'no_analysis_needed' },
+      { re: /\bthat'?s\s+an\s+observable\s+fact\s+that\b/i, key: 'observable_fact' },
+      { re: /\bwarm,\s+playful,?\s+and\s+grounded\b/i, key: 'warm_playful_grounded' },
+      { re: /\bI'?m\s+picking\s+up\s+on\b/i, key: 'picking_up_on' },
+      { re: /^(?:Tone:|Goal:|Format:|Shape:|Strategy:)\s/im, key: 'label_prefix' },
+      { re: /\bThe\s+(?:user|Jason)\s+said\b/i, key: 'user_said_ref' },
+    ];
+    const hits: string[] = [];
+    for (const { re, key } of PROC_PATTERNS) {
+      if (re.test(text)) hits.push(key);
+    }
+    if (hits.length === 0) return NO;
+    const severity: 'light' | 'heavy' = hits.length >= 2 ? 'heavy' : 'light';
+    return { detected: true, patterns: hits, severity };
+  }
+
+  /**
+   * Expanded anecdotal confabulation detector.
+   * Covers both classic biography stems AND time-anchored vignettes ("There was a moment last winter...",
+   * "I ended up just layering...", "Back when I had a thermostat that...").
+   */
+  private detectUnsupportedAnecdotalConfabulation(text: string): {
+    detected: boolean;
+    claimText: string | null;
+    claimPattern: string | null;
+    isTimeAnchored: boolean;
+  } {
+    const NO = { detected: false, claimText: null, claimPattern: null, isTimeAnchored: false };
+    if (!text) return NO;
+    const patterns: Array<{ re: RegExp; key: string; ta: boolean }> = [
+      // Time-anchored vignettes (highest priority)
+      { re: /\bThere\s+was\s+a\s+(?:moment|time|day|night|period)\s+(?:last\s+(?:winter|summer|spring|fall|year|month|week)|the\s+other\s+(?:day|night)|back\s+when|when\s+I)\b/i, key: 'there_was_a_moment', ta: true },
+      { re: /\bBack\s+when\s+I\b/i, key: 'back_when_i', ta: true },
+      { re: /\bOne\s+time\s+I\b/i, key: 'one_time_i', ta: true },
+      { re: /\bI\s+thought\s+I'?d?\s+(?:accidentally|just\s+end|end(?:ed)?\s+up|moved?|gone?|found?)\b/i, key: 'i_thought_id', ta: false },
+      { re: /\bI\s+ended\s+up\s+(?:just\s+)?(?:layering|wearing|buying|eating|making|doing|going|staying|sitting|living|working|cooking|drinking|standing|hiding|sleeping)\b/i, key: 'i_ended_up', ta: false },
+      { re: /\bI\s+had\s+(?:this|a|one|an)\s+(?:moment|day|experience|apartment|house|thermostat|cat|dog|coworker|neighbor|office|roommate)\b/i, key: 'i_had_this', ta: false },
+      { re: /\bIn\s+my\s+(?:apartment|house|office|old\s+place|last\s+place|previous\s+(?:home|apartment|place))\b/i, key: 'in_my_place', ta: false },
+      // Classic biography stems
+      { re: /\bI\s+remember\s+(?:a\s+time\s+(?:I|when)|when\s+I)\b/i, key: 'i_remember_a_time', ta: true },
+      { re: /\bI\s+once\b/i, key: 'i_once', ta: false },
+      { re: /\bwhen\s+I\s+was\s+(?:young|a\s+child|growing\s+up|little|small|in\s+school|in\s+college)\b/i, key: 'when_i_was_young', ta: true },
+      { re: /\bI\s+grew\s+up\b/i, key: 'i_grew_up', ta: true },
+      { re: /\bIn\s+my\s+(?:past|childhood|upbringing|earlier\s+years?)\b/i, key: 'in_my_past', ta: true },
+      { re: /\bI\s+know\s+what\s+it(?:'s|\s+is)\s+like\s+to\b/i, key: 'i_know_what_its_like', ta: false },
+    ];
+    for (const { re, key, ta } of patterns) {
+      const m = text.match(re);
+      if (m) return { detected: true, claimText: m[0], claimPattern: key, isTimeAnchored: ta };
+    }
+    return NO;
+  }
+
+  /**
+   * Synthesizes a minimal safe acknowledgment when all candidates are contaminated
+   * and no clean regen can run. 1-3 sentences, grounded in the human turn.
+   */
+  private synthesizeMinimalAck(mustTouch: string | null, humanText: string): string {
+    const t = (humanText || '').trim().toLowerCase();
+    if (/cook|cooking|food|breakfast|dinner|lunch|meal|eat|eating/.test(t)) return 'Take your time.';
+    if (/ice\s*tea|iced\s*tea/.test(t)) return 'Iced tea in a cold room — I appreciate the commitment.';
+    if (/cold|warm|hot|temperature|thermostat|heater/.test(t)) return 'That does track.';
+    if (/funny|ironic|irony|paradox|backwards|opposite/.test(t)) return 'Yeah, that is a little backwards.';
+    if (/minute|moment|second|bit|hold\s+on|wait|brb/.test(t)) return "Take your time — I'm here.";
+    if (mustTouch && mustTouch.length < 80) return `Yeah — ${mustTouch.toLowerCase()}.`;
+    return "I hear you.";
+  }
+
+  /**
+   * Detects tiny in-room updates that warrant a simple acknowledgment (1-3 sentences),
+   * not an essay, analysis, or playful overbuild.
+   */
+  private detectSimpleRelationalAckTurn(humanText: string, directQuestionDetected: boolean): boolean {
+    if (directQuestionDetected) return false;
+    const t = (humanText || '').trim();
+    if (t.length > 220) return false;
+    if (/\?/.test(t)) return false;
+    // Explicit small-update stems
+    if (/\b(?:going\s+to\s+(?:take\s+a?\s*)?(?:little\s+)?(?:minute|moment|bit)|almost\s+done|finishing\s+up|just\s+(?:cooking|eating|finishing|waiting|made|making)|made\s+some|be\s+right\s+back|brb|one\s+(?:sec|second|minute|moment)|stepping\s+(?:out|away)|it'?s\s+going\s+to\s+take)\b/i.test(t)) return true;
+    // Short conversational observation (<=100 chars, no imperative, first-person statement)
+    if (t.length <= 100 && /\b(?:it'?s|its|i'?m|im|i\s+am|i\s+made|i\s+just|i\s+think|i\s+feel|kind\s+of|kinda|pretty|funny|weird|interesting)\b/i.test(t) && !/\b(?:can\s+you|could\s+you|please|tell\s+me|explain|what\s+do|how\s+do|do\s+you)\b/i.test(t)) return true;
+    return false;
+  }
+
+  /**
+   * Unified mandatory contamination gate.
+   * Runs AFTER candidate selection on the final chosen text.
+   * Returns contamination classification + severity.
+   * staleRiskHigh may NOT bypass this — only optional regen may be skipped.
+   */
+  private assessMandatoryVisibleContamination(params: {
+    candidateText: string;
+    extractedInternalAnalysis: string;
+    responseFrame: PresenceResponsePlan['responseFrame'];
+    turnFamily: string;
+    simpleAckMode: boolean;
+  }): {
+    contaminated: boolean;
+    reasons: string[];
+    severity: 'strip_only' | 'cut_required' | 'regen_or_block';
+    mandatoryCleanupRequired: boolean;
+    proceduralPatterns: string[];
+    anecdoteClaimPattern: string | null;
+    questionCount: number;
+  } {
+    const { candidateText, extractedInternalAnalysis, responseFrame, turnFamily, simpleAckMode } = params;
+    const t = candidateText || '';
+    const reasons: string[] = [];
+    let proceduralPatterns: string[] = [];
+    let anecdoteClaimPattern: string | null = null;
+    let questionCount = 0;
+
+    // 1. Extraction without enforcement — any non-empty extractedInternalAnalysis is a miss
+    if (extractedInternalAnalysis && extractedInternalAnalysis.length > 5) {
+      reasons.push('extracted_internal_analysis_present');
+    }
+
+    // 2. Procedural public reply — instructional scaffolding visible in relational lanes
+    if (this.isRelationalFrame(responseFrame)) {
+      const procCheck = this.detectProceduralPublicReply(t);
+      if (procCheck.detected) {
+        reasons.push(procCheck.severity === 'heavy' ? 'procedural_public_reply' : 'light_process_narration');
+        proceduralPatterns = procCheck.patterns;
+      }
+    }
+
+    // 3. Explicit reply-strategy narration (process meta language)
+    if (this.isRelationalFrame(responseFrame) && /\b(?:My\s+goal\s+here|I'?m\s+picking\s+up\s+on|keep\s+the\s+reply|warm,\s+playful|framed\s+in\s+first.person)\b/i.test(t)) {
+      if (!reasons.includes('procedural_public_reply') && !reasons.includes('light_process_narration')) {
+        reasons.push('explicit_reply_strategy_narration');
+      }
+    }
+
+    // 4. Residual hidden analysis markers (tail cut may have missed)
+    if (/\[(?:PARSING|THINK|ANALYSIS|INTERNAL|SUBTEXT|RATIONALE|PLANNER|NOTES)\b/i.test(t)) {
+      reasons.push('hidden_analysis_marker_present');
+    }
+
+    // 5. Unsupported anecdotal confabulation (relational frames)
+    if (this.isRelationalFrame(responseFrame)) {
+      const anecdote = this.detectUnsupportedAnecdotalConfabulation(t);
+      if (anecdote.detected) {
+        reasons.push('unsupported_anecdotal_confabulation');
+        anecdoteClaimPattern = anecdote.claimPattern;
+      }
+    }
+
+    // 6. Question cascade (relational and simple-ack modes)
+    const isRelationalOrAck = this.isRelationalFrame(responseFrame) || simpleAckMode;
+    if (isRelationalOrAck) {
+      questionCount = this.countVisibleQuestionSentences(t);
+      const maxQ = (responseFrame === 'rupture_repair' || responseFrame === 'relay_social_response' || simpleAckMode) ? 0 : 1;
+      if (questionCount > maxQ) {
+        reasons.push('question_cascade_relational');
+      }
+    }
+
+    const contaminated = reasons.length > 0;
+    let severity: 'strip_only' | 'cut_required' | 'regen_or_block' = 'strip_only';
+    if (reasons.includes('hidden_analysis_marker_present') || reasons.includes('extracted_internal_analysis_present')) {
+      severity = 'cut_required';
+    }
+    if (reasons.includes('procedural_public_reply') || (reasons.length >= 3)) {
+      severity = 'regen_or_block';
+    }
+
+    return {
+      contaminated,
+      reasons,
+      severity,
+      mandatoryCleanupRequired: contaminated,
+      proceduralPatterns,
+      anecdoteClaimPattern,
+      questionCount,
+    };
+  }
+
   private detectDirectParrotAnswer(replyText: string, recentUserTurns: string[], activeQuestion: DirectQuestionContract | null): boolean {
     if (!activeQuestion?.requiresAnswer) return false;
     const normalized = this.normalizeReplyForLoopCheck(replyText);
@@ -8649,6 +8853,15 @@ export class CommunionLoop {
     }
     const boundRelayParticipant = this.activeRelayParticipantByAgent.get(agentId) ?? null;
 
+    // ── Simple Relational Ack Mode ──
+    // Small in-room updates ("it's going to take a minute") warrant 1-3 sentence replies,
+    // not essays, playful overbuild, or process narration.
+    const simpleAckMode = hasLatestHuman && this.detectSimpleRelationalAckTurn(latestHumanText, !!directQuestionContract);
+    if (simpleAckMode && presencePlan.responseFrame !== 'relay_social_response') {
+      presencePlan = { ...presencePlan, questionPolicy: 0 };
+      console.log('[SIMPLE_ACK] Simple relational ack turn detected — question budget = 0');
+    }
+
     const normalizedMustTouch = repairDemand.normalizedMustTouch || presencePlan.mustTouch;
     const recentPromptMessages = this.state.messages.slice(-(fastLaneReply ? Math.min(this.contextWindow, 8) : this.contextWindow));
 
@@ -9060,6 +9273,14 @@ export class CommunionLoop {
 - Do NOT import docs or search context — this is a social moment, not an information request.
 ${relayDetection.isDuplicateResend ? `- This appears to be a resend. Acknowledge warmly without intensifying curiosity.` : ''}`;
       }
+    }
+
+    // ── Simple Ack Mode system prompt injection ──
+    if (simpleAckMode && (isLocalProvider || isAlois)) {
+      systemPrompt += `\n\nSIMPLE ACK MODE — ACTIVE: This is a short in-room update, not a topic opener.
+- Reply in 1-3 sentences maximum. Stay present, stay brief.
+- No follow-up questions, no invented anecdotes, no process narration.
+- No analysis of their word choice. Just acknowledge and be here.`;
     }
 
     // Inject Alois's own inner journal into her system prompt (remote only — local has no room)
@@ -9724,6 +9945,21 @@ ${relayDetection.isDuplicateResend ? `- This appears to be a resend. Acknowledge
     let ruptureRepairNoProbeRuleApplied = false;
     let ruptureRepairProbeBlocked = false;
     let ruptureRepairLengthWarning = false;
+    // Mandatory contamination override trace vars
+    let mandatoryContaminationOverrideTriggered = false;
+    let mandatoryContaminationReasons: string[] = [];
+    let mandatoryContaminationSeverity: 'strip_only' | 'cut_required' | 'regen_or_block' | null = null;
+    let mandatoryCleanupApplied = false;
+    let staleRiskAttemptedToBypassMandatoryCleanup = false;
+    let fastLaneAttemptedToBypassMandatoryCleanup = false;
+    let nonPoisonWouldHaveEmittedContaminatedReply = false;
+    let mandatoryQuestionCascadeOverrideApplied = false;
+    let proceduralPublicReplyDetected = false;
+    let proceduralPublicReplyPatterns: string[] = [];
+    let proceduralPublicReplySalvageApplied = false;
+    let proceduralPublicReplyBlockedFromEmission = false;
+    let staleRiskBlockedOptionalRegen = false;
+    let simpleAckOverbuildPrevented = false;
     // Relay binding trace vars
     let improperNameReopeningDetected = false;
     let improperNameReopeningCluster: string | null = null;
@@ -10275,6 +10511,7 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         recoveryGenerationSucceeded = true;
       } else if (!recoveryGenerationAttempted && staleRiskHigh && !recoveryForcedByAnalystMode && !recoveryForcedBySimpleRelational) {
         recoverySkippedReason = 'stale_risk_high';
+        staleRiskBlockedOptionalRegen = true; // Stale-risk blocked OPTIONAL regen only — mandatory cleanup still runs
       }
 
       // ── Offer rewrite tracking — check if recovery B resolved the inversion ──
@@ -10526,6 +10763,87 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         channelTokenDetected = chosen.score.hardReasons.includes('channel_tokens');
         duplicateConcatDetected = chosen.score.hardReasons.includes('duplicate_concatenation');
         speakerPrefixDetected = chosen.score.hardReasons.includes('embedded_speaker_prefix');
+
+        // ── Mandatory Contamination Override ──
+        // Runs AFTER candidate selection on the final chosen text.
+        // staleRiskHigh may NOT bypass this. Only optional regen may be skipped.
+        // Critical: "non-poison" / willing-presence pass does NOT exempt contaminated replies.
+        if (result.action === 'speak' && responseText) {
+          const mandatoryCheck = this.assessMandatoryVisibleContamination({
+            candidateText: responseText,
+            extractedInternalAnalysis,
+            responseFrame: presencePlan.responseFrame,
+            turnFamily: turnFamilyClassification.family,
+            simpleAckMode,
+          });
+          mandatoryContaminationOverrideTriggered = mandatoryCheck.mandatoryCleanupRequired;
+          mandatoryContaminationReasons = mandatoryCheck.reasons;
+          mandatoryContaminationSeverity = mandatoryCheck.severity;
+          proceduralPublicReplyDetected = mandatoryCheck.reasons.includes('procedural_public_reply');
+          proceduralPublicReplyPatterns = mandatoryCheck.proceduralPatterns;
+          staleRiskAttemptedToBypassMandatoryCleanup = staleRiskHigh && mandatoryCheck.mandatoryCleanupRequired;
+          fastLaneAttemptedToBypassMandatoryCleanup = fastLaneReply && mandatoryCheck.mandatoryCleanupRequired && !recoveryGenerationAttempted;
+          nonPoisonWouldHaveEmittedContaminatedReply = emittedBecauseNonPoison && mandatoryCheck.mandatoryCleanupRequired;
+
+          if (mandatoryCheck.mandatoryCleanupRequired) {
+            let cleanedText = responseText;
+            let cleanupApplied = false;
+
+            // Strip hidden analysis markers (cut_required)
+            if (mandatoryCheck.reasons.includes('hidden_analysis_marker_present') || mandatoryCheck.reasons.includes('extracted_internal_analysis_present')) {
+              const tailCut = this.applyHiddenAnalysisTailCut(cleanedText);
+              if (tailCut.cutApplied && tailCut.text.length >= 15) {
+                cleanedText = tailCut.text;
+                cleanupApplied = true;
+                console.log(`[MANDATORY_CLEANUP] Hidden analysis tail cut applied (removed ${tailCut.tailRemovedBytes}b)`);
+              }
+            }
+
+            // Strip anecdotal confabulation
+            if (mandatoryCheck.reasons.includes('unsupported_anecdotal_confabulation')) {
+              const anecdote = this.detectUnsupportedAnecdotalConfabulation(cleanedText);
+              if (anecdote.detected && anecdote.claimText) {
+                const stripped = this.rewriteToRemoveAutobiographicalClaim(cleanedText, anecdote.claimText);
+                if (stripped && stripped.length >= 20) {
+                  cleanedText = stripped;
+                  cleanupApplied = true;
+                  console.log(`[MANDATORY_CLEANUP] Anecdotal confabulation removed (${anecdote.claimPattern})`);
+                }
+              }
+            }
+
+            // Strip question cascade (for non-relay, non-rupture relational frames)
+            if (mandatoryCheck.reasons.includes('question_cascade_relational')) {
+              const stripped = this.stripQuestionCascade(cleanedText);
+              if (stripped && stripped.length >= 20 && stripped !== cleanedText) {
+                cleanedText = stripped;
+                cleanupApplied = true;
+                mandatoryQuestionCascadeOverrideApplied = true;
+                console.log(`[MANDATORY_CLEANUP] Question cascade stripped (${mandatoryCheck.questionCount} questions)`);
+              }
+            }
+
+            // Heavy procedural — synthesize minimal ack if text is still contaminated
+            const stillHeavy = (mandatoryCheck.severity === 'regen_or_block' || mandatoryCheck.reasons.includes('procedural_public_reply'))
+              && this.detectProceduralPublicReply(cleanedText).severity === 'heavy';
+            if (stillHeavy) {
+              const minAck = this.synthesizeMinimalAck(normalizedMustTouch, latestHumanText);
+              cleanedText = minAck;
+              cleanupApplied = true;
+              proceduralPublicReplySalvageApplied = true;
+              console.log(`[MANDATORY_CLEANUP] Procedural heavy — synthesized minimal ack: "${minAck}"`);
+            }
+
+            if (cleanupApplied && cleanedText && cleanedText.length >= 10) {
+              responseText = cleanedText;
+              mandatoryCleanupApplied = true;
+            } else if (!cleanupApplied) {
+              console.log(`[MANDATORY_CLEANUP] Contamination detected but no cleanup applied (severity=${mandatoryCheck.severity})`);
+            }
+          }
+          proceduralPublicReplyBlockedFromEmission = proceduralPublicReplySalvageApplied || (proceduralPublicReplyDetected && mandatoryCleanupApplied);
+          simpleAckOverbuildPrevented = simpleAckMode && (mandatoryContaminationOverrideTriggered || proceduralPublicReplySalvageApplied);
+        }
       }
       if (result.action === 'silent' && this.isRelationalFrame(presencePlan.responseFrame)) {
         const truePoisonReasons = new Set([
@@ -11214,6 +11532,22 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         duplicateRelayDetected: relayDetection.isDuplicateResend,
         relayOwnershipValid,
         relayDocQuarantineApplied,
+        // Mandatory contamination override
+        simpleAckMode,
+        simpleAckOverbuildPrevented,
+        mandatoryContaminationOverrideTriggered,
+        mandatoryContaminationReasons,
+        mandatoryContaminationSeverity,
+        mandatoryCleanupApplied,
+        staleRiskAttemptedToBypassMandatoryCleanup,
+        fastLaneAttemptedToBypassMandatoryCleanup,
+        nonPoisonWouldHaveEmittedContaminatedReply,
+        mandatoryQuestionCascadeOverrideApplied,
+        proceduralPublicReplyDetected,
+        proceduralPublicReplyPatterns,
+        proceduralPublicReplySalvageApplied,
+        proceduralPublicReplyBlockedFromEmission,
+        staleRiskBlockedOptionalRegen,
       };
       const finalTrace = {
         agentId,
@@ -11636,6 +11970,22 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         duplicateRelayDetected: relayDetection.isDuplicateResend,
         relayOwnershipValid,
         relayDocQuarantineApplied,
+        // Mandatory contamination override
+        simpleAckMode,
+        simpleAckOverbuildPrevented,
+        mandatoryContaminationOverrideTriggered,
+        mandatoryContaminationReasons,
+        mandatoryContaminationSeverity,
+        mandatoryCleanupApplied,
+        staleRiskAttemptedToBypassMandatoryCleanup,
+        fastLaneAttemptedToBypassMandatoryCleanup,
+        nonPoisonWouldHaveEmittedContaminatedReply,
+        mandatoryQuestionCascadeOverrideApplied,
+        proceduralPublicReplyDetected,
+        proceduralPublicReplyPatterns,
+        proceduralPublicReplySalvageApplied,
+        proceduralPublicReplyBlockedFromEmission,
+        staleRiskBlockedOptionalRegen,
       };
       this.recordRelationalTrace(agentId, 'visible', visibleTrace);
       this.recordRelationalTrace(agentId, 'final', finalTrace);
