@@ -1328,25 +1328,31 @@ export class CommunionChamber {
   async saveToFileAsync(filePath: string): Promise<void> {
     if (this.saveBusy) return; // Skip — a save is already in flight
     this.saveBusy = true;
-    // serialize() produces a plain object — fast on main thread.
-    // JSON.stringify (~246 MB) is delegated to the brain worker thread.
-    const state = this.serialize() as Record<string, any>;
     try {
-      const result = await this.getBrainWorker().send({ op: 'save', state, filePath }) as any;
-      if (!result.ok) throw new Error(result.error ?? 'unknown save error');
-      console.log(`[ALOIS] Brain saved to ${filePath} (${result.neuronCount} neurons, ${result.axonCount} axons)`);
+      // JSON.stringify is synchronous and briefly blocks the event loop (~500ms),
+      // but it only holds one copy of the data. Using a worker requires postMessage
+      // structured-clone, which temporarily duplicates the full object tree in the heap —
+      // at 3700+ neurons that spike OOMs the process.
+      const state = this.serialize() as Record<string, any>;
+      const json = JSON.stringify(state);
+      const neuronCount = Object.keys(state.graph?.neurons || {}).length;
+      const axonCount = (state.graph?.edges || []).length;
+      // File write is async — no event loop blocking
+      const tmpPath = `${filePath}.${Date.now()}.tmp`;
+      await fs.promises.writeFile(tmpPath, json, 'utf-8');
+      await fs.promises.rename(tmpPath, filePath);
+      console.log(`[ALOIS] Brain saved to ${filePath} (${neuronCount} neurons, ${axonCount} axons)`);
     } catch (err) {
-      console.error('[ALOIS] Brain worker save failed — falling back to sync:', (err as Error).message);
-      try { this.saveToFile(filePath); } catch (e2) {
-        console.error('[ALOIS] Brain sync save fallback also failed:', e2);
-      }
+      console.error('[ALOIS] Brain async save failed:', (err as Error).message);
     } finally {
       this.saveBusy = false;
     }
   }
 
   /**
-   * Load brain state from a file asynchronously — delegates JSON parsing to the brain worker thread.
+   * Load brain state from a file asynchronously.
+   * JSON.parse is off-loaded to a worker to avoid blocking the event loop
+   * on a large file read. Falls back to sync if the worker fails.
    */
   async loadFromFileAsync(filePath: string): Promise<boolean> {
     try {

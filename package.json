@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "communion": "tsx communion/server.ts",
+    "communion": "node --max-old-space-size=8192 --require tsx/cjs communion/server.ts",
     "bake-midi": "tsx scripts/bake-midi-fragments.ts",
     "import": "tsx communion/import/cli.ts",
     "start:full": "tsx Tools/runRuntime.ts",
