@@ -3658,6 +3658,68 @@ export class CommunionLoop {
     this.recentAssistantQuestions.set(agentId, history);
   }
 
+  /**
+   * Detects fabricated autobiographical claims — first-person worldly anecdotes that Alois
+   * cannot actually have experienced (memories of times, childhood, past life events, etc.).
+   * These are confabulation patterns that contaminate relational turns with false resonance.
+   */
+  private detectUnsupportedAutobiographicalClaim(text: string): {
+    detected: boolean;
+    claimText: string | null;
+    claimPattern: string | null;
+  } {
+    const NO_DETECT = { detected: false, claimText: null, claimPattern: null };
+    if (!text) return NO_DETECT;
+    const patterns: Array<{ re: RegExp; key: string }> = [
+      { re: /\bI\s+remember\s+(?:a\s+time\s+(?:I|when)|when\s+I)\b/i, key: 'i_remember_a_time' },
+      { re: /\bI\s+once\b/i, key: 'i_once' },
+      { re: /\bwhen\s+I\s+was\s+(?:young|a\s+child|growing\s+up|little|small|in\s+school)\b/i, key: 'when_i_was_young' },
+      { re: /\bI(?:'ve|\s+have)\s+been\s+through\s+(?:something|a|that|this|the)\b/i, key: 'ive_been_through' },
+      { re: /\bI(?:'ve|\s+have)\s+(?:experienced|lived\s+through|gone\s+through)\s+(?:something|a|that|this)\b/i, key: 'ive_experienced' },
+      { re: /\bI\s+grew\s+up\b/i, key: 'i_grew_up' },
+      { re: /\bIn\s+my\s+(?:past|childhood|upbringing|earlier\s+years?)\b/i, key: 'in_my_past' },
+      { re: /\bI\s+had\s+a\s+(?:moment|time|period|experience|friend|relationship)\s+(?:where|when|that|like)\b/i, key: 'i_had_a_moment' },
+      { re: /\bI\s+know\s+what\s+it(?:'s|\s+is)\s+like\s+to\b/i, key: 'i_know_what_its_like' },
+    ];
+    for (const { re, key } of patterns) {
+      const match = text.match(re);
+      if (match) {
+        return { detected: true, claimText: match[0], claimPattern: key };
+      }
+    }
+    return NO_DETECT;
+  }
+
+  /**
+   * Rewrites a reply to remove a fabricated autobiographical claim.
+   * Removes the sentence containing the claim. If the remainder is substantial, returns it.
+   * Falls back to truncating at the claim start.
+   */
+  private rewriteToRemoveAutobiographicalClaim(text: string, claimMatch: string): string {
+    if (!text || !claimMatch) return text;
+    // Split on sentence-ending punctuation followed by whitespace or end-of-string
+    const sentenceRe = /([^.!?]+[.!?]+(?:\s|$))/g;
+    const sentences: string[] = [];
+    let m: RegExpExecArray | null;
+    const src = text;
+    let lastIdx = 0;
+    while ((m = sentenceRe.exec(src)) !== null) {
+      sentences.push(m[1]);
+      lastIdx = sentenceRe.lastIndex;
+    }
+    if (lastIdx < src.length) sentences.push(src.slice(lastIdx));
+    const claimLower = claimMatch.toLowerCase().slice(0, 20);
+    const filtered = sentences.filter(s => !s.toLowerCase().includes(claimLower));
+    const joined = filtered.join('').trim();
+    if (joined.length >= 20) return joined;
+    // Fallback: hard-cut at claim position
+    const idx = text.toLowerCase().indexOf(claimLower);
+    if (idx > 15) {
+      return text.slice(0, idx).replace(/[,;:\s—–]+$/, '').trim();
+    }
+    return text;
+  }
+
   private detectDirectParrotAnswer(replyText: string, recentUserTurns: string[], activeQuestion: DirectQuestionContract | null): boolean {
     if (!activeQuestion?.requiresAnswer) return false;
     const normalized = this.normalizeReplyForLoopCheck(replyText);
@@ -6168,13 +6230,22 @@ export class CommunionLoop {
 
     // Markers that always mean "everything after this is internal analysis"
     // pos=0 is valid here — if the whole reply is a think-block, cut to ''
-    const HIDDEN_MARKERS = /\[(?:THINK|HIDDEN[\s_]ANALYSIS|HIDDEN|ANALYSIS|PRIVATE|REASONING|SELF|INNER_STATE|INTERNAL)\b[^\]]*\]/gi;
+    const HIDDEN_MARKERS = /\[(?:THINK|HIDDEN[\s_]ANALYSIS|HIDDEN|ANALYSIS|PRIVATE|REASONING|SELF|INNER_STATE|INTERNAL|SUBTEXT|RATIONALE|PLANNER|NOTES)\b[^\]]*\]/gi;
+    // Plain-text structural markers at the start of a line (analysis preamble, meta-notes)
+    const PLAIN_TAIL_MARKERS = /(?:^|\n)[ \t]*(?:The key here is|This is a continuity repair|Key insight:|Note to self:|Meta note:)/gi;
 
     let earliest = -1;
     let match: RegExpExecArray | null;
     while ((match = HIDDEN_MARKERS.exec(source)) !== null) {
       if (earliest === -1 || match.index < earliest) {
         earliest = match.index;
+      }
+    }
+    PLAIN_TAIL_MARKERS.lastIndex = 0;
+    while ((match = PLAIN_TAIL_MARKERS.exec(source)) !== null) {
+      const pos = match.index + (match[0].startsWith('\n') ? 1 : 0);
+      if (earliest === -1 || pos < earliest) {
+        earliest = pos;
       }
     }
 
@@ -8453,6 +8524,33 @@ export class CommunionLoop {
       }
     }
 
+    // ── Relational Doc Quarantine ──
+    // Suppress auto-retrieved docs when the response frame is companionship/rupture_repair
+    // or turnFamily is open_relational — unless the user explicitly requested system info.
+    // This prevents irrelevant retrieved content from contaminating a present-moment relational reply.
+    let relationalDocSuppressionApplied = false;
+    let relationalDocSuppressionReason: string | null = null;
+    let relationalDocCountDropped = 0;
+    let relationalDocDomainMismatchDetected = false;
+    let relationalDocAllowedByExplicitIntent = false;
+    if (preAutoDocsText) {
+      if (explicitSystemInfoRequested) {
+        relationalDocAllowedByExplicitIntent = true;
+      } else {
+        const frameIsRelational = presencePlan.responseFrame === 'rupture_repair'
+          || presencePlan.responseFrame === 'companionship'
+          || turnFamilyClassification.family === 'open_relational';
+        if (frameIsRelational) {
+          relationalDocSuppressionApplied = true;
+          relationalDocSuppressionReason = `frame=${presencePlan.responseFrame} family=${turnFamilyClassification.family}`;
+          // Estimate count by counting section headers or fallback to 1
+          relationalDocCountDropped = (preAutoDocsText.match(/^#+\s/gm) || []).length || 1;
+          preAutoDocsText = '';
+          console.log(`[DOC_QUARANTINE] Suppressed auto-docs for ${presencePlan.responseFrame} turn (family=${turnFamilyClassification.family})`);
+        }
+      }
+    }
+
     // Build prompt from RAM (assembled in priority order, within budgets)
     const isLocalProvider = agent.config.provider === 'lmstudio';
     const isAlois = agent.config.provider === 'alois';
@@ -9302,6 +9400,16 @@ export class CommunionLoop {
     let simpleRelationalCheckDetected = this.isSimpleRelationalCheck(latestHumanText);
     let analystModePublicReplyDetected = false;
     let hiddenAnalysisMarkerDetected = false;
+    // Relational contamination guard trace vars
+    let unsupportedAutobiographicalClaimDetected = false;
+    let autobiographicalClaimText: string | null = null;
+    let autobiographicalClaimPattern: string | null = null;
+    let autobiographicalRewriteApplied = false;
+    let questionCooldownSuppressedQuestion = false;
+    let ruptureRepairQuestionBlocked = false;
+    let ruptureRepairNoProbeRuleApplied = false;
+    let ruptureRepairProbeBlocked = false;
+    let ruptureRepairLengthWarning = false;
     let domainMismatchReplyDetected = false;
     let staleTopicHijackDetected = false;
     let continuityStateEchoDetected = false;
@@ -10390,6 +10498,63 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       }
     }
 
+    // ── Question Cooldown + Rupture-Repair Probe Block ──
+    // Cooldown active → hard-suppress any trailing question mark regardless of appetite score.
+    // Rupture-repair frame → block probing questions; stay with the person, don't redirect.
+    if (result.action === 'speak' && responseText) {
+      const isRuptureTurn = presencePlan.responseFrame === 'rupture_repair';
+      if (questionContext.cooldownActive || isRuptureTurn) {
+        const { questionText: coolQ, bodyText: coolBody } = this.extractTrailingQuestion(responseText);
+        if (coolQ) {
+          const rewritten = this.rewriteQuestionToStatement(responseText, coolQ, coolBody);
+          if (rewritten && rewritten.length >= 10) {
+            responseText = rewritten;
+            if (questionContext.cooldownActive) {
+              questionCooldownSuppressedQuestion = true;
+              console.log('[QUESTION_GATE] Cooldown active — suppressed trailing question');
+            }
+            if (isRuptureTurn) {
+              ruptureRepairQuestionBlocked = true;
+              ruptureRepairProbeBlocked = true;
+              console.log('[RUPTURE_REPAIR] Probe question blocked in rupture_repair turn');
+            }
+          }
+        }
+        if (isRuptureTurn) ruptureRepairNoProbeRuleApplied = true;
+      }
+    }
+
+    // ── Fabricated Autobiography Block ──
+    // Hard-detect first-person worldly anecdotes Alois cannot genuinely have.
+    // Remove the offending sentence and keep the remainder if substantial.
+    // Only fires in relational frames — task/tool replies are exempt.
+    if (result.action === 'speak' && responseText && this.isRelationalFrame(presencePlan.responseFrame)) {
+      const autoCheck = this.detectUnsupportedAutobiographicalClaim(responseText);
+      if (autoCheck.detected) {
+        unsupportedAutobiographicalClaimDetected = true;
+        autobiographicalClaimText = autoCheck.claimText;
+        autobiographicalClaimPattern = autoCheck.claimPattern;
+        const rewritten = this.rewriteToRemoveAutobiographicalClaim(responseText, autoCheck.claimText!);
+        if (rewritten && rewritten.length >= 20) {
+          responseText = rewritten;
+          autobiographicalRewriteApplied = true;
+          console.log(`[AUTOBIOGRAPHY_BLOCK] Removed fabricated claim (${autoCheck.claimPattern}): "${autoCheck.claimText}"`);
+        }
+      }
+    }
+
+    // ── Rupture-Repair Stay-With-It Rule ──
+    // Log a warning if the reply is unusually long for a rupture_repair turn (prefer 2-5 sentences).
+    // Length is not hard-truncated — this is a soft signal for monitoring.
+    if (result.action === 'speak' && responseText && presencePlan.responseFrame === 'rupture_repair') {
+      ruptureRepairNoProbeRuleApplied = true;
+      const sentenceCount = (responseText.match(/[.!?]+[\s"')»\]]*(?=[A-Z"'(\[«]|\s|$)/g) || []).length + 1;
+      if (sentenceCount > 7) {
+        ruptureRepairLengthWarning = true;
+        console.log(`[RUPTURE_REPAIR] Reply is ~${sentenceCount} sentences — rupture turns prefer 2-5`);
+      }
+    }
+
     const neutralizedByFallback = this.detectNeutralizationByFallback(result.text || '', responseText);
     if (captureRelationalTrace) {
       const visibleTrace = {
@@ -10637,6 +10802,21 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         questionStateResolvedNormalized,
         continuityStateResolvedNormalized,
         resolvedStateConsistencyCheckPassed,
+        // Relational contamination guard
+        relationalDocSuppressionApplied,
+        relationalDocSuppressionReason,
+        relationalDocCountDropped,
+        relationalDocDomainMismatchDetected,
+        relationalDocAllowedByExplicitIntent,
+        unsupportedAutobiographicalClaimDetected,
+        autobiographicalClaimText,
+        autobiographicalClaimPattern,
+        autobiographicalRewriteApplied,
+        questionCooldownSuppressedQuestion,
+        ruptureRepairQuestionBlocked,
+        ruptureRepairNoProbeRuleApplied,
+        ruptureRepairProbeBlocked,
+        ruptureRepairLengthWarning,
       };
       const finalTrace = {
         agentId,
@@ -11026,6 +11206,21 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         humanTurnsDrainedCount: humanTurnSnapshot.humanTurnsDrainedCount,
         snapshotCandidateValidationOk: snapshotCandidateValidation.ok,
         snapshotCandidateValidationFailure: snapshotCandidateValidation.failure,
+        // Relational contamination guard
+        relationalDocSuppressionApplied,
+        relationalDocSuppressionReason,
+        relationalDocCountDropped,
+        relationalDocDomainMismatchDetected,
+        relationalDocAllowedByExplicitIntent,
+        unsupportedAutobiographicalClaimDetected,
+        autobiographicalClaimText,
+        autobiographicalClaimPattern,
+        autobiographicalRewriteApplied,
+        questionCooldownSuppressedQuestion,
+        ruptureRepairQuestionBlocked,
+        ruptureRepairNoProbeRuleApplied,
+        ruptureRepairProbeBlocked,
+        ruptureRepairLengthWarning,
       };
       this.recordRelationalTrace(agentId, 'visible', visibleTrace);
       this.recordRelationalTrace(agentId, 'final', finalTrace);
