@@ -619,10 +619,21 @@ export class OpenAICompatibleBackend implements AgentBackend {
     // Estimate prompt size for latency trace
     const llmPromptCharEstimate = finalMessages.reduce((sum, m) => sum + (m.content || '').length, 0);
 
+    // Full-call timeout: covers both "no response headers" and "stream hangs after headers".
+    // Remote models (DeepSeek, OpenAI) get 120s; local models get 90s.
+    // AbortController is the only reliable way to kill a hung fetch in Node.js.
+    const FULL_CALL_TIMEOUT_MS = isLocalModel ? 90_000 : 120_000;
+    const fetchAbort = new AbortController();
+    const fetchAbortTimer = setTimeout(() => {
+      console.warn(`[${this.agentName}] Full-call timeout (${FULL_CALL_TIMEOUT_MS / 1000}s) — aborting fetch`);
+      fetchAbort.abort(new Error('full_call_timeout'));
+    }, FULL_CALL_TIMEOUT_MS);
+
     // Retry up to 3 times on socket errors — LM Studio intermittently drops connections
     // (UND_ERR_SOCKET / "other side closed") especially under VRAM pressure
     let response: Response | null = null;
     let lastFetchErr: unknown;
+    try {
     for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) {
         const delay = attempt * 2000;
@@ -643,9 +654,11 @@ export class OpenAICompatibleBackend implements AgentBackend {
             temperature: this.temperature,
             stream: true,
           }),
+          signal: fetchAbort.signal,
         });
         break; // got a response — exit retry loop
       } catch (err: any) {
+        if (err?.name === 'AbortError') throw new Error(`${this.agentName}: request timed out after ${FULL_CALL_TIMEOUT_MS / 1000}s`);
         lastFetchErr = err;
         const isSocket = err?.cause?.code === 'UND_ERR_SOCKET' || err?.message === 'fetch failed';
         if (!isSocket) throw err; // non-retryable (bad URL, DNS, etc.)
@@ -776,6 +789,9 @@ export class OpenAICompatibleBackend implements AgentBackend {
 
     const parsed = parseResponse(text);
     return { ...parsed, budgetReceipt: packed.receipt, ...timingFields };
+    } finally {
+      clearTimeout(fetchAbortTimer);
+    }
   }
 }
 
