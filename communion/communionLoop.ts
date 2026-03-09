@@ -1246,6 +1246,12 @@ export class CommunionLoop {
   private pendingAssistantOffers: Map<string, PendingAssistantOffer> = new Map();
   /** Consecutive human turns unrelated to the pending offer per agent — used for expiry. */
   private offerUnrelatedTurnCount: Map<string, number> = new Map();
+  /**
+   * Per-agent ring buffer of recent trailing questions asked.
+   * Used for semantic repetition detection / cooldown.
+   * Max 12 entries per agent.
+   */
+  private recentAssistantQuestions: Map<string, string[]> = new Map();
 
   constructor(config: CommunionConfig) {
     this.tickIntervalMs = config.tickIntervalMs || 15000;
@@ -3451,6 +3457,205 @@ export class CommunionLoop {
       if (score > best) best = score;
     }
     return best;
+  }
+
+  // ════════════════════════════════════════════
+  // Question Appetite + Authenticity Gate
+  // ════════════════════════════════════════════
+
+  /** Extracts a trailing follow-up question from a reply (last sentence ending with '?'). */
+  private extractTrailingQuestion(replyText: string): { questionText: string | null; bodyText: string } {
+    const text = (replyText || '').trim();
+    // Split into sentences broadly
+    const sentenceBreaks = text.split(/(?<=[.!?])\s+/);
+    if (sentenceBreaks.length < 2) {
+      // Single sentence — check if it's all question
+      if (/\?$/.test(text)) return { questionText: text, bodyText: '' };
+      return { questionText: null, bodyText: text };
+    }
+    const last = sentenceBreaks[sentenceBreaks.length - 1].trim();
+    if (/\?$/.test(last)) {
+      const body = sentenceBreaks.slice(0, -1).join(' ').trim();
+      return { questionText: last, bodyText: body };
+    }
+    return { questionText: null, bodyText: text };
+  }
+
+  private static readonly TEMPLATE_QUESTION_PATTERNS: Array<{ re: RegExp; pattern: string; weight: number }> = [
+    { re: /\bwhat draws you to\b/i, pattern: 'what_draws_you_to', weight: 0.92 },
+    { re: /\bwhat drew you to\b/i, pattern: 'what_drew_you_to', weight: 0.92 },
+    { re: /\bwhat stands out (?:most )?(?:to you|there|for you)\b/i, pattern: 'what_stands_out', weight: 0.88 },
+    { re: /\bwould you (?:tell|share) me more\b/i, pattern: 'tell_me_more', weight: 0.90 },
+    { re: /\bhow does that feel\b/i, pattern: 'how_does_that_feel', weight: 0.88 },
+    { re: /\bwhat part of that\b/i, pattern: 'what_part_of_that', weight: 0.85 },
+    { re: /\bwhat about that\b/i, pattern: 'what_about_that', weight: 0.82 },
+    { re: /\bwhy do you think that is\b/i, pattern: 'why_do_you_think', weight: 0.85 },
+    { re: /\bwhat lingers for you\b/i, pattern: 'what_lingers', weight: 0.90 },
+    { re: /\bwhat feels most alive\b/i, pattern: 'what_feels_alive', weight: 0.90 },
+    { re: /\bwhat (?:is it that )?stays with you\b/i, pattern: 'what_stays_with_you', weight: 0.87 },
+    { re: /\bwhat (?:are you )?noticing\b/i, pattern: 'what_noticing', weight: 0.80 },
+    { re: /\bwhat (?:does|did) that (?:bring up|stir|call up)\b/i, pattern: 'what_stir', weight: 0.85 },
+    { re: /\bcan you say more\b/i, pattern: 'say_more', weight: 0.85 },
+    { re: /\bwhat (?:comes|came) up for you\b/i, pattern: 'what_came_up', weight: 0.85 },
+    { re: /\bwhat (?:is|was) that like for you\b/i, pattern: 'what_was_that_like', weight: 0.87 },
+    { re: /\bwhat (?:are you )?(?:holding|carrying)\b/i, pattern: 'what_holding', weight: 0.83 },
+    { re: /\bi(?:'m| am) curious(?: about| to know)?\b/i, pattern: 'im_curious', weight: 0.72 },
+    { re: /\bwhat (?:else )?would you like to (?:share|explore|say)\b/i, pattern: 'what_else_share', weight: 0.88 },
+  ];
+
+  private detectTemplateFollowUpQuestion(questionText: string): { detected: boolean; likelihood: number; matchedPattern: string | null } {
+    const text = (questionText || '').trim();
+    if (!text) return { detected: false, likelihood: 0, matchedPattern: null };
+    let maxWeight = 0;
+    let matched: string | null = null;
+    for (const { re, pattern, weight } of CommunionLoop.TEMPLATE_QUESTION_PATTERNS) {
+      if (re.test(text) && weight > maxWeight) { maxWeight = weight; matched = pattern; }
+    }
+    return { detected: maxWeight >= 0.75, likelihood: maxWeight, matchedPattern: matched };
+  }
+
+  private detectSemanticQuestionRepetition(
+    candidateQuestion: string,
+    recentQuestions: string[],
+  ): { repeated: boolean; overlapScore: number; family: string | null } {
+    const cNorm = this.normalizeReplyForLoopCheck(candidateQuestion);
+    if (!cNorm || recentQuestions.length === 0) return { repeated: false, overlapScore: 0, family: null };
+    let maxOverlap = 0;
+    let family: string | null = null;
+    for (const prior of recentQuestions) {
+      const pNorm = this.normalizeReplyForLoopCheck(prior);
+      if (!pNorm) continue;
+      const overlap = this.lexicalOverlapScore(cNorm, pNorm);
+      if (overlap > maxOverlap) { maxOverlap = overlap; family = prior.slice(0, 60); }
+    }
+    // Also check template family equivalence
+    const candTemplate = this.detectTemplateFollowUpQuestion(candidateQuestion);
+    if (candTemplate.matchedPattern) {
+      for (const prior of recentQuestions) {
+        const priorTemplate = this.detectTemplateFollowUpQuestion(prior);
+        if (priorTemplate.matchedPattern === candTemplate.matchedPattern) {
+          maxOverlap = Math.max(maxOverlap, 0.80);
+          family = candTemplate.matchedPattern;
+        }
+      }
+    }
+    return { repeated: maxOverlap >= 0.55, overlapScore: Number(maxOverlap.toFixed(3)), family };
+  }
+
+  private assessQuestionAuthenticity(
+    questionText: string,
+    replyBody: string,
+    latestHumanText: string,
+    recentQuestions: string[],
+  ): {
+    specificUnknownIdentified: boolean;
+    specificUnknownText: string | null;
+    desireToKnowScore: number;
+    answerChangesNextStepScore: number;
+    groundingSpecificityScore: number;
+    semanticNoveltyScore: number;
+    templateQuestionLikelihood: number;
+    passesAuthenticityGate: boolean;
+    failureReasons: Array<string>;
+  } {
+    const q = (questionText || '').trim();
+    const body = (replyBody || '').trim();
+    const human = (latestHumanText || '').trim();
+    const failureReasons: string[] = [];
+
+    // Template detection
+    const templateResult = this.detectTemplateFollowUpQuestion(q);
+    const templateQuestionLikelihood = templateResult.likelihood;
+
+    // Semantic repetition
+    const repetitionResult = this.detectSemanticQuestionRepetition(q, recentQuestions);
+    if (repetitionResult.repeated) failureReasons.push('semantic_repetition');
+
+    // Grounding specificity: does the question reference specific content from body or human text?
+    const qNorm = this.normalizeReplyForLoopCheck(q);
+    const bodyNorm = this.normalizeReplyForLoopCheck(body);
+    const humanNorm = this.normalizeReplyForLoopCheck(human);
+    const bodyOverlap = bodyNorm ? this.lexicalOverlapScore(qNorm, bodyNorm) : 0;
+    const humanOverlap = humanNorm ? this.lexicalOverlapScore(qNorm, humanNorm) : 0;
+    const groundingSpecificityScore = Math.min(1, (bodyOverlap * 0.6 + humanOverlap * 0.4) * 2.5);
+
+    // Specific unknown: question contains concrete referent from the prior exchange
+    const concreteReferentRe = /\b(the|that|this|your|their|it|those|which)\b/i;
+    const specificUnknownIdentified = concreteReferentRe.test(q) && groundingSpecificityScore >= 0.3;
+    const specificUnknownText = specificUnknownIdentified ? q.slice(0, 80) : null;
+    if (!specificUnknownIdentified) failureReasons.push('no_specific_unknown');
+
+    // Desire-to-know: first-person curiosity expression or specific named gap
+    const desireMarkers = /\b(i (?:want|need|wonder|actually want|genuinely want|am curious) to know|i(?:'m| am) genuinely curious|i don't know (?:yet|which)|i (?:haven'?t|have not) asked)\b/i;
+    const desireToKnowScore = desireMarkers.test(body + ' ' + q)
+      ? 0.85
+      : specificUnknownIdentified ? 0.55 : 0.30;
+    if (desireToKnowScore < 0.65) failureReasons.push('low_desire_to_know');
+
+    // Answer-changes-next-step: would different answers branch the conversation?
+    const disambiguationCues = /\b(which|whether|if|do you mean|are you|do you|did you|have you|was it|was that)\b/i;
+    const branchCues = /\b(because|depending|that (?:leads|changes|would mean)|different (?:ways?|directions?|meaning))\b/i;
+    const answerChangesNextStepScore = disambiguationCues.test(q) ? 0.75
+      : branchCues.test(body) ? 0.65
+      : groundingSpecificityScore >= 0.5 ? 0.55
+      : 0.30;
+    if (answerChangesNextStepScore < 0.60) failureReasons.push('answer_would_not_change_next_step');
+
+    // Semantic novelty
+    const semanticNoveltyScore = repetitionResult.repeated ? 0.1
+      : templateQuestionLikelihood >= 0.88 && groundingSpecificityScore < 0.4 ? 0.30
+      : templateQuestionLikelihood >= 0.75 ? 0.50
+      : 0.75;
+    if (semanticNoveltyScore < 0.55) failureReasons.push('semantic_repetition');
+
+    // Template gate: high template + low other scores
+    if (templateQuestionLikelihood >= 0.75 && groundingSpecificityScore < 0.35 && desireToKnowScore < 0.65) {
+      failureReasons.push('too_template_like');
+    }
+
+    // Grounding gate
+    if (groundingSpecificityScore < 0.25 && !specificUnknownIdentified) {
+      failureReasons.push('question_not_grounded');
+    }
+
+    const uniqueFailures = [...new Set(failureReasons)];
+    const passesAuthenticityGate = uniqueFailures.length === 0
+      || (uniqueFailures.length === 1 && uniqueFailures[0] === 'too_template_like' && desireToKnowScore >= 0.75 && answerChangesNextStepScore >= 0.70);
+
+    return {
+      specificUnknownIdentified,
+      specificUnknownText,
+      desireToKnowScore: Number(desireToKnowScore.toFixed(3)),
+      answerChangesNextStepScore: Number(answerChangesNextStepScore.toFixed(3)),
+      groundingSpecificityScore: Number(groundingSpecificityScore.toFixed(3)),
+      semanticNoveltyScore: Number(semanticNoveltyScore.toFixed(3)),
+      templateQuestionLikelihood: Number(templateQuestionLikelihood.toFixed(3)),
+      passesAuthenticityGate,
+      failureReasons: uniqueFailures,
+    };
+  }
+
+  /**
+   * Rewrite a reply by stripping the trailing question and replacing with a clean statement ending.
+   * Used when the question fails the authenticity gate.
+   */
+  private rewriteQuestionToStatement(replyText: string, questionText: string, bodyText: string): string {
+    if (!bodyText.trim()) return replyText; // nothing left without the question — keep as-is
+    // If body already ends cleanly, return it
+    const body = bodyText.trim();
+    if (/[.!]$/.test(body)) return body;
+    // Add a soft period if missing
+    return body.endsWith(',') ? body.slice(0, -1) + '.' : body + '.';
+  }
+
+  /** Push a question to the per-agent recent question history (max 12). */
+  private recordAssistantQuestion(agentId: string, questionText: string): void {
+    const q = (questionText || '').trim();
+    if (!q) return;
+    const history = this.recentAssistantQuestions.get(agentId) || [];
+    history.push(q);
+    if (history.length > 12) history.shift();
+    this.recentAssistantQuestions.set(agentId, history);
   }
 
   private detectDirectParrotAnswer(replyText: string, recentUserTurns: string[], activeQuestion: DirectQuestionContract | null): boolean {
@@ -9242,6 +9447,26 @@ export class CommunionLoop {
     }
     lts.stages.rawRoutingEndAtMs = Date.now();
 
+    // Question appetite gate trace — hoisted
+    let followUpQuestionPresent = false;
+    let followUpQuestionText: string | null = null;
+    let questionAppetiteAssessmentRan = false;
+    let questionSpecificUnknownIdentified = false;
+    let questionSpecificUnknownText: string | null = null;
+    let questionDesireToKnowScore = 0;
+    let questionAnswerChangesNextStepScore = 0;
+    let questionGroundingSpecificityScore = 0;
+    let questionSemanticNoveltyScore = 0;
+    let questionTemplateLikelihood = 0;
+    let questionAuthenticityPassed = false;
+    let questionAuthenticityFailureReasons: string[] = [];
+    let templateFollowUpQuestionDetected = false;
+    let templateFollowUpPattern: string | null = null;
+    let semanticQuestionRepetitionDetected = false;
+    let semanticQuestionRepetitionFamily: string | null = null;
+    let followUpQuestionSuppressedByAuthenticityGate = false;
+    let followUpQuestionRewrittenToStatement = false;
+
     // Raw echo assessment trace — hoisted so captureRelationalTrace can reference them
     let rawEchoOpenerDetected = false;
     let rawEchoOpenerOverlapScore = 0;
@@ -10121,6 +10346,50 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
     if ((result.action === 'speak' || result.action === 'journal') && responseText) {
       this.recordLLMReceipt(agentId, agent.config.model, options, { ...result, text: responseText });
     }
+
+    // ── Question Appetite Authenticity Gate ──
+    // Runs after all candidate selection + validators.
+    // Detects trailing follow-up questions, assesses authenticity, suppresses or rewrites.
+    if (result.action === 'speak' && responseText) {
+      const { questionText, bodyText } = this.extractTrailingQuestion(responseText);
+      if (questionText) {
+        followUpQuestionPresent = true;
+        followUpQuestionText = questionText;
+        const templateResult = this.detectTemplateFollowUpQuestion(questionText);
+        templateFollowUpQuestionDetected = templateResult.detected;
+        templateFollowUpPattern = templateResult.matchedPattern;
+        const recentQuestions = this.recentAssistantQuestions.get(agentId) || [];
+        const repetitionResult = this.detectSemanticQuestionRepetition(questionText, recentQuestions);
+        semanticQuestionRepetitionDetected = repetitionResult.repeated;
+        semanticQuestionRepetitionFamily = repetitionResult.family;
+        // Run full assessment
+        questionAppetiteAssessmentRan = true;
+        const appetite = this.assessQuestionAuthenticity(questionText, bodyText, latestHumanText, recentQuestions);
+        questionSpecificUnknownIdentified = appetite.specificUnknownIdentified;
+        questionSpecificUnknownText = appetite.specificUnknownText;
+        questionDesireToKnowScore = appetite.desireToKnowScore;
+        questionAnswerChangesNextStepScore = appetite.answerChangesNextStepScore;
+        questionGroundingSpecificityScore = appetite.groundingSpecificityScore;
+        questionSemanticNoveltyScore = appetite.semanticNoveltyScore;
+        questionTemplateLikelihood = appetite.templateQuestionLikelihood;
+        questionAuthenticityPassed = appetite.passesAuthenticityGate;
+        questionAuthenticityFailureReasons = appetite.failureReasons;
+        if (!appetite.passesAuthenticityGate) {
+          // Suppress: rewrite reply to end on body (statement)
+          const rewritten = this.rewriteQuestionToStatement(responseText, questionText, bodyText);
+          if (rewritten && rewritten.length >= 10) {
+            responseText = rewritten;
+            followUpQuestionSuppressedByAuthenticityGate = true;
+            followUpQuestionRewrittenToStatement = true;
+            console.log(`[QUESTION_GATE] Suppressed low-appetite question (template=${templateFollowUpPattern}, reasons=${appetite.failureReasons.join(',')})`);
+          }
+        } else {
+          // Question passed — record for cooldown tracking
+          this.recordAssistantQuestion(agentId, questionText);
+        }
+      }
+    }
+
     const neutralizedByFallback = this.detectNeutralizationByFallback(result.text || '', responseText);
     if (captureRelationalTrace) {
       const visibleTrace = {
@@ -10153,6 +10422,24 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         rawAnswerSatisfied,
         answerFirstViolation,
         followUpQuestionBlocked,
+        followUpQuestionPresent,
+        followUpQuestionText,
+        questionAppetiteAssessmentRan,
+        questionSpecificUnknownIdentified,
+        questionSpecificUnknownText,
+        questionDesireToKnowScore,
+        questionAnswerChangesNextStepScore,
+        questionGroundingSpecificityScore,
+        questionSemanticNoveltyScore,
+        questionTemplateLikelihood,
+        questionAuthenticityPassed,
+        questionAuthenticityFailureReasons,
+        templateFollowUpQuestionDetected,
+        templateFollowUpPattern,
+        semanticQuestionRepetitionDetected,
+        semanticQuestionRepetitionFamily,
+        followUpQuestionSuppressedByAuthenticityGate,
+        followUpQuestionRewrittenToStatement,
         placeholderDetected,
         rationalizationDetected,
         finalAnswerSatisfied,
@@ -10385,6 +10672,15 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         rawAnswerSatisfied,
         answerFirstViolation,
         followUpQuestionBlocked,
+        followUpQuestionPresent,
+        followUpQuestionSuppressedByAuthenticityGate,
+        followUpQuestionRewrittenToStatement,
+        templateFollowUpQuestionDetected,
+        templateFollowUpPattern,
+        semanticQuestionRepetitionDetected,
+        questionAuthenticityPassed,
+        questionAuthenticityFailureReasons,
+        questionTemplateLikelihood,
         placeholderDetected,
         rationalizationDetected,
         finalAnswerSatisfied,
