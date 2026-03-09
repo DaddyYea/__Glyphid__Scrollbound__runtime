@@ -502,9 +502,14 @@ export class AloisBackend implements AgentBackend {
 
   // ── Brain Persistence ──
 
-  /** Save brain state to disk */
+  /** Save brain state to disk (sync — shutdown only) */
   saveBrain(filePath: string): void {
     this.chamber.saveToFile(filePath);
+  }
+
+  /** Save brain state to disk (async — use during normal operation) */
+  async saveBrainAsync(filePath: string): Promise<void> {
+    await this.chamber.saveToFileAsync(filePath);
   }
 
   /** Load brain state from disk. Returns true if loaded. */

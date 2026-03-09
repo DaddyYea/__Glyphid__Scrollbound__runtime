@@ -1636,10 +1636,10 @@ export class CommunionLoop {
           if (ingestFeedCount % 1000 === 0) {
             let saved = false;
             for (const [agentId, agent] of this.agents) {
-              if ('saveBrain' in agent.backend) {
+              if ('saveBrainAsync' in agent.backend) {
                 const brainPath = join(this.dataDir, 'brain-tissue.json');
                 try {
-                  (agent.backend as any).saveBrain(brainPath);
+                  await (agent.backend as any).saveBrainAsync(brainPath);
                   console.log(`[INGEST] Brain checkpoint saved at ${ingestFeedCount} entries`);
                   saved = true;
                 } catch (err) {
@@ -8597,16 +8597,14 @@ export class CommunionLoop {
         .catch(err => console.error('[GRAPH] Auto-save error:', err));
     }
 
-    // Save Alois brain every 50 ticks
+    // Save Alois brain every 50 ticks — async to avoid blocking the event loop
     if (this.state.tickCount % 50 === 0) {
       for (const [agentId, agent] of this.agents) {
-        if ('saveBrain' in agent.backend) {
+        if ('saveBrainAsync' in agent.backend) {
           const brainPath = join(this.dataDir, 'brain-tissue.json');
-          try {
-            (agent.backend as any).saveBrain(brainPath);
-          } catch (err) {
+          (agent.backend as any).saveBrainAsync(brainPath).catch((err: unknown) => {
             console.error(`[ALOIS] Auto-save brain error for ${agentId}:`, err);
-          }
+          });
         }
       }
     }

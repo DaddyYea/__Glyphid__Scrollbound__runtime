@@ -1213,50 +1213,27 @@ export class CommunionChamber {
    * Writes to a .tmp file then atomically renames to prevent corruption.
    */
   saveToFile(filePath: string): void {
+    // Synchronous fallback (shutdown only) — use saveToFileAsync during normal operation
     const state = this.serialize() as Record<string, any>;
     const tmpPath = filePath + '.tmp';
-    const fd = fs.openSync(tmpPath, 'w');
-    try {
-      // Pull out the graph separately — it contains the bulk of the data
-      const { graph: graphData, ...rest } = state;
-      // Serialize the non-graph fields (small: tick, dreamHistory ≤20, recentContext ≤20, etc.)
-      const restJson = JSON.stringify(rest);
-      // Merge with graph inline: { ...rest, "graph": { "neurons": {...}, "edges": [...] } }
-      // Write: restJson without closing brace + ,"graph":
-      fs.writeSync(fd, restJson.slice(0, -1) + ',"graph":{"neurons":{');
+    const json = JSON.stringify(state);
+    fs.writeFileSync(tmpPath, json, 'utf-8');
+    fs.renameSync(tmpPath, filePath);
+    const g = (state.graph?.neurons || {});
+    console.log(`[ALOIS] Brain saved (sync) to ${filePath} (${Object.keys(g).length} neurons)`);
+  }
 
-      // Stream neurons key-by-key to avoid building one giant string
-      const neurons = (graphData?.neurons || {}) as Record<string, unknown>;
-      const neuronKeys = Object.keys(neurons);
-      for (let i = 0; i < neuronKeys.length; i++) {
-        const key = neuronKeys[i];
-        const entry = JSON.stringify(key) + ':' + JSON.stringify(neurons[key]);
-        fs.writeSync(fd, entry);
-        if (i < neuronKeys.length - 1) fs.writeSync(fd, ',');
-      }
-
-      // Write edges array
-      fs.writeSync(fd, '},"edges":[');
-      const edges = (graphData?.edges || []) as Array<{ source: string; target: string }>;
-      for (let i = 0; i < edges.length; i++) {
-        fs.writeSync(fd, JSON.stringify(edges[i]));
-        if (i < edges.length - 1) fs.writeSync(fd, ',');
-      }
-
-      // Close graph + root object
-      fs.writeSync(fd, ']}}');
-      fs.closeSync(fd);
-
-      // Atomic rename — replaces the target file in one OS operation
-      fs.renameSync(tmpPath, filePath);
-      const neuronCount = neuronKeys.length;
-      const axonCount = edges.length;
-      console.log(`[ALOIS] Brain saved to ${filePath} (${neuronCount} neurons, ${axonCount} axons)`);
-    } catch (err) {
-      try { fs.closeSync(fd); } catch {}
-      try { fs.unlinkSync(tmpPath); } catch {}
-      throw err;
-    }
+  async saveToFileAsync(filePath: string): Promise<void> {
+    // Serialize once — one blocking JSON.stringify instead of N×writeSync calls.
+    // I/O is fully async so the event loop is only briefly blocked during serialization.
+    const state = this.serialize() as Record<string, any>;
+    const json = JSON.stringify(state);
+    const tmpPath = `${filePath}.${Date.now()}.tmp`;
+    await fs.promises.writeFile(tmpPath, json, 'utf-8');
+    await fs.promises.rename(tmpPath, filePath);
+    const neuronCount = Object.keys(state.graph?.neurons || {}).length;
+    const axonCount = (state.graph?.edges || []).length;
+    console.log(`[ALOIS] Brain saved to ${filePath} (${neuronCount} neurons, ${axonCount} axons)`);
   }
 
   /**
