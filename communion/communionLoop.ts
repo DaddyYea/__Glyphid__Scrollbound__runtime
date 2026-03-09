@@ -5407,6 +5407,137 @@ export class CommunionLoop {
     };
   }
 
+  /**
+   * Detect a correction / challenge / leak-repair turn from the human.
+   * These are turns where the human is questioning a reply that seemed:
+   *   - leaked inner/process thought into chat
+   *   - aimed at the wrong prompt / prior turn
+   *   - confused about what it was responding to
+   * Separate from repairDemand (emotional/tone complaints) — this is about targeting integrity.
+   */
+  private detectRepairOrChallengeTurn(text: string): {
+    isChallenge: boolean;
+    kind: 'inner_thought_leak' | 'prompt_mismatch' | 'wrong_turn' | null;
+    confidence: number;
+  } {
+    const src = (text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!src) return { isChallenge: false, kind: null, confidence: 0 };
+
+    // Inner-thought leak: human noticed process/internal content in chat
+    if (
+      /\b(inner\s*thought|inner\s*voice|process\s*text|internal\s*content|thought.*in\s+chat|your\s+thoughts.*leaked)\b/.test(src)
+      || /\bdid\s+you\s+mean\s+to\s+(put|send|show|post).*chat\b/.test(src)
+      || /\bthat\s+(leaked|wasn'?t\s+supposed\s+to\s+show|shouldn'?t\s+have\s+shown)\b/.test(src)
+      || /\bwas\s+that\s+supposed\s+to\s+(show|be\s+visible|appear|go\s+here)\b/.test(src)
+      || /\b(internal|inner)\s+thought\b.*\bchat\b/.test(src)
+    ) {
+      return { isChallenge: true, kind: 'inner_thought_leak', confidence: 0.95 };
+    }
+
+    // Prompt mismatch: human questioning which turn/prompt it was responding to
+    if (
+      /\b(which|what)\s+(prompt|message|turn)\s+(was\s+that|is\s+that|were\s+you|are\s+you)\b/.test(src)
+      || /\bwhat\s+(are\s+you\s+responding\s+to|were\s+you\s+responding\s+to|were\s+you\s+answering|is\s+that\s+in\s+response\s+to)\b/.test(src)
+      || /\b(in\s+response\s+to|responding\s+to|answering)\s+(which|what)\b/.test(src)
+      || /\bi'?m\s+not\s+sure\s+(which|what)\s+(prompt|message|turn|thing)\s+(that|this)\s+(was|is)\s+(in\s+response\s+to|for|about)\b/.test(src)
+      || /\bwhich\s+(of\s+my|message)\s+(was\s+that|prompted\s+that|did\s+you)\b/.test(src)
+    ) {
+      return { isChallenge: true, kind: 'prompt_mismatch', confidence: 0.90 };
+    }
+
+    // Wrong-turn / misdirected reply
+    if (
+      /\b(was\s+that|is\s+that)\s+(for\s+me|meant\s+for\s+me|directed\s+at\s+me)\b/.test(src)
+      || /\b(that\s+wasn'?t\s+meant\s+for|you'?re\s+not\s+talking\s+to\s+me|wrong\s+(message|reply|person))\b/.test(src)
+      || /\bwhat\s+was\s+that\s+(in\s+response\s+to|for|about)\??\s*$/.test(src)
+      || /\bdid\s+you\s+mean\s+(that|this)\b/.test(src)
+      || /\bare\s+you\s+talking\s+to\s+(me\s+or|the\s+(previous|old|last)|another)\b/.test(src)
+      || /\bthat\s+reply\s+(got|went|was)\s+(pointed|sent|aimed)\s+at\s+the\s+wrong\b/.test(src)
+    ) {
+      return { isChallenge: true, kind: 'wrong_turn', confidence: 0.85 };
+    }
+
+    return { isChallenge: false, kind: null, confidence: 0 };
+  }
+
+  /**
+   * Check whether a candidate reply plausibly addresses the latest human turn,
+   * especially when the latest turn is a challenge/correction.
+   * Hard-fails companionship continuation if the latest is a leak/mismatch challenge.
+   */
+  private candidateAnswersLatestTurn(
+    candidateText: string,
+    latestHumanText: string,
+    repairOrChallengeKind: 'inner_thought_leak' | 'prompt_mismatch' | 'wrong_turn' | null,
+  ): { passed: boolean; reason: string | null } {
+    if (!repairOrChallengeKind || !candidateText) return { passed: true, reason: null };
+    const cand = candidateText.toLowerCase();
+    // A challenge turn requires acknowledgment of the mismatch/leak — not companionship continuation
+    const hasAcknowledgment =
+      /\b(yeah|yes|no|sorry|that|wasn'?t|didn'?t|meant|inner|process|leaked|wrong|misdirected|respond|prompt|message|apolog)\b/.test(cand);
+    // Companionship continuation pattern — signals old-target carryover
+    const isCompanionshipCarryover =
+      /\b(glad\s+you'?re\s+here|exhale|success\s+for\s+me|here\s+with\s+me|glad\s+i'?m\s+here|nice\s+that|warmth|feels\s+good|yeah,?\s+me\s+too)\b/.test(cand);
+    if (isCompanionshipCarryover && !hasAcknowledgment) {
+      return {
+        passed: false,
+        reason: `companionship_carryover_on_${repairOrChallengeKind}`,
+      };
+    }
+    // For inner_thought_leak or prompt_mismatch, require some acknowledgment token
+    if ((repairOrChallengeKind === 'inner_thought_leak' || repairOrChallengeKind === 'prompt_mismatch') && !hasAcknowledgment) {
+      // Allow if reply is very short (1-2 sentences) — short answers are often fine
+      const sentences = candidateText.split(/[.!?]+/).filter(s => s.trim().length > 0);
+      if (sentences.length > 3) {
+        return { passed: false, reason: `no_acknowledgment_on_${repairOrChallengeKind}` };
+      }
+    }
+    return { passed: true, reason: null };
+  }
+
+  /**
+   * Validate that the captured generation target still matches the current latest human turn.
+   * Returns structured result so callers can decide whether to drop/regenerate.
+   */
+  private validateLatestHumanTargetLock(
+    capturedHumanMessageId: string,
+    currentLatestHumanMessageId: string,
+    capturedHumanTurnSequence: number,
+    currentHumanTurnSequence: number,
+    currentIsChallengeTurn: boolean,
+  ): {
+    stillLatest: boolean;
+    targetLockPassed: boolean;
+    failureReason: string | null;
+    staleTargetEmitPrevented: boolean;
+  } {
+    if (!capturedHumanMessageId || !currentLatestHumanMessageId) {
+      return { stillLatest: true, targetLockPassed: true, failureReason: null, staleTargetEmitPrevented: false };
+    }
+    const idMatch = capturedHumanMessageId === currentLatestHumanMessageId;
+    const seqMatch = capturedHumanTurnSequence >= currentHumanTurnSequence;
+    if (idMatch && seqMatch) {
+      return { stillLatest: true, targetLockPassed: true, failureReason: null, staleTargetEmitPrevented: false };
+    }
+    // IDs differ — candidate was generated against an older turn
+    if (currentIsChallengeTurn) {
+      // Challenge/correction turns: never allow stale candidate through
+      return {
+        stillLatest: false,
+        targetLockPassed: false,
+        failureReason: 'stale_target_on_challenge_turn',
+        staleTargetEmitPrevented: true,
+      };
+    }
+    // Non-challenge newer turn: standard stale drop
+    return {
+      stillLatest: false,
+      targetLockPassed: false,
+      failureReason: 'newer_human_turn_arrived',
+      staleTargetEmitPrevented: true,
+    };
+  }
+
   private isDirectQuestionTurn(text: string): boolean {
     const source = text || '';
     return /\?/.test(source) || /\b(what|why|how|where|when|are you|do you|did you|can you|will you)\b/i.test(source);
@@ -8677,6 +8808,8 @@ export class CommunionLoop {
     const latestHumanText = latestHumanMessage?.text?.trim() || '';
     const latestHumanSpeaker = latestHumanMessage?.speakerName || this.state.humanName;
     const latestHumanMessageId = latestHumanMessage?.id || '';
+    /** Capture turn sequence at generation start — for target-lock validation at emit time */
+    const capturedHumanTurnSequence = this.humanTurnSequenceCounter;
     const recentTurns = this.state.messages.slice(-8);
     const recentUserTurns = this.state.messages.filter(m => m.speaker === 'human').slice(-4).map(m => m.text || '');
     const recentAssistantTurns = this.state.messages.filter(m => m.speaker !== 'human').slice(-8).map(m => m.text || '');
@@ -8693,6 +8826,8 @@ export class CommunionLoop {
     let presenceState = this.derivePresenceState(agentId, latestHumanMessage);
     const turnMode = this.determineTurnMode(latestHumanText);
     const repairDemand = this.detectRepairDemand(latestHumanText, recentTurns);
+    /** Leak/challenge/correction turn detection — separate from repairDemand (which handles tone/emotional repair) */
+    const repairOrChallenge = this.detectRepairOrChallengeTurn(latestHumanText);
     const relationalAnswerObligation = this.detectRelationalAnswerObligation(latestHumanText);
     const staleTopicSourceThread = priorPresenceState?.aliveThreadId || null;
     let staleTopicLatchCleared = false;
@@ -8755,6 +8890,36 @@ export class CommunionLoop {
         continuityConfidence: this.clamp01(Math.max(presenceState.continuityConfidence, priorPresenceState?.continuityConfidence || 0.55)),
       };
     }
+    // ── Challenge/Leak-Repair: override carryover, set repair frame ──
+    // When human is calling out a leaked inner thought or misdirected reply,
+    // clear stale thread, suppress assistant history carryover, route to direct explanation.
+    let challengeCarryoverSuppressed = false;
+    let challengeSuppressedPriorThreadId: string | null = null;
+    if (repairOrChallenge.isChallenge && !repairDemand.requiresRepair) {
+      challengeSuppressedPriorThreadId = presenceState.aliveThreadId;
+      challengeCarryoverSuppressed = !!presenceState.aliveThreadId;
+      staleTopicLatchCleared = true;
+      presenceState = {
+        ...presenceState,
+        aliveThreadId: 'thread:leak_repair',
+        aliveThreadSummary: repairOrChallenge.kind === 'inner_thought_leak'
+          ? 'my inner thought leaked into chat'
+          : repairOrChallenge.kind === 'prompt_mismatch'
+            ? 'my reply was aimed at the wrong prompt'
+            : 'my reply was misdirected',
+        aliveThreadStrength: 0.85,
+        unresolvedPressure: this.clamp01(Math.max(presenceState.unresolvedPressure, 0.70)),
+        relationalGravity: this.clamp01(Math.max(presenceState.relationalGravity, 0.65)),
+        ruptureHeat: this.clamp01(Math.max(presenceState.ruptureHeat, 0.5)),
+        assistantResetRisk: this.clamp01(Math.max(presenceState.assistantResetRisk, 0.6)),
+      };
+      // Suppress assistant history carryover — old (misdirected) replies are the problem
+      if (this.assistantHistoryBlackoutTurnsRemaining < 2) {
+        this.assistantHistoryBlackoutTurnsRemaining = 2;
+      }
+      console.log(`[TARGET_LOCK] Challenge turn (${repairOrChallenge.kind}) — carryover suppressed, leak-repair frame active`);
+    }
+
     // ── Snapshot emotional-center override: strong EC on latest turn yields stale thread ──
     // Per HumanTurnSnapshot spec §9: if EC confidence >= 0.65 and alive thread has low
     // overlap with latest human text, the stale thread must yield regardless of carryover.
@@ -8762,6 +8927,7 @@ export class CommunionLoop {
     if (
       !staleTopicLatchCleared
       && !repairDemand.requiresRepair
+      && !repairOrChallenge.isChallenge
       && !microRuptureDetected
       && latestEmotionalCenter.confidence >= 0.65
       && presenceState.aliveThreadId
@@ -9330,6 +9496,21 @@ export class CommunionLoop {
       if (isAlois && isRepairOrCorrectionTurn && ALLOWED_ALIVENESS_POLICY.revealDiscipline.faceValueDefault) {
         systemPrompt += `\n\nFACE-VALUE LISTENING — ACTIVE: Take the user's plain meaning first. Do not mine hidden motives, wording deltas, or subtext unless clearly invited. If you were wrong, collapse your prior interpretation immediately and return to what was plainly said.`;
       }
+      // Leak/challenge/correction: direct acknowledgment required, no old-thread continuation
+      if (repairOrChallenge.isChallenge) {
+        const leakKindDesc = repairOrChallenge.kind === 'inner_thought_leak'
+          ? 'inner/process text leaked into the visible chat'
+          : repairOrChallenge.kind === 'prompt_mismatch'
+            ? 'your reply was aimed at the wrong prompt or an older message'
+            : 'your reply was misdirected — it targeted the wrong turn';
+        systemPrompt += `\n\nLEAK/MISMATCH REPAIR — ACTIVE:
+- ${this.state.humanName} is asking about a reply that did not match where it was sent: ${leakKindDesc}.
+- Answer DIRECTLY and BRIEFLY. Acknowledge the issue plainly in your first sentence.
+- Do NOT continue companionship / emotional continuation from the prior thread.
+- Do NOT ask a follow-up question.
+- Do NOT explain at length — just acknowledge what happened and offer brief clarity if needed.
+- Correct answers look like: "No, that wasn't supposed to show." / "Yeah, that was inner text that leaked." / "That reply landed on an older message, not yours."`;
+      }
       // ── Relay Social Response Frame ──
       // Inject relay-specific constraints into system prompt before generation.
       if (presencePlan.responseFrame === 'relay_social_response' && relayDetection.isRelay) {
@@ -9486,6 +9667,13 @@ ${relayDetection.isDuplicateResend ? `- This appears to be a resend. Acknowledge
         complaintThreadInherited,
         repairDemandDetected: repairDemand.requiresRepair,
         repairDemandKind: repairDemand.complaintKind || null,
+        repairOrChallengeTurnDetected: repairOrChallenge.isChallenge,
+        repairOrChallengeKind: repairOrChallenge.kind || null,
+        repairOrChallengeConfidence: Number((repairOrChallenge.confidence || 0).toFixed(2)),
+        repairPriorityRoutingApplied: repairOrChallenge.isChallenge,
+        companionshipCarryoverSuppressedByRepair: challengeCarryoverSuppressed,
+        suppressedCarryoverThreadId: challengeSuppressedPriorThreadId,
+        capturedHumanTurnSequence,
         explanationObligationDetected,
         staleTopicLatchCleared,
         staleTopicSourceThread,
@@ -11172,20 +11360,61 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       && (chosenCandidate !== 'fallback')
       && ((chosenCandidate === 'B' ? candidateBScore?.total : candidateAScore?.total) || 0) >= 1.0
     );
+    // ── Hard Latest-Human Target Lock ──
+    // Validate that the candidate is still aimed at the current latest human turn.
+    // Also run a semantic target check when the latest turn is a challenge/correction.
     const currentLatestHumanMessageId = this.latestHumanMessage()?.id || '';
-    const staleReplyDropped = result.action === 'speak' && this.shouldDropAsStale(latestHumanMessageId, currentLatestHumanMessageId);
+    const currentLatestHumanText = this.latestHumanMessage()?.text?.trim() || '';
+    const currentHumanTurnSequence = this.humanTurnSequenceCounter;
+    const currentRepairOrChallenge = this.detectRepairOrChallengeTurn(currentLatestHumanText);
+
+    const targetLock = this.validateLatestHumanTargetLock(
+      latestHumanMessageId,
+      currentLatestHumanMessageId,
+      capturedHumanTurnSequence,
+      currentHumanTurnSequence,
+      currentRepairOrChallenge.isChallenge,
+    );
+    const staleReplyDropped = result.action === 'speak' && !targetLock.targetLockPassed;
+
+    // Pre-emit semantic target check for challenge/correction turns
+    let semanticTargetCheckRan = false;
+    let semanticTargetCheckPassed = true;
+    let semanticTargetMismatchDetected = false;
+    let semanticTargetMismatchReason: string | null = null;
+    if (result.action === 'speak' && responseText && !staleReplyDropped && currentRepairOrChallenge.isChallenge) {
+      semanticTargetCheckRan = true;
+      const semCheck = this.candidateAnswersLatestTurn(responseText, currentLatestHumanText, currentRepairOrChallenge.kind);
+      semanticTargetCheckPassed = semCheck.passed;
+      if (!semCheck.passed) {
+        semanticTargetMismatchDetected = true;
+        semanticTargetMismatchReason = semCheck.reason;
+        console.log(`[TARGET_LOCK] Semantic target mismatch on challenge turn (${semCheck.reason}) — dropping candidate`);
+        result.action = 'silent';
+        responseText = '';
+        this.requestImmediateTick('semantic_target_mismatch');
+      }
+    }
+
     if (staleReplyDropped) {
-      console.log(`[${agent.config.name}] STALE reply dropped captured=${latestHumanMessageId} current=${currentLatestHumanMessageId}`);
+      const dropReason = targetLock.failureReason || 'stale_target';
+      console.log(`[${agent.config.name}] STALE reply dropped (${dropReason}) captured=${latestHumanMessageId} current=${currentLatestHumanMessageId} challenge=${currentRepairOrChallenge.isChallenge}`);
       if (captureRelationalTrace) {
         const staleTrace = {
           agentId,
           capturedHumanMessageId: latestHumanMessageId,
           currentLatestHumanMessageId,
+          capturedHumanTurnSequence,
+          currentHumanTurnSequence,
           staleReplyDropped: true,
+          staleTargetEmitPrevented: targetLock.staleTargetEmitPrevented,
+          targetLockFailureReason: targetLock.failureReason,
+          currentIsChallengeTurn: currentRepairOrChallenge.isChallenge,
+          currentChallengeKind: currentRepairOrChallenge.kind,
         };
         this.recordRelationalTrace(agentId, 'stale', staleTrace);
         if (traceRelational) {
-          console.log('[TRACE_RELATIONAL][STALE]', JSON.stringify(staleTrace));
+          console.log('[TRACE_RELATIONAL][STALE_TARGET_EMIT_PREVENTED]', JSON.stringify(staleTrace));
         }
       }
       result.action = 'silent';
@@ -11421,6 +11650,22 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         complaintThreadInherited,
         repairDemandDetected: repairDemand.requiresRepair,
         repairDemandKind: repairDemand.complaintKind || null,
+        repairOrChallengeTurnDetected: repairOrChallenge.isChallenge,
+        repairOrChallengeKind: repairOrChallenge.kind || null,
+        repairPriorityRoutingApplied: repairOrChallenge.isChallenge,
+        companionshipCarryoverSuppressedByRepair: challengeCarryoverSuppressed,
+        suppressedCarryoverThreadId: challengeSuppressedPriorThreadId,
+        targetLockValidationRan: true,
+        targetLockPassed: targetLock.targetLockPassed,
+        targetLockFailureReason: targetLock.failureReason,
+        staleTargetEmitPrevented: targetLock.staleTargetEmitPrevented,
+        capturedHumanTurnSequence,
+        currentHumanTurnSequence,
+        currentIsChallengeTurn: currentRepairOrChallenge.isChallenge,
+        semanticTargetCheckRan,
+        semanticTargetCheckPassed,
+        semanticTargetMismatchDetected,
+        semanticTargetMismatchReason,
         explanationObligationDetected,
         staleTopicLatchCleared,
         staleTopicSourceThread,
@@ -11723,6 +11968,22 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         complaintThreadInherited,
         repairDemandDetected: repairDemand.requiresRepair,
         repairDemandKind: repairDemand.complaintKind || null,
+        repairOrChallengeTurnDetected: repairOrChallenge.isChallenge,
+        repairOrChallengeKind: repairOrChallenge.kind || null,
+        repairPriorityRoutingApplied: repairOrChallenge.isChallenge,
+        companionshipCarryoverSuppressedByRepair: challengeCarryoverSuppressed,
+        suppressedCarryoverThreadId: challengeSuppressedPriorThreadId,
+        targetLockValidationRan: true,
+        targetLockPassed: targetLock.targetLockPassed,
+        targetLockFailureReason: targetLock.failureReason,
+        staleTargetEmitPrevented: targetLock.staleTargetEmitPrevented,
+        capturedHumanTurnSequence,
+        currentHumanTurnSequence,
+        currentIsChallengeTurn: currentRepairOrChallenge.isChallenge,
+        semanticTargetCheckRan,
+        semanticTargetCheckPassed,
+        semanticTargetMismatchDetected,
+        semanticTargetMismatchReason,
         explanationObligationDetected,
         staleTopicLatchCleared,
         staleTopicSourceThread,
@@ -13235,16 +13496,27 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
     const staleByAge = ageMs > 30000;
     const newHumanTurnsSinceCapture = this.pendingHumanTurnsSinceLastAgent(pending.agentId);
     const staleByContext = newHumanTurnsSinceCapture >= 2;
+    // Delivery-time drop for stale UI emit: also drop if the newest human turn is a challenge/correction
+    const currentLatestHumanTextForPending = this.latestHumanMessage()?.text?.trim() || '';
+    const pendingIsChallengeTurn = this.detectRepairOrChallengeTurn(currentLatestHumanTextForPending).isChallenge;
+    const staleByChallengeTurn = pendingIsChallengeTurn && newHumanTurnsSinceCapture >= 1;
 
-    if (staleByAge || staleByContext) {
+    if (staleByAge || staleByContext || staleByChallengeTurn) {
       this.pendingSpeechPlayback = null;
-      const reason = staleByAge ? `age=${Math.round(ageMs / 1000)}s` : `newHumanTurns=${newHumanTurnsSinceCapture}`;
+      const reason = staleByAge
+        ? `age=${Math.round(ageMs / 1000)}s`
+        : staleByChallengeTurn
+          ? `challenge_turn_arrived`
+          : `newHumanTurns=${newHumanTurnsSinceCapture}`;
       console.log(`[VOICE] Pending speech dropped as stale (${reason})`);
       this.recordRelationalTrace(pending.agentId, 'tts', {
         ...pending.ttsTrace,
         pendingSpeechDroppedAsStale: true,
         pendingSpeechAgeMs: ageMs,
         pendingSpeechDropReason: reason,
+        staleDeliveryDropTriggered: true,
+        ttsBlockedBecauseStale: true,
+        challengeTurnCausedDrop: staleByChallengeTurn,
       });
       return;
     }
