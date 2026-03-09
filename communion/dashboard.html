@@ -3104,14 +3104,17 @@
       const o = trace.outcome || {};
       const derived = trace.derived || {};
 
+      const orchMs = (d.promptAssembly || 0) + (d.rawRouting || 0) + (d.visibleCandidateBuild || 0)
+        + (d.journalToSpeakConversion || 0) + (d.freshSpeakRetry || 0) + (d.salvage || 0);
       const rows = [
         ['Total', fmtMs(total), total > 10000],
         ['LLM gen', fmtMs(llm), llm > 6000],
-        ['Prompt assembly', fmtMs(d.promptAssembly), false],
-        ['Raw routing', fmtMs(d.rawRouting), false],
-        ['Jrnl→speak conv', fmtMs(d.journalToSpeakConversion), false],
-        ['Fresh speak retry', fmtMs(d.freshSpeakRetry), false],
-        ['Candidate build', fmtMs(d.visibleCandidateBuild), false],
+        ['Orch', fmtMs(orchMs), orchMs > 4000],
+        ['  prompt', fmtMs(d.promptAssembly), false],
+        ['  routing', fmtMs(d.rawRouting), false],
+        ['  build', fmtMs(d.visibleCandidateBuild), false],
+        ['  jrnl conv', fmtMs(d.journalToSpeakConversion), false],
+        ['  speak retry', fmtMs(d.freshSpeakRetry), false],
         ['TTS', fmtMs(d.ttsTotal), d.ttsTotal > 5000],
       ];
 
@@ -3167,9 +3170,12 @@
       const d = trace.durationsMs || {};
       const c = trace.counters || {};
       const o = trace.outcome || {};
+      const orch = (d.promptAssembly || 0) + (d.rawRouting || 0) + (d.visibleCandidateBuild || 0)
+        + (d.journalToSpeakConversion || 0) + (d.freshSpeakRetry || 0) + (d.salvage || 0);
       const lines = [
         `Turn ${trace.turnId?.slice(0, 8)} | ${o.finalAction} | total: ${fmtMs(d.totalTurnWallClock)}`,
-        `  llm: ${fmtMs(d.llmGeneration)} | prompt: ${fmtMs(d.promptAssembly)} | build: ${fmtMs(d.visibleCandidateBuild)} | tts: ${fmtMs(d.ttsTotal)}`,
+        `  llm: ${fmtMs(d.llmGeneration)} | orch: ${fmtMs(orch)} | tts: ${fmtMs(d.ttsTotal)}`,
+        `  orch breakdown: prompt ${fmtMs(d.promptAssembly)} | build ${fmtMs(d.visibleCandidateBuild)} | routing ${fmtMs(d.rawRouting)}`,
         `  calls: ${c.llmCalls ?? 0} llm, ${c.retryCalls ?? 0} retry, ${c.conversionCalls ?? 0} conv`,
         `  dominant: ${o.dominantLatencyStage ?? '—'}`,
       ];

@@ -3550,12 +3550,12 @@ export class CommunionLoop {
     directQuestion: DirectQuestionContract | null;
     turnMode?: 'relational' | 'task' | 'troubleshooting' | 'command';
     explicitSystemInfoRequested?: boolean;
-  }): { hardFailed: boolean; reasons: string[] } {
+  }): { hardFailed: boolean; reasons: string[]; rawEchoSoftPenalty: number; rawEchoAssessment: ReturnType<CommunionLoop['assessRawEchoShell']> | null } {
     const reasons: string[] = [];
     const text = (params.replyText || '').trim();
     if (!text) {
       reasons.push('empty');
-      return { hardFailed: true, reasons };
+      return { hardFailed: true, reasons, rawEchoSoftPenalty: 0, rawEchoAssessment: null };
     }
     if (this.containsRuntimeTags(text)) reasons.push('runtime_tags');
     if (this.containsChannelTokens(text)) reasons.push('channel_tokens');
@@ -3565,10 +3565,17 @@ export class CommunionLoop {
     if (params.turnMode === 'relational' && !params.explicitSystemInfoRequested && this.detectRelationalToolHijack(text)) reasons.push('relational_tool_hijack');
     if ((params.turnMode === 'relational' || !!params.directQuestion?.requiresAnswer) && this.detectArchiveAnalysisLeak(text).detected) reasons.push('archive_analysis_leak');
     if (this.detectDirectParrotAnswer(text, params.latestUserTurns, params.directQuestion)) reasons.push('direct_parrot');
-    if (this.isRawEchoShell(text, params.latestUserTurns)) reasons.push('raw_echo_shell');
+    const latest = params.latestUserTurns[params.latestUserTurns.length - 1] || '';
+    const rawEchoAssessment = latest ? this.assessRawEchoShell(text, latest) : null;
+    if (rawEchoAssessment?.shouldHardFail) {
+      reasons.push('raw_echo_shell');
+    } else if (!rawEchoAssessment?.shouldHardFail && /^i(?:'m| am) (?:with|responding to)\b/i.test(text) && this.userEchoScore(text, [latest]) >= 0.45) {
+      reasons.push('raw_echo_shell');
+    }
     if (this.isLoopingFallback(text)) reasons.push('fallback_loop');
     if (this.isRecentDuplicateEmit(text)) reasons.push('recent_duplicate_emit');
-    return { hardFailed: reasons.length > 0, reasons };
+    const rawEchoSoftPenalty = rawEchoAssessment?.softPenalty ?? 0;
+    return { hardFailed: reasons.length > 0, reasons, rawEchoSoftPenalty, rawEchoAssessment };
   }
 
   private isTruePoisonVisibleReply(params: {
@@ -3579,7 +3586,8 @@ export class CommunionLoop {
     turnMode?: 'relational' | 'task' | 'troubleshooting' | 'command';
     explicitSystemInfoRequested?: boolean;
   }): { hardFailed: boolean; reasons: string[] } {
-    return this.checkHardBoundaries(params);
+    const result = this.checkHardBoundaries(params);
+    return { hardFailed: result.hardFailed, reasons: result.reasons };
   }
 
   private shouldUseEmergencyDeblockMode(
@@ -5409,17 +5417,144 @@ export class CommunionLoop {
     return specificCount >= 2 || text.length >= 80;
   }
 
+  /**
+   * Splits a reply into an echo opener (first sentence if it mirrors the user's latest text)
+   * and the remaining tail.
+   */
+  private splitReplyIntoEchoOpenerAndTail(
+    replyText: string,
+    latestHumanText: string,
+  ): { openerText: string; tailText: string; openerEchoDetected: boolean; openerOverlapScore: number } {
+    const text = (replyText || '').trim();
+    const latest = (latestHumanText || '').trim();
+    // Split on first sentence boundary
+    const sentenceMatch = text.match(/^([^.!?\n]+[.!?])\s*([\s\S]*)$/);
+    const openerText = sentenceMatch ? sentenceMatch[1].trim() : text;
+    const tailText = sentenceMatch ? sentenceMatch[2].trim() : '';
+    const openerNorm = this.normalizeReplyForLoopCheck(openerText);
+    const latestNorm = this.normalizeReplyForLoopCheck(latest);
+    const openerOverlapScore = (openerNorm && latestNorm)
+      ? this.lexicalOverlapScore(openerNorm, latestNorm)
+      : 0;
+    // Opener echo: high overlap with user's wording, or opener is a near-exact quote
+    const openerEchoDetected = openerOverlapScore >= 0.55 || (latestNorm.length > 0 && openerNorm.includes(latestNorm));
+    return { openerText, tailText, openerEchoDetected, openerOverlapScore };
+  }
+
+  /**
+   * Evaluates whether the tail (after an echoed opener) is novel and advancing.
+   */
+  private evaluateNovelTail(
+    tailText: string,
+    latestHumanText: string,
+  ): { novelTailLength: number; novelTailSentenceCount: number; novelTailMeaningful: boolean; advancementDetected: boolean } {
+    const tail = (tailText || '').trim();
+    const novelTailLength = tail.length;
+    const sentences = tail.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 4);
+    const novelTailSentenceCount = sentences.length;
+    const latestNorm = this.normalizeReplyForLoopCheck(latestHumanText);
+    const tailNorm = this.normalizeReplyForLoopCheck(tail);
+    const tailOverlap = (tailNorm && latestNorm) ? this.lexicalOverlapScore(tailNorm, latestNorm) : 0;
+    // Advancement features
+    const hasCausalContinuation = /\b(because|since|so|therefore|that means|which means|and so|thus)\b/i.test(tail);
+    const hasFirstPersonStake = /\bI\b.*?\b(think|feel|notice|find|love|wonder|believe|want|know|see|mean|get|would|could|remember)\b/i.test(tail);
+    const hasConcreteContent = tail.length >= 80 && tailOverlap < 0.55;
+    const hasNewFraming = /\b(the thing is|what matters|what changes|what strikes me|here's what|the point is)\b/i.test(tail);
+    const advancementDetected = hasCausalContinuation || hasFirstPersonStake || hasConcreteContent || hasNewFraming;
+    const novelTailMeaningful = (
+      novelTailLength >= 80
+      || (novelTailSentenceCount >= 1 && tailOverlap < 0.55 && novelTailLength >= 45)
+      || advancementDetected
+    );
+    return { novelTailLength, novelTailSentenceCount, novelTailMeaningful, advancementDetected };
+  }
+
+  /**
+   * Full two-part assessment: opener echo + novel tail evaluation.
+   * Returns whether to hard-fail, and the failure reason.
+   */
+  private assessRawEchoShell(
+    replyText: string,
+    latestHumanText: string,
+  ): {
+    openerEchoDetected: boolean;
+    openerOverlapScore: number;
+    fullReplyOverlapScore: number;
+    novelTailLength: number;
+    novelTailSentenceCount: number;
+    novelTailMeaningful: boolean;
+    advancementDetected: boolean;
+    shouldHardFail: boolean;
+    failureReason: 'true_raw_echo_shell' | 'echo_only_no_advancement' | 'mostly_echo_minimal_tail' | null;
+    softPenalty: number;
+  } {
+    const text = (replyText || '').trim();
+    const latest = (latestHumanText || '').trim();
+    if (!text || !latest) {
+      return { openerEchoDetected: false, openerOverlapScore: 0, fullReplyOverlapScore: 0, novelTailLength: 0, novelTailSentenceCount: 0, novelTailMeaningful: false, advancementDetected: false, shouldHardFail: false, failureReason: null, softPenalty: 0 };
+    }
+    const { openerText, tailText, openerEchoDetected, openerOverlapScore } = this.splitReplyIntoEchoOpenerAndTail(text, latest);
+    const { novelTailLength, novelTailSentenceCount, novelTailMeaningful, advancementDetected } = this.evaluateNovelTail(tailText, latest);
+    const fullReplyNorm = this.normalizeReplyForLoopCheck(text);
+    const latestNorm = this.normalizeReplyForLoopCheck(latest);
+    const fullReplyOverlapScore = (fullReplyNorm && latestNorm) ? this.lexicalOverlapScore(fullReplyNorm, latestNorm) : 0;
+    // True raw echo: reply IS the user's text (normalized include check)
+    const isTrueRawEcho = fullReplyNorm.includes(latestNorm);
+    // Hard-fail conditions
+    let shouldHardFail = false;
+    let failureReason: 'true_raw_echo_shell' | 'echo_only_no_advancement' | 'mostly_echo_minimal_tail' | null = null;
+    if (isTrueRawEcho && !novelTailMeaningful) {
+      // Reply is essentially a copy of the user's words with no real continuation
+      shouldHardFail = true;
+      failureReason = 'true_raw_echo_shell';
+    } else if (openerEchoDetected && novelTailLength < 8 && !advancementDetected) {
+      // Echo opener with no meaningful follow-through
+      shouldHardFail = true;
+      failureReason = 'echo_only_no_advancement';
+    } else if (fullReplyOverlapScore >= 0.72 && novelTailLength < 45 && !novelTailMeaningful) {
+      // Mostly echo even in the aggregate, tiny tail
+      shouldHardFail = true;
+      failureReason = 'mostly_echo_minimal_tail';
+    }
+    // If opener echoes but tail is meaningful → soft penalty only
+    const softPenalty = (!shouldHardFail && openerEchoDetected && novelTailMeaningful)
+      ? -(0.35 + Math.min(0.4, openerOverlapScore * 0.6))
+      : 0;
+    return { openerEchoDetected, openerOverlapScore, fullReplyOverlapScore, novelTailLength, novelTailSentenceCount, novelTailMeaningful, advancementDetected, shouldHardFail, failureReason, softPenalty };
+  }
+
   private isRawEchoShell(replyText: string, latestUserTurns: string[]): boolean {
     const text = (replyText || '').trim();
     if (!text) return false;
     const latest = (latestUserTurns[latestUserTurns.length - 1] || '').trim();
     if (!latest) return false;
-    const normalizedReply = this.normalizeReplyForLoopCheck(text);
-    const normalizedLatest = this.normalizeReplyForLoopCheck(latest);
-    if (!normalizedReply || !normalizedLatest) return false;
-    if (normalizedReply.includes(normalizedLatest)) return true;
+    // Delegate to full assessment — only hard-fail on true shell cases
+    const assessment = this.assessRawEchoShell(text, latest);
+    if (assessment.shouldHardFail) return true;
+    // Legacy: "I'm with/responding to" opener + moderate overall echo still triggers
     if (/^i(?:'m| am) (?:with|responding to)\b/i.test(text) && this.userEchoScore(text, [latest]) >= 0.45) return true;
     return false;
+  }
+
+  /**
+   * Strips the echoed opener from a reply, returning only the meaningful tail.
+   * Used as a salvage path before committing to silence.
+   */
+  private salvageNovelTail(
+    replyText: string,
+    latestHumanText: string,
+  ): { attempted: boolean; succeeded: boolean; removedEchoOpener: boolean; salvagedText: string | null } {
+    const text = (replyText || '').trim();
+    const latest = (latestHumanText || '').trim();
+    if (!text || !latest) return { attempted: false, succeeded: false, removedEchoOpener: false, salvagedText: null };
+    const assessment = this.assessRawEchoShell(text, latest);
+    if (!assessment.openerEchoDetected) return { attempted: false, succeeded: false, removedEchoOpener: false, salvagedText: null };
+    const { tailText, openerEchoDetected } = this.splitReplyIntoEchoOpenerAndTail(text, latest);
+    const tail = tailText.trim();
+    if (!tail || tail.length < 20) return { attempted: true, succeeded: false, removedEchoOpener: openerEchoDetected, salvagedText: null };
+    const { novelTailMeaningful, advancementDetected } = this.evaluateNovelTail(tail, latest);
+    if (!novelTailMeaningful && !advancementDetected) return { attempted: true, succeeded: false, removedEchoOpener: openerEchoDetected, salvagedText: null };
+    return { attempted: true, succeeded: true, removedEchoOpener: openerEchoDetected, salvagedText: tail };
   }
 
   private isDegenerateFinalShell(replyText: string, latestUserTurns: string[], agentLabel?: string): boolean {
@@ -9107,6 +9242,22 @@ export class CommunionLoop {
     }
     lts.stages.rawRoutingEndAtMs = Date.now();
 
+    // Raw echo assessment trace — hoisted so captureRelationalTrace can reference them
+    let rawEchoOpenerDetected = false;
+    let rawEchoOpenerOverlapScore = 0;
+    let rawEchoFullReplyOverlapScore = 0;
+    let rawEchoNovelTailLength = 0;
+    let rawEchoNovelTailSentenceCount = 0;
+    let rawEchoNovelTailMeaningful = false;
+    let rawEchoAdvancementDetected = false;
+    let rawEchoHardFailTriggered = false;
+    let rawEchoHardFailReason: string | null = null;
+    let rawEchoOpenerSoftPenaltyApplied = false;
+    let novelTailSalvageAttempted = false;
+    let novelTailSalvageSucceeded = false;
+    let novelTailSalvageRemovedEchoOpener = false;
+    let novelTailSalvagedLength = 0;
+
     // Salvage variables — hoisted so captureRelationalTrace can reference them
     // regardless of whether the speak block is entered.
     let sameTurnSalvageAttempted = false;
@@ -9235,6 +9386,15 @@ export class CommunionLoop {
               hardReasons: finalized.hardReasons.length ? finalized.hardReasons : ['empty'],
               features: {},
             };
+        // ── Raw echo opener soft penalty ──
+        // Apply ONLY when not already hard-failed for raw_echo_shell (soft penalty path means tail is meaningful)
+        const rawEchoAssessment = approvedText && !score.hardFailed
+          ? this.assessRawEchoShell(approvedText, latestHumanText)
+          : null;
+        if (rawEchoAssessment && rawEchoAssessment.softPenalty !== 0 && !rawEchoAssessment.shouldHardFail) {
+          score.features['rawEchoOpenerPenalty'] = rawEchoAssessment.softPenalty;
+          score.total = Number((score.total + rawEchoAssessment.softPenalty).toFixed(3));
+        }
         return {
           label,
           rawTextLength,
@@ -9242,6 +9402,7 @@ export class CommunionLoop {
           finalized,
           notes,
           score,
+          rawEchoAssessment,
           failureClass: approvedText
             ? this.buildReplyFailureClass(agentId, approvedText, directQuestionContract, questionContext, recentUserTurns, presencePlan)
             : null,
@@ -9254,6 +9415,23 @@ export class CommunionLoop {
       candidateAHardReasons = candidateA.score.hardReasons;
       relationalAcceptanceFloorApplied = this.isRelationalFrame(presencePlan.responseFrame);
       candidateABelowRelationalFloor = this.isBelowRelationalAcceptanceFloor(candidateA.score, candidateA.failureClass, candidateA.notes, presencePlan);
+      // Populate raw echo trace from candidateA assessment
+      if (candidateA.rawEchoAssessment) {
+        const re = candidateA.rawEchoAssessment;
+        rawEchoOpenerDetected = re.openerEchoDetected;
+        rawEchoOpenerOverlapScore = re.openerOverlapScore;
+        rawEchoFullReplyOverlapScore = re.fullReplyOverlapScore;
+        rawEchoNovelTailLength = re.novelTailLength;
+        rawEchoNovelTailSentenceCount = re.novelTailSentenceCount;
+        rawEchoNovelTailMeaningful = re.novelTailMeaningful;
+        rawEchoAdvancementDetected = re.advancementDetected;
+        rawEchoHardFailTriggered = re.shouldHardFail;
+        rawEchoHardFailReason = re.failureReason;
+        rawEchoOpenerSoftPenaltyApplied = re.softPenalty !== 0;
+      } else if (candidateA.score.hardReasons.includes('raw_echo_shell')) {
+        rawEchoHardFailTriggered = true;
+        rawEchoHardFailReason = 'true_raw_echo_shell';
+      }
 
       // ── Snapshot candidate validation ──
       // Reject if candidate answers a prior thread instead of the socially live turn.
@@ -9578,6 +9756,37 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         }
         if (!sameTurnSalvageSucceeded) {
           console.log(`[SALVAGE] Same-turn prefix salvage attempted but failed (staleRisk=${staleRiskHigh})`);
+        }
+        // ── Novel-tail salvage — runs after prefix salvage if raw_echo_shell caused the failure ──
+        if (!sameTurnSalvageSucceeded && (
+          candidateA.score.hardReasons.includes('raw_echo_shell')
+          || (candidateB && candidateB.score.hardReasons.includes('raw_echo_shell'))
+        )) {
+          const echoSalvageSources = [rawCandidateAText, ...(candidateB?.text ? [candidateB.text] : [])];
+          for (const src of echoSalvageSources) {
+            const tailSalvage = this.salvageNovelTail(src, latestHumanText);
+            novelTailSalvageAttempted = tailSalvage.attempted;
+            novelTailSalvageRemovedEchoOpener = tailSalvage.removedEchoOpener;
+            if (tailSalvage.succeeded && tailSalvage.salvagedText) {
+              const tailCleaned = this.sanitizeSpeakOutput(tailSalvage.salvagedText, agent.config.name, this.state.humanName);
+              if (tailCleaned && tailCleaned.length >= 20) {
+                novelTailSalvageSucceeded = true;
+                novelTailSalvagedLength = tailCleaned.length;
+                result.action = 'speak';
+                responseText = tailCleaned;
+                replySourcePath = 'novel-tail-salvage';
+                finalizationReason = 'novel_tail_salvage_after_echo_opener';
+                noAcceptableGeneratedReply = false;
+                silentDueToNoAcceptableReply = false;
+                console.log(`[SALVAGE] Novel-tail salvage succeeded (${tailCleaned.length}ch, removedOpener=${tailSalvage.removedEchoOpener})`);
+                break;
+              }
+            }
+            if (tailSalvage.attempted) break; // only try one source for echo salvage
+          }
+          if (!novelTailSalvageSucceeded && novelTailSalvageAttempted) {
+            console.log('[SALVAGE] Novel-tail salvage attempted but tail not sufficient');
+          }
         }
       }
 
@@ -10479,6 +10688,20 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         relationalFirstSentenceBindingReason,
         mixedLayerRootCause,
         duplicateConcatenationSymptom,
+        rawEchoOpenerDetected,
+        rawEchoOpenerOverlapScore: Number(rawEchoOpenerOverlapScore.toFixed(3)),
+        rawEchoFullReplyOverlapScore: Number(rawEchoFullReplyOverlapScore.toFixed(3)),
+        rawEchoNovelTailLength,
+        rawEchoNovelTailSentenceCount,
+        rawEchoNovelTailMeaningful,
+        rawEchoAdvancementDetected,
+        rawEchoHardFailTriggered,
+        rawEchoHardFailReason,
+        rawEchoOpenerSoftPenaltyApplied,
+        novelTailSalvageAttempted,
+        novelTailSalvageSucceeded,
+        novelTailSalvageRemovedEchoOpener,
+        novelTailSalvagedLength,
         sameTurnVisiblePrefixSalvageAttempted: sameTurnSalvageAttempted,
         sameTurnVisiblePrefixSalvageSucceeded: sameTurnSalvageSucceeded,
         sameTurnVisiblePrefixCutKind: sameTurnSalvageCutKind,
