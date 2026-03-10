@@ -1690,6 +1690,21 @@
       return false;
     }
 
+    function llmBugReason(receipt) {
+      if (!receipt) return 'no_receipt';
+      const issues = Array.isArray(receipt.issues) ? receipt.issues : [];
+      if (receipt.lastError) return receipt.lastError;
+      if (issues.includes('request_failed')) return 'request_failed';
+      const apiErr = issues.find(i => String(i).startsWith('api_error_'));
+      if (apiErr) return apiErr;
+      if ((receipt.wmMissingStreak || 0) >= 2) return `wm_missing_streak:${receipt.wmMissingStreak}`;
+      if (!llmHasRequiredFields(receipt)) {
+        const msgs = receipt?.payload?.messages;
+        return `missing_required_fields (msgs=${Array.isArray(msgs) ? msgs.length : 'none'}, hasSystem=${Array.isArray(msgs) && msgs.some(m => m?.role === 'system')})`;
+      }
+      return null;
+    }
+
     function llmSummary(receipt, trace) {
       if (!receipt) return 'No request yet.';
       const wm = receipt.clusterChars?.WM || 0;
@@ -1710,6 +1725,7 @@
       const isBug = llmIsBug(receipt);
       llmDebugBtn.classList.remove('good', 'bad');
       if (receipt && isBug) llmDebugBtn.classList.add('bad');
+      else if (receipt && !isBug) llmDebugBtn.classList.add('good');
 
       llmReceiptSummary.textContent = llmSummary(receipt, trace);
       const wmSnippet = receipt?.clusterSnippets?.WM || '(no WM snippet)';
@@ -1726,15 +1742,12 @@
         messages: receipt?.messages,
       }, null, 2);
 
-      const errorText = receipt?.lastError || (Array.isArray(receipt?.issues) && receipt.issues.length ? receipt.issues.join(', ') : '');
-      if (isBug && errorText) {
+      const reason = isBug ? llmBugReason(receipt) : null;
+      if (isBug && reason) {
         llmReceiptError.style.display = 'block';
-        llmReceiptError.textContent = errorText;
-        lastLLMError = errorText;
-      } else if (isBug && lastLLMError) {
-        llmReceiptError.style.display = 'block';
-        llmReceiptError.textContent = lastLLMError;
-      } else {
+        llmReceiptError.textContent = reason;
+        lastLLMError = reason;
+      } else if (!isBug) {
         llmReceiptError.style.display = 'none';
         llmReceiptError.textContent = '';
       }
@@ -3501,21 +3514,38 @@
             audio._blobUrl = revokeOnDone ? url : '';
             audio._bargedIn = false;
             currentAudio = audio;
-            audio.onended = () => {
-              if (revokeOnDone) URL.revokeObjectURL(url);
-              reportSpeechStatus(agentId, 'finished');
+            let audioResolved = false;
+            const resolveOnce = (reason) => {
+              if (audioResolved) return;
+              audioResolved = true;
+              clearTimeout(audioSafetyTimer);
               resolve();
             };
+            // Safety valve: if onended/onerror never fire (common in WebView2/Electron),
+            // force-resolve after 90s so the mic lock never gets permanently stuck.
+            const audioSafetyTimer = setTimeout(() => {
+              if (!audioResolved) {
+                console.warn('[VOICE] Audio safety timeout — forcing release of speaking lock');
+                if (revokeOnDone) URL.revokeObjectURL(url);
+                reportSpeechStatus(agentId, 'finished');
+                resolveOnce('safety_timeout');
+              }
+            }, 90000);
+            audio.addEventListener('ended', () => {
+              if (revokeOnDone) URL.revokeObjectURL(url);
+              reportSpeechStatus(agentId, 'finished');
+              resolveOnce('ended');
+            });
             audio.onerror = () => {
               if (revokeOnDone) URL.revokeObjectURL(url);
               console.error('[VOICE] Audio playback failed for', agentId);
               reportSpeechStatus(agentId, 'failed', 'audio_error');
-              resolve();
+              resolveOnce('onerror');
             };
             audio.onpause = () => {
               if (audio._bargedIn) {
                 bargedIn = true;
-                resolve();
+                resolveOnce('barge_in');
               }
             };
             const playPromise = audio.play();
@@ -3528,7 +3558,7 @@
                   if (revokeOnDone) URL.revokeObjectURL(url);
                   console.error('[VOICE] Audio play() failed:', err);
                   reportSpeechStatus(agentId, 'failed', String(err && err.message ? err.message : err));
-                  resolve();
+                  resolveOnce('play_rejected');
                 });
             } else {
               reportSpeechStatus(agentId, 'started');
