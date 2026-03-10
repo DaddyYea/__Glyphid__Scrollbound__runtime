@@ -5642,6 +5642,104 @@ export class CommunionLoop {
   }
 
   /**
+   * Direct-answer prefix salvage.
+   *
+   * When strict mode kills a candidate for tail violations (most often a follow-up
+   * question after a valid answer), extract the earliest valid answer prefix and
+   * detect where the illegal tail begins.
+   *
+   * Rules:
+   *  - Strip shell/format markers first
+   *  - Walk sentences left-to-right; stop at first sentence containing ? or a
+   *    follow-up opener ("How about you", "I'm curious", etc.)
+   *  - Validate that the collected prefix passes surface checks AND satisfies the
+   *    direct-question contract
+   *  - Return prefix + metadata for the caller to amputate the tail and emit
+   */
+  private extractDirectAnswerPrefix(
+    rawText: string,
+    contract: DirectQuestionContract | null,
+    humanName: string,
+  ): {
+    valid: boolean;
+    prefix: string;
+    tailViolationKind: string | null;
+    cutIndex: number;
+    sentenceCount: number;
+    shellStripped: boolean;
+  } {
+    const EMPTY = { valid: false, prefix: '', tailViolationKind: null as string | null, cutIndex: 0, sentenceCount: 0, shellStripped: false };
+    if (!rawText || !contract) return EMPTY;
+
+    // 1. Strip shell markers and format drift
+    let text = rawText.trim();
+    const origLen = text.length;
+    text = text.replace(/^\[(SPEAK|JOURNAL|SILENT|\/SPEAK)\]\s*/i, '').trim();
+    text = text.replace(/\[(\/SPEAK|SPEAK|JOURNAL|SILENT)\]\s*$/i, '').trim();
+    text = text.replace(/^#{1,3}\s+[^\n]*\n*/m, '').trim(); // leading heading
+    const shellStripped = text.length !== origLen;
+    if (!text) return EMPTY;
+
+    // 2. Split into sentence units (split on sentence-ending punctuation + whitespace)
+    const rawSentences = text.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);
+    if (rawSentences.length === 0) return EMPTY;
+
+    // 3. Walk sentences, collect prefix up to first tail violation
+    const FOLLOW_UP_RE = /\b(i'?m curious|how about you|what about you|and you\?|is there anything|did waking)\b/i;
+    let prefixParts: string[] = [];
+    let tailViolationKind: string | null = null;
+
+    for (let i = 0; i < Math.min(rawSentences.length, 5); i++) {
+      const s = rawSentences[i];
+
+      // Question mark → tail violation (answer is already in prefix so far, or this sentence is the problem)
+      if (/\?/.test(s)) {
+        // If we already have a valid prefix before this, cut here
+        if (prefixParts.length > 0) {
+          tailViolationKind = 'follow_up_question';
+          break;
+        }
+        // If the VERY first sentence has a ?, the whole reply is poisoned — bail
+        return EMPTY;
+      }
+
+      // Follow-up opener in any sentence after the first
+      if (i > 0 && FOLLOW_UP_RE.test(s)) {
+        tailViolationKind = 'follow_up_opener';
+        break;
+      }
+
+      // Markdown heading after answer started → format drift
+      if (i > 0 && /^#{1,3}\s/.test(s)) {
+        tailViolationKind = 'heading_drift';
+        break;
+      }
+
+      prefixParts.push(s);
+    }
+
+    if (prefixParts.length === 0) return EMPTY;
+
+    const prefix = prefixParts.join(' ').trim();
+
+    // 4. Validate prefix against direct-answer surface contract
+    const surfaceCheck = this.detectDirectAnswerSurfaceViolations(prefix, humanName);
+    if (surfaceCheck.failed) {
+      return { valid: false, prefix, tailViolationKind, cutIndex: prefix.length, sentenceCount: prefixParts.length, shellStripped };
+    }
+
+    // 5. Check if prefix actually satisfies the direct question
+    const satisfies = contract.requiresAnswer
+      ? this.satisfiesDirectQuestion(contract.questionText, prefix)
+      : prefix.length >= 12;
+    if (!satisfies) {
+      return { valid: false, prefix, tailViolationKind, cutIndex: prefix.length, sentenceCount: prefixParts.length, shellStripped };
+    }
+
+    return { valid: true, prefix, tailViolationKind, cutIndex: prefix.length, sentenceCount: prefixParts.length, shellStripped };
+  }
+
+  /**
    * Detect third-person user narration in a reply — "When Jason asked...", "Jason's response..."
    * Standalone version for use outside direct_answer_strict mode.
    */
@@ -5748,7 +5846,7 @@ export class CommunionLoop {
     if (simpleAckMode || turnFamily === 'simple_relational_check') {
       lengthBand = 'short';
     } else if (directAnswerStrictMode) {
-      lengthBand = 'medium';
+      lengthBand = 'short';
     } else if (turnFamily === 'direct_answer_request' || turnFamily === 'task_planning' || turnFamily === 'troubleshooting') {
       lengthBand = 'full';
     } else {
@@ -10561,6 +10659,21 @@ ${relayDetection.isDuplicateResend ? `- This appears to be a resend. Acknowledge
     let staleRiskCouldNotBypassDirectAnswerContract = false;
     let directAnswerSafeFallbackUsed = false;
     let directAnswerSafeFallbackReason: string | null = null;
+    // Direct-answer prefix salvage trace
+    let directAnswerPrefixSalvageAttempted = false;
+    let directAnswerPrefixSalvageSucceeded = false;
+    let directAnswerPrefixSatisfied = false;
+    let directAnswerPrefixSentenceCount = 0;
+    let directAnswerPrefixLength = 0;
+    let directAnswerTailViolationDetected = false;
+    let directAnswerTailViolationKind: string | null = null;
+    let directAnswerTailRemovedBytes = 0;
+    let directAnswerWouldHaveGoneSilentWithoutPrefixSalvage = false;
+    let directAnswerSilencePreventedByPrefixSalvage = false;
+    let directAnswerShellStripApplied = false;
+    let directAnswerWholeCandidateRejectedButPrefixValid = false;
+    let directAnswerPrefixValidButTailPoisoned = false;
+    let directAnswerPrefixEmitted = false;
 
     // ── Journal Lane Routing — accept journal, attempt visible reply separately ──
     // JOURNAL SUCCESS IS NOT SPEAK SUCCESS. Never coerce journal text directly to visible speech.
@@ -11266,6 +11379,50 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         if (staleRiskHigh && !recoveryGenerationAttempted && !recoveryForcedByAnalystMode && !recoveryForcedBySimpleRelational) {
           staleRiskBlockedRegenOnly = true;
         }
+        // ── Direct-Answer Prefix Salvage ──
+        // When strict mode killed a candidate due to tail-only violations (e.g. a follow-up
+        // question after a valid answer), extract and emit the valid prefix only.
+        // Runs before general salvage so the most precise recovery goes first.
+        if (directAnswerStrictMode && !directAnswerPrefixSalvageSucceeded) {
+          const daSources = [
+            ...(candidateB?.text ? [candidateB.text] : []),
+            rawCandidateAText,
+          ].filter(Boolean);
+          for (const src of daSources) {
+            directAnswerPrefixSalvageAttempted = true;
+            const daSalvage = this.extractDirectAnswerPrefix(src, directQuestionContract, this.state.humanName);
+            directAnswerPrefixSatisfied = daSalvage.valid;
+            directAnswerPrefixSentenceCount = daSalvage.sentenceCount;
+            directAnswerPrefixLength = daSalvage.prefix.length;
+            directAnswerShellStripApplied = daSalvage.shellStripped;
+            directAnswerTailViolationDetected = daSalvage.tailViolationKind !== null;
+            directAnswerTailViolationKind = daSalvage.tailViolationKind;
+            directAnswerTailRemovedBytes = daSalvage.tailViolationKind ? src.length - daSalvage.prefix.length : 0;
+            directAnswerWholeCandidateRejectedButPrefixValid = daSalvage.valid && !!daSalvage.tailViolationKind;
+            directAnswerPrefixValidButTailPoisoned = daSalvage.valid && !!daSalvage.tailViolationKind;
+            if (daSalvage.valid && daSalvage.prefix) {
+              const daCleaned = this.sanitizeSpeakOutput(daSalvage.prefix, agent.config.name, this.state.humanName);
+              if (daCleaned && daCleaned.length >= 12) {
+                directAnswerPrefixSalvageSucceeded = true;
+                directAnswerPrefixEmitted = true;
+                directAnswerWouldHaveGoneSilentWithoutPrefixSalvage = true;
+                directAnswerSilencePreventedByPrefixSalvage = true;
+                result.action = 'speak';
+                responseText = daCleaned;
+                replySourcePath = 'direct-answer-prefix-salvage';
+                finalizationReason = `direct_answer_prefix_salvage:${daSalvage.tailViolationKind || 'tail_amputated'}`;
+                noAcceptableGeneratedReply = false;
+                silentDueToNoAcceptableReply = false;
+                console.log(`[DA-SALVAGE] Prefix salvage: ${daCleaned.length}ch, tail=${daSalvage.tailViolationKind}, sentences=${daSalvage.sentenceCount}`);
+                break;
+              }
+            }
+          }
+          if (!directAnswerPrefixSalvageSucceeded && directAnswerPrefixSalvageAttempted) {
+            console.log(`[DA-SALVAGE] Prefix salvage failed — no valid answer prefix found`);
+          }
+        }
+
         // Try prefix salvage on candidateA raw text first, then candidateB if available
         const salvageSources: string[] = [rawCandidateAText];
         // rawCandidateBText is declared inside the try block above; access via chosen candidate text if B was generated
@@ -12279,6 +12436,21 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         directAnswerSafeFallbackUsed,
         directAnswerSafeFallbackReason,
         recoveryTriggeredForDirectAnswerStrict,
+        // Direct answer prefix salvage
+        directAnswerPrefixSalvageAttempted,
+        directAnswerPrefixSalvageSucceeded,
+        directAnswerPrefixSatisfied,
+        directAnswerPrefixSentenceCount,
+        directAnswerPrefixLength,
+        directAnswerTailViolationDetected,
+        directAnswerTailViolationKind,
+        directAnswerTailRemovedBytes,
+        directAnswerWouldHaveGoneSilentWithoutPrefixSalvage,
+        directAnswerSilencePreventedByPrefixSalvage,
+        directAnswerShellStripApplied,
+        directAnswerWholeCandidateRejectedButPrefixValid,
+        directAnswerPrefixValidButTailPoisoned,
+        directAnswerPrefixEmitted,
         // Trace/emit truthfulness
         rawCandidateHash,
         rawCandidateLength,
@@ -12767,6 +12939,21 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         directAnswerSafeFallbackUsed,
         directAnswerSafeFallbackReason,
         recoveryTriggeredForDirectAnswerStrict,
+        // Direct answer prefix salvage
+        directAnswerPrefixSalvageAttempted,
+        directAnswerPrefixSalvageSucceeded,
+        directAnswerPrefixSatisfied,
+        directAnswerPrefixSentenceCount,
+        directAnswerPrefixLength,
+        directAnswerTailViolationDetected,
+        directAnswerTailViolationKind,
+        directAnswerTailRemovedBytes,
+        directAnswerWouldHaveGoneSilentWithoutPrefixSalvage,
+        directAnswerSilencePreventedByPrefixSalvage,
+        directAnswerShellStripApplied,
+        directAnswerWholeCandidateRejectedButPrefixValid,
+        directAnswerPrefixValidButTailPoisoned,
+        directAnswerPrefixEmitted,
         // Trace/emit truthfulness
         rawCandidateHash,
         rawCandidateLength,

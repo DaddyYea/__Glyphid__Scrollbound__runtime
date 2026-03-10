@@ -1566,8 +1566,10 @@
 
   <script>
     const eventSource = new EventSource('/events');
-    // Track rendered message IDs to prevent duplicates on SSE reconnect (server replays all messages)
-    const renderedMessageIds = new Set();
+    // ID-based dedup Sets — persists across reconnects so SSE replays never double-render
+    const renderedMessageIds = new Set();   // room-message ids
+    const renderedJournalIds  = new Set();  // journal-entry ids
+    const renderedChannelIds  = new Set();  // backchannel ids
     const mainLayout = document.getElementById('mainLayout');
     const roomPanel = document.getElementById('roomPanel');
     const roomMessages = document.getElementById('roomMessages');
@@ -2987,10 +2989,14 @@
         }
         addRoomMessage(data.speaker, data.speakerName, data.text, data.timestamp, false, data.visibleText ?? data.visible_text ?? data.text);
       } else if (data.type === 'journal-entry') {
+        if (data.id && renderedJournalIds.has(data.id)) return;
+        if (data.id) renderedJournalIds.add(data.id);
         addJournalEntry(data.speaker, data.text, data.timestamp);
       } else if (data.type === 'tick') {
         tickCounter.textContent = `tick ${data.tickCount}`;
       } else if (data.type === 'backchannel') {
+        if (data.id && renderedChannelIds.has(data.id)) return;
+        if (data.id) renderedChannelIds.add(data.id);
         addRoomMessage(data.speaker, data.speakerName, data.text, data.timestamp, true);
       } else if (data.type === 'speech-start') {
         // Speaking indicator is handled by audio queue when playback actually starts
