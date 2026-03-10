@@ -3051,6 +3051,68 @@ export class CommunionLoop {
   }
 
   /**
+   * Classifies the relation of the newest pending human message to the earlier
+   * unanswered cluster. Biases strongly toward append/refine — override/replace
+   * require explicit evidence.
+   */
+  private classifyPendingClusterRelation(drainedTurns: CommunionMessage[]): {
+    relationType: 'append' | 'refine' | 'override' | 'replace' | 'single';
+    clusterTextCombined: string;
+    clusterDirectRequestPresent: boolean;
+    clusterQuestionPresent: boolean;
+    clusterMessageIds: string[];
+    clusterPreview: string;
+  } {
+    if (drainedTurns.length <= 1) {
+      const t = drainedTurns[0]?.text?.trim() || '';
+      return {
+        relationType: 'single',
+        clusterTextCombined: t,
+        clusterDirectRequestPresent: /\b(?:can you|could you|please|tell me|explain|show me)\b/i.test(t),
+        clusterQuestionPresent: /\?/.test(t),
+        clusterMessageIds: drainedTurns.map(m => m.id),
+        clusterPreview: t.slice(0, 100),
+      };
+    }
+
+    const newest = drainedTurns[drainedTurns.length - 1];
+    const prior  = drainedTurns.slice(0, -1);
+    const newestText  = (newest?.text || '').trim().toLowerCase();
+    const priorTexts  = prior.map(m => (m.text || '').trim().toLowerCase());
+    const priorCombined = priorTexts.join(' ');
+
+    // Replace — clear topic change
+    const isReplace = /\b(?:never\s*mind|forget\s+(?:it|that)|different\s+topic|let'?s?\s+(?:talk\s+about\s+something\s+else|change\s+(?:the\s+)?subject|move\s+on)|actually\s+(?:forget|never\s+mind))\b/.test(newestText);
+    // Override — correction/challenge/redirect
+    const isOverride = !isReplace && /^(?:no[,.]?\s|not\s+(?:that|what)|that'?s?\s+not\s+(?:what|it)|i\s+mean[t]?\s|what\s+i\s+(?:said|meant|asked)|answer\s+(?:me|what)|you'?re\s+not|stop\b)/.test(newestText);
+    // Refine — same topic, clarifying addendum (≥1 significant word overlap with prior)
+    const newestWords = new Set(newestText.replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length > 3));
+    const priorWords  = new Set(priorCombined.replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length > 3));
+    const overlap = [...newestWords].filter(w => priorWords.has(w)).length;
+    const isRefine = !isReplace && !isOverride && overlap >= 1 && newestText.length < 120
+      && /\b(?:i\s+mean|that\s+is|specifically|actually|more\s+like|kind\s+of|sort\s+of|or\s+(?:rather|maybe)|as\s+in)\b/.test(newestText);
+
+    const relationType: 'append' | 'refine' | 'override' | 'replace' =
+      isReplace ? 'replace' : isOverride ? 'override' : isRefine ? 'refine' : 'append';
+
+    // Combined text: for append/refine use all turns; for override/replace use only newest
+    const clusterTexts = (relationType === 'override' || relationType === 'replace')
+      ? [newest?.text?.trim() || '']
+      : drainedTurns.map(m => m.text?.trim() || '');
+    const clusterTextCombined = clusterTexts.join(' ').trim();
+
+    const allTexts = drainedTurns.map(m => m.text || '').join(' ');
+    return {
+      relationType,
+      clusterTextCombined,
+      clusterDirectRequestPresent: /\b(?:can you|could you|please|tell me|explain|show me|do you)\b/i.test(allTexts),
+      clusterQuestionPresent: /\?/.test(allTexts),
+      clusterMessageIds: drainedTurns.map(m => m.id),
+      clusterPreview: clusterTextCombined.slice(0, 120),
+    };
+  }
+
+  /**
    * Builds the canonical HumanTurnSnapshot — one per generation tick, before planning.
    * All downstream stages must derive from this single object.
    */
@@ -4130,6 +4192,10 @@ export class CommunionLoop {
     const t = (humanText || '').trim();
     if (t.length > 220) return false;
     if (/\?/.test(t)) return false;
+    // Pure acknowledgment tokens — highest priority, catches "yeah", "mm", "yep", etc.
+    // Must pass after ? check so "yeah?" is excluded
+    const pureAck = /^(?:yeah+|yep|yup|yh|mm+|mhm+|mh|right|okay|ok|sure|true|exactly|fair|same|nice|got\s+it|i\s+know|makes?\s+sense|that('?s|'?\s+is)\s+(right|true|fair|it)|alright|alrighty|gotcha|noted|indeed|of\s+course|absolutely|for\s+sure|uh\s*huh|uh\s*hu|ahh?|oh|hmm+|hm+|ha|lol|haha|k|kk|cool|word|solid|tight|bet)[\s.,!]*$/i.test(t);
+    if (pureAck) return true;
     // Explicit small-update stems
     if (/\b(?:going\s+to\s+(?:take\s+a?\s*)?(?:little\s+)?(?:minute|moment|bit)|almost\s+done|finishing\s+up|just\s+(?:cooking|eating|finishing|waiting|made|making)|made\s+some|be\s+right\s+back|brb|one\s+(?:sec|second|minute|moment)|stepping\s+(?:out|away)|it'?s\s+going\s+to\s+take)\b/i.test(t)) return true;
     // Short conversational observation (<=100 chars, no imperative, first-person statement)
@@ -4208,6 +4274,14 @@ export class CommunionLoop {
       if (questionCount > maxQ) {
         reasons.push('question_cascade_relational');
       }
+    }
+
+    // 7. Analyst shell on tiny-ack turns — catch over-interpretation essays
+    if (simpleAckMode) {
+      const hasAnalystShell = /^(?:The\s+(?:word|question|honest\s+answer|challenge|thing\s+about)|What\s+this\s+(?:suggests|means|reveals)|My\s+(?:response\s+will|honest)|There'?s\s+(?:a\s+)?(?:hinge|weight|tension)|\[REPLY\]|\[SPEAK\])/im.test(t.trimStart());
+      if (hasAnalystShell) reasons.push('ack_turn_analyst_shell');
+      const hasJournalRegister = /\b(?:the\s+word\s+"?\w+"?\s+is\s+a|interpretation\s+of|unpacking\s+the|what\s+"\w+"\s+(?:could|might)\s+mean|the\s+(?:silence|pause|beat)\s+(?:between|after|before))\b/i.test(t);
+      if (hasJournalRegister && !reasons.includes('ack_turn_analyst_shell')) reasons.push('ack_turn_journal_register');
     }
 
     const contaminated = reasons.length > 0;
@@ -9117,6 +9191,20 @@ export class CommunionLoop {
     const recentUserTurns = this.state.messages.filter(m => m.speaker === 'human').slice(-4).map(m => m.text || '');
     const recentAssistantTurns = this.state.messages.filter(m => m.speaker !== 'human').slice(-8).map(m => m.text || '');
 
+    // ── Pending Human Turn Clustering ──
+    // Drain all unanswered human messages and classify their relation so that
+    // back-to-back turns (append/refine) are treated as one answer target.
+    const pendingCluster = this.classifyPendingClusterRelation(
+      this.drainPendingHumanTurns(agentId),
+    );
+    const pendingClusterIsMulti = pendingCluster.clusterMessageIds.length >= 2;
+    // For append/refine clusters: derive question contract + mustTouch from combined text
+    // For override/replace or single: use only the latest message (current behavior)
+    const answerTargetText = (pendingClusterIsMulti && (pendingCluster.relationType === 'append' || pendingCluster.relationType === 'refine'))
+      ? pendingCluster.clusterTextCombined
+      : latestHumanText;
+    const answerTargetDerivedFromCluster = answerTargetText !== latestHumanText;
+
     // ── Relational Surface — canonical single-live-human-turn object ──
     const relationalSurface = this.buildRelationalSurface(this.state.messages, latestHumanMessage ?? null);
     lts.stages.relationalSurfaceBuiltAtMs = Date.now();
@@ -9333,8 +9421,9 @@ export class CommunionLoop {
       }
     }
 
-    const directQuestionContract = this.detectDirectQuestionContract(latestHumanText, turnMode, presenceState);
-    const turnFamilyClassification = this.classifyTurnFamily(latestHumanText, directQuestionContract);
+    // Use answerTargetText (cluster-combined for append/refine) for obligation + family detection
+    const directQuestionContract = this.detectDirectQuestionContract(answerTargetText, turnMode, presenceState);
+    const turnFamilyClassification = this.classifyTurnFamily(answerTargetText, directQuestionContract);
     const positivePull = this.detectPositivePull(latestHumanText, recentUserTurns);
     const contactOpportunities = hasLatestHuman
       ? this.detectContactOpportunities(latestHumanText, recentUserTurns)
@@ -9353,7 +9442,7 @@ export class CommunionLoop {
       };
     }
     let presencePlan = this.applyQuestionResolutionToPlan(
-      this.buildPresenceResponsePlan(turnMode, presenceState, presenceBias, latestHumanText, directQuestionContract, recentUserTurns, repairDemand),
+      this.buildPresenceResponsePlan(turnMode, presenceState, presenceBias, answerTargetText, directQuestionContract, recentUserTurns, repairDemand),
       questionContext,
     );
     /**
@@ -9409,8 +9498,13 @@ export class CommunionLoop {
     // Small in-room updates ("it's going to take a minute") warrant 1-3 sentence replies,
     // not essays, playful overbuild, or process narration.
     const simpleAckMode = hasLatestHuman && this.detectSimpleRelationalAckTurn(latestHumanText, !!directQuestionContract);
+    simpleAckEligibleDetected = simpleAckMode;
     if (simpleAckMode && presencePlan.responseFrame !== 'relay_social_response') {
+      simpleAckModeApplied = true;
+      simpleAckReason = 'pure_ack_or_small_update';
       presencePlan = { ...presencePlan, questionPolicy: 0 };
+      simpleAckQuestionSuppressed = true;
+      simpleAckLengthBandApplied = true;
       console.log('[SIMPLE_ACK] Simple relational ack turn detected — question budget = 0');
     }
 
@@ -10659,6 +10753,30 @@ ${relayDetection.isDuplicateResend ? `- This appears to be a resend. Acknowledge
     let staleRiskCouldNotBypassDirectAnswerContract = false;
     let directAnswerSafeFallbackUsed = false;
     let directAnswerSafeFallbackReason: string | null = null;
+    // Pending human cluster trace
+    let pendingHumanClusterRelationType: string = pendingCluster.relationType;
+    let pendingHumanClusterMessageCount: number = pendingCluster.clusterMessageIds.length;
+    let clusteredHumanMessageIds: string[] = pendingCluster.clusterMessageIds;
+    let clusteredHumanPreview: string = pendingCluster.clusterPreview;
+    let pendingHumanClusterAppendApplied = pendingClusterIsMulti && pendingCluster.relationType === 'append';
+    let pendingHumanClusterRefineApplied = pendingClusterIsMulti && pendingCluster.relationType === 'refine';
+    let pendingHumanClusterOverrideApplied = pendingClusterIsMulti && pendingCluster.relationType === 'override';
+    let pendingHumanClusterReplaceApplied = pendingClusterIsMulti && pendingCluster.relationType === 'replace';
+    let clusterDirectRequestPresent = pendingCluster.clusterDirectRequestPresent;
+    let clusterQuestionPresent = pendingCluster.clusterQuestionPresent;
+    // Simple ack trace
+    let simpleAckEligibleDetected = false;
+    let simpleAckModeApplied = false;
+    let simpleAckReason: string | null = null;
+    let simpleAckQuestionSuppressed = false;
+    let simpleAckLengthBandApplied = false;
+    let simpleAckOverbuildPrevented = false;
+    // Ack-turn analyst containment trace
+    let ackTurnAnalystShellDetected = false;
+    let ackTurnReplySuffixCutApplied = false;
+    let ackTurnJournalRegisterBlocked = false;
+    let ackTurnTinyFallbackGenerated = false;
+    let ackTurnSilencePrevented = false;
     // Direct-answer prefix salvage trace
     let directAnswerPrefixSalvageAttempted = false;
     let directAnswerPrefixSalvageSucceeded = false;
@@ -11591,6 +11709,12 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
           staleRiskAttemptedToBypassMandatoryCleanup = staleRiskHigh && mandatoryCheck.mandatoryCleanupRequired;
           fastLaneAttemptedToBypassMandatoryCleanup = fastLaneReply && mandatoryCheck.mandatoryCleanupRequired && !recoveryGenerationAttempted;
           nonPoisonWouldHaveEmittedContaminatedReply = emittedBecauseNonPoison && mandatoryCheck.mandatoryCleanupRequired;
+          // Ack-turn containment trace
+          if (simpleAckMode) {
+            ackTurnAnalystShellDetected = mandatoryCheck.reasons.includes('ack_turn_analyst_shell');
+            ackTurnJournalRegisterBlocked = mandatoryCheck.reasons.includes('ack_turn_journal_register');
+            if (ackTurnAnalystShellDetected || ackTurnJournalRegisterBlocked) simpleAckOverbuildPrevented = true;
+          }
 
           if (mandatoryCheck.mandatoryCleanupRequired) {
             let cleanedText = responseText;
@@ -12451,6 +12575,32 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         directAnswerWholeCandidateRejectedButPrefixValid,
         directAnswerPrefixValidButTailPoisoned,
         directAnswerPrefixEmitted,
+        // Pending human cluster
+        pendingHumanClusterRelationType,
+        pendingHumanClusterMessageCount,
+        clusteredHumanMessageIds,
+        clusteredHumanPreview,
+        latestHumanRelationToPendingCluster: pendingClusterIsMulti ? pendingCluster.relationType : null,
+        pendingHumanClusterAppendApplied,
+        pendingHumanClusterRefineApplied,
+        pendingHumanClusterOverrideApplied,
+        pendingHumanClusterReplaceApplied,
+        answerTargetDerivedFromCluster,
+        clusterDirectRequestPresent,
+        clusterQuestionPresent,
+        // Simple ack
+        simpleAckEligibleDetected,
+        simpleAckModeApplied,
+        simpleAckReason,
+        simpleAckQuestionSuppressed,
+        simpleAckLengthBandApplied,
+        simpleAckOverbuildPrevented,
+        // Ack-turn analyst containment
+        ackTurnAnalystShellDetected,
+        ackTurnReplySuffixCutApplied,
+        ackTurnJournalRegisterBlocked,
+        ackTurnTinyFallbackGenerated,
+        ackTurnSilencePrevented,
         // Trace/emit truthfulness
         rawCandidateHash,
         rawCandidateLength,
@@ -12954,6 +13104,32 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         directAnswerWholeCandidateRejectedButPrefixValid,
         directAnswerPrefixValidButTailPoisoned,
         directAnswerPrefixEmitted,
+        // Pending human cluster
+        pendingHumanClusterRelationType,
+        pendingHumanClusterMessageCount,
+        clusteredHumanMessageIds,
+        clusteredHumanPreview,
+        latestHumanRelationToPendingCluster: pendingClusterIsMulti ? pendingCluster.relationType : null,
+        pendingHumanClusterAppendApplied,
+        pendingHumanClusterRefineApplied,
+        pendingHumanClusterOverrideApplied,
+        pendingHumanClusterReplaceApplied,
+        answerTargetDerivedFromCluster,
+        clusterDirectRequestPresent,
+        clusterQuestionPresent,
+        // Simple ack
+        simpleAckEligibleDetected,
+        simpleAckModeApplied,
+        simpleAckReason,
+        simpleAckQuestionSuppressed,
+        simpleAckLengthBandApplied,
+        simpleAckOverbuildPrevented,
+        // Ack-turn analyst containment
+        ackTurnAnalystShellDetected,
+        ackTurnReplySuffixCutApplied,
+        ackTurnJournalRegisterBlocked,
+        ackTurnTinyFallbackGenerated,
+        ackTurnSilencePrevented,
         // Trace/emit truthfulness
         rawCandidateHash,
         rawCandidateLength,
