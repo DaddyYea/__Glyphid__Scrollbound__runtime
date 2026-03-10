@@ -1601,14 +1601,18 @@
       if (pendingHumanMessages.length > 20) pendingHumanMessages.shift();
     }
 
+    function normalizeForDedup(s) {
+      return (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    }
+
     function consumePendingHumanMessage(text) {
-      const target = (text || '').trim();
+      const target = normalizeForDedup(text);
       if (!target) return false;
       const now = Date.now();
       for (let i = 0; i < pendingHumanMessages.length; i++) {
         const item = pendingHumanMessages[i];
-        if (!item || item.text !== target) continue;
-        if ((now - item.at) > 15000) continue;
+        if (!item || normalizeForDedup(item.text) !== target) continue;
+        if ((now - item.at) > 90000) continue;
         pendingHumanMessages.splice(i, 1);
         return true;
       }
