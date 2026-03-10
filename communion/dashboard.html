@@ -1836,6 +1836,7 @@
      * If odd number: more journals on the left.
      */
     let agentProviders = {};
+    let layoutAgentIds = []; // tracks current panel layout — skip rebuild when unchanged
 
     function buildLayout(cfg) {
       config = cfg;
@@ -1845,6 +1846,21 @@
       if (cfg.customInstructions) customInstructions = cfg.customInstructions;
       if (cfg.agentProviders) agentProviders = cfg.agentProviders;
       const agents = cfg.agentIds;
+
+      // If agent list unchanged, skip full panel rebuild — prevents brain monitor flash/blink
+      // on every SSE reconnect (server sends config on every new connection)
+      const agentListSame = layoutAgentIds.length === agents.length &&
+        layoutAgentIds.every((id, i) => id === agents[i]);
+      if (agentListSame) {
+        // Update soft state only — no DOM destruction
+        const names = agents.map(id => cfg.agentNames[id]);
+        names.push(cfg.humanName);
+        participantList.textContent = names.join(' · ');
+        updateBrainBtn();
+        return;
+      }
+      layoutAgentIds = agents.slice();
+
       const half = Math.ceil(agents.length / 2);
       const leftAgents = agents.slice(0, half);
       const rightAgents = agents.slice(half);
@@ -1852,7 +1868,11 @@
       // Remove room panel temporarily
       roomPanel.remove();
 
-      // Clear layout
+      // Clear layout (clear all intervals before destroying DOM)
+      for (const id of Object.keys(brainMonitorIntervals)) {
+        clearInterval(brainMonitorIntervals[id]);
+        delete brainMonitorIntervals[id];
+      }
       mainLayout.innerHTML = '';
 
       // Left journals
