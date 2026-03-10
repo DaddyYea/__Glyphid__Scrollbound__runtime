@@ -687,9 +687,11 @@ export class CommunionChamber {
       const line = `${new Date().toISOString()}  ${thought}\n`;
       try {
         fs.appendFileSync(this.innerJournalPath, line);
-      } catch {
-        // non-fatal — journal write failure doesn't stop the thought
+      } catch (err) {
+        console.error('[INNER] Journal write failed:', this.innerJournalPath, err);
       }
+    } else {
+      console.warn('[INNER] innerJournalPath not set — thought not written to file');
     }
   }
 

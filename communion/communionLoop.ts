@@ -1384,7 +1384,7 @@ export class CommunionLoop {
     for (let i = 0; i < config.agents.length; i++) {
       const agentConfig = config.agents[i];
       this.staticAgentIds.add(agentConfig.id); // Mark as static — never save to dynamic-agents.json
-      const backend = createBackend(agentConfig);
+      const backend = createBackend({ ...agentConfig, dataDir: this.dataDir });
       const systemPrompt = agentConfig.systemPrompt || buildDefaultSystemPrompt(agentConfig, config.agents, config.humanName);
 
       // Load persisted brain state for Alois agents
@@ -16028,7 +16028,7 @@ Sometimes the most real thing you can offer is not fixing, not reframing, not in
       ...Array.from(this.agents.values()).map(a => a.config),
       agentConfig,
     ];
-    const backend = createBackend(agentConfig);
+    const backend = createBackend({ ...agentConfig, dataDir: this.dataDir });
     const systemPrompt = agentConfig.systemPrompt || buildDefaultSystemPrompt(agentConfig, allConfigs, this.state.humanName);
 
     // Load persisted brain state for Alois agents
