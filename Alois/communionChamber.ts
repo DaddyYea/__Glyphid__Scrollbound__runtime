@@ -1175,6 +1175,7 @@ export class CommunionChamber {
       internalThoughtRecurrenceByMotif: Array.from(this.internalThoughtRecurrenceByMotif.entries()),
       lastInternalThoughtDebug: this.lastInternalThoughtDebug,
       lastBridgeNeurons: this.lastBridgeNeurons,
+      lastBrainInject: this.lastBrainInject,
       mycoLobe: this.mycoLobe.serialize(),
       cognitiveCore: this.cognitiveCore.serialize(),
     };
@@ -1304,6 +1305,10 @@ export class CommunionChamber {
     this.lastBridgeNeurons = Array.isArray(data.lastBridgeNeurons)
       ? data.lastBridgeNeurons.map((v: any) => String(v)).slice(0, 2)
       : [];
+
+    if (typeof data.lastBrainInject === 'string') {
+      this.lastBrainInject = data.lastBrainInject;
+    }
 
     const neuronCount = this.graph.getNeuronCount();
     const axonCount = this.graph.getAxonCount();
