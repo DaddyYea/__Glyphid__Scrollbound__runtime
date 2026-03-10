@@ -9245,6 +9245,19 @@ export class CommunionLoop {
       ? this.detectLoveOpportunities(latestHumanText, recentUserTurns)
       : null;
     const strictAnswerMode = repairDemand.requiresRepair || !!relationalAnswerObligation.requiresAnswer || (!!directQuestionContract?.requiresAnswer && this.countRecentAnswerFailures(agentId) >= 2);
+    let questionContext = this.getQuestionResolutionContext(agentId, latestHumanMessage);
+    if ((microRuptureDetected || repairDemand.requiresRepair || staleTopicLatchCleared) && !questionContext.answeredThisTurn) {
+      questionContext = {
+        ...questionContext,
+        activeQuestion: null,
+        cooldownActive: false,
+        metabolizeAnswer: null,
+      };
+    }
+    let presencePlan = this.applyQuestionResolutionToPlan(
+      this.buildPresenceResponsePlan(turnMode, presenceState, presenceBias, latestHumanText, directQuestionContract, recentUserTurns, repairDemand),
+      questionContext,
+    );
     /**
      * Direct-answer strict mode — activated when:
      * - turn family is direct_answer_request (literalAnswerRequiredFirst=true)
@@ -9263,19 +9276,6 @@ export class CommunionLoop {
       repairPassesUsed += 1;
       return true;
     };
-    let questionContext = this.getQuestionResolutionContext(agentId, latestHumanMessage);
-    if ((microRuptureDetected || repairDemand.requiresRepair || staleTopicLatchCleared) && !questionContext.answeredThisTurn) {
-      questionContext = {
-        ...questionContext,
-        activeQuestion: null,
-        cooldownActive: false,
-        metabolizeAnswer: null,
-      };
-    }
-    let presencePlan = this.applyQuestionResolutionToPlan(
-      this.buildPresenceResponsePlan(turnMode, presenceState, presenceBias, latestHumanText, directQuestionContract, recentUserTurns, repairDemand),
-      questionContext,
-    );
 
     // ── Relay Binding: Upstream Detection ──
     // Detect before prompt assembly so the model sees a clean relay frame.
