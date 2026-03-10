@@ -1670,7 +1670,7 @@
 
     function llmHasRequiredFields(receipt) {
       const payload = receipt && receipt.payload;
-      if (!payload || !payload.model) return false;
+      if (!payload) return false;
       if (!Array.isArray(payload.messages) || payload.messages.length < 2) return false;
       const hasSystem = payload.messages.some(m => m && m.role === 'system' && typeof m.content === 'string' && m.content.length > 0);
       return hasSystem;
