@@ -2190,11 +2190,15 @@
         panel.appendChild(monitor);
 
         const INGEST_TOTAL = 220247;
+        let bmConsecutiveFailures = 0;
 
         function refreshBrainMonitor() {
           fetch('/alois/tissue?agentId=' + encodeURIComponent(agentId))
             .then(r => r.json())
             .then(data => {
+              // If server returned an error (e.g. agent_not_found), treat as a failure
+              if (data.error) { bmConsecutiveFailures++; return; }
+              bmConsecutiveFailures = 0;
               const st = data.state || {};
               const ingest = data.ingestStatus;
               const hbAlive = !!st.heartbeatRunning;
@@ -2243,8 +2247,14 @@
               }
             })
             .catch(() => {
-              bmDot.className      = 'bm-dot';
-              bmHbLabel.className  = 'bm-hb-label bm-hb-stopped';
+              // Only show OFFLINE after 3+ consecutive failures — suppresses transient hiccups
+              // that would otherwise wipe data sections and cause a CSS animation blink on recovery
+              bmConsecutiveFailures++;
+              if (bmConsecutiveFailures < 3) return;
+              const dotClass = 'bm-dot';
+              if (bmDot.className !== dotClass) bmDot.className = dotClass;
+              const hbClass = 'bm-hb-label bm-hb-stopped';
+              if (bmHbLabel.className !== hbClass) bmHbLabel.className = hbClass;
               bmHbLabel.textContent = 'OFFLINE';
               bmMood.textContent = '';
               [bmHbStat, bmNStat, bmAStat, bmWStat, bmGStat].forEach(el => el.textContent = '');
