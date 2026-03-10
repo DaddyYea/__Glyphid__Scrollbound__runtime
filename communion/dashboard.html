@@ -1723,9 +1723,11 @@
       window.lastLLMReceipt = receipt || null;
       window.lastRelationalTrace = trace || null;
       const isBug = llmIsBug(receipt);
-      llmDebugBtn.classList.remove('good', 'bad');
-      if (receipt && isBug) llmDebugBtn.classList.add('bad');
-      else if (receipt && !isBug) llmDebugBtn.classList.add('good');
+      const wantClass = (receipt && isBug) ? 'bad' : (receipt && !isBug) ? 'good' : '';
+      if (!llmDebugBtn.classList.contains(wantClass) || (wantClass === '' && (llmDebugBtn.classList.contains('good') || llmDebugBtn.classList.contains('bad')))) {
+        llmDebugBtn.classList.remove('good', 'bad');
+        if (wantClass) llmDebugBtn.classList.add(wantClass);
+      }
 
       llmReceiptSummary.textContent = llmSummary(receipt, trace);
       const wmSnippet = receipt?.clusterSnippets?.WM || '(no WM snippet)';
