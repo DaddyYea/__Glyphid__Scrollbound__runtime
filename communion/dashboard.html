@@ -3034,6 +3034,7 @@
         speakingIndicator.classList.add('active');
         speakingName.textContent = name + ' synthesizing...';
         ttsHoldActive = true;
+        lastSentAt = Date.now(); // Reset replay window — clock starts from TTS begin, not send time
         pauseRecognitionForTts();
       } else if (data.type === 'speech-chunk') {
         // Streaming TTS: each chunk arrives as it's synthesized — play immediately.
@@ -3286,6 +3287,12 @@
     async function sendMessage() {
       const text = chatInput.value.trim();
       if (!text) return;
+      // STT buffered-replay dedup: Chrome sometimes re-fires a final result after recognition
+      // restarts (onend → start), which would send the same text a second time 3s later.
+      const now = Date.now();
+      if (text === lastSentText && (now - lastSentAt) < 60000) return;
+      lastSentText = text;
+      lastSentAt = now;
       if (typeof lastRecognitionRenderedText !== 'undefined' && text === lastRecognitionRenderedText.trim()) {
         lastRecognitionRenderedText = '';
       }
@@ -3492,6 +3499,15 @@
     async function processAudioQueue() {
       if (audioQueue.length === 0) {
         audioPlaying = false;
+        // If the chunk stream is fully done (speech-end already received) but the final
+        // chunk never had isFinalChunk=true (TTS failed mid-stream), ttsHoldActive would
+        // stay true forever. Clean up here when the queue empties after stream end.
+        if (!chunkStreamActive && ttsHoldActive) {
+          ttsHoldActive = false;
+          speakingIndicator.classList.remove('active');
+          resumeRecognitionAfterTts();
+          fetch('/speech-done', { method: 'POST' }).catch(() => {});
+        }
         return;
       }
       audioPlaying = true;
@@ -3655,6 +3671,8 @@
     let recognition = null;
     let micListening = false;
     let lastRecognitionRenderedText = '';
+    let lastSentText = '';
+    let lastSentAt = 0;
 
     if (SpeechRecognition) {
       recognition = new SpeechRecognition();

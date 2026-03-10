@@ -249,8 +249,8 @@ const DEFAULT_MAX_CONTEXT_TOKENS: Record<string, number> = {
   anthropic: 200000,
   openai: 128000,
   grok: 131072,
-  lmstudio: 8192,
-  alois: 8192,
+  lmstudio: 32768,
+  alois: 32768,
   default: 32768,
 };
 

@@ -8588,6 +8588,16 @@ export class CommunionLoop {
     this.lastHumanMessageSource = source;
     const now = Date.now();
 
+    // ── Large Paste Guard ──
+    // Cap incoming messages at 6000 chars to prevent context budget overflow.
+    // Voice input is never this large; keyboard pastes are the only risk.
+    const MAX_HUMAN_MSG_CHARS = 6000;
+    if (text.length > MAX_HUMAN_MSG_CHARS) {
+      const truncated = text.slice(0, MAX_HUMAN_MSG_CHARS);
+      console.warn(`[COMMUNION] Human message truncated: ${text.length} → ${MAX_HUMAN_MSG_CHARS} chars`);
+      text = truncated + `\n\n[… truncated — original was ${text.length} chars]`;
+    }
+
     // ── Human Turn Dedup Gate ──
     const dedupResult = this.detectRecentHumanTurnDuplicate(text, now);
     if (dedupResult.isDuplicate) {
@@ -9497,6 +9507,11 @@ export class CommunionLoop {
     // ── Simple Relational Ack Mode ──
     // Small in-room updates ("it's going to take a minute") warrant 1-3 sentence replies,
     // not essays, playful overbuild, or process narration.
+    let simpleAckEligibleDetected = false;
+    let simpleAckModeApplied = false;
+    let simpleAckReason: string | null = null;
+    let simpleAckQuestionSuppressed = false;
+    let simpleAckLengthBandApplied = false;
     const simpleAckMode = hasLatestHuman && this.detectSimpleRelationalAckTurn(latestHumanText, !!directQuestionContract);
     simpleAckEligibleDetected = simpleAckMode;
     if (simpleAckMode && presencePlan.responseFrame !== 'relay_social_response') {
@@ -10764,13 +10779,6 @@ ${relayDetection.isDuplicateResend ? `- This appears to be a resend. Acknowledge
     let pendingHumanClusterReplaceApplied = pendingClusterIsMulti && pendingCluster.relationType === 'replace';
     let clusterDirectRequestPresent = pendingCluster.clusterDirectRequestPresent;
     let clusterQuestionPresent = pendingCluster.clusterQuestionPresent;
-    // Simple ack trace
-    let simpleAckEligibleDetected = false;
-    let simpleAckModeApplied = false;
-    let simpleAckReason: string | null = null;
-    let simpleAckQuestionSuppressed = false;
-    let simpleAckLengthBandApplied = false;
-    let simpleAckOverbuildPrevented = false;
     // Ack-turn analyst containment trace
     let ackTurnAnalystShellDetected = false;
     let ackTurnReplySuffixCutApplied = false;

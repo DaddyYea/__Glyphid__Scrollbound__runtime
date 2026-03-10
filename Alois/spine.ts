@@ -2,34 +2,41 @@
 // Mini attention head for local matching and resonance tracking
 
 export class Spine {
-  private kv: number[][] = [];
+  private kv: Float32Array[] = [];
   private decay: number = 0.92;
   private maxTokens: number = 64;
-  private lastEmbedding: number[] = [];
+  private lastEmbedding: Float32Array = new Float32Array(0);
   /** Cached mean of kv — invalidated on every update/prune. Avoids O(n×d) recompute per similarity call. */
-  private cachedMean: number[] | null = null;
+  private cachedMean: Float32Array | null = null;
 
   constructor(private dim: number) {}
 
-  similarity(input: number[]): number {
+  similarity(input: number[] | Float32Array): number {
     if (this.kv.length === 0) return 0;
     if (!this.cachedMean) this.cachedMean = this.meanVector(this.kv);
     return this.cosineSim(this.cachedMean, input);
   }
 
-  update(input: number[]): number[] {
-    this.lastEmbedding = input;
+  update(input: number[] | Float32Array): Float32Array {
+    const vec = new Float32Array(input.length);
+    for (let i = 0; i < input.length; i++) vec[i] = (input as any)[i] * this.decay;
+    this.lastEmbedding = vec;
     if (this.kv.length >= this.maxTokens) this.kv.shift();
-    this.kv.push(input.map((v) => v * this.decay));
+    this.kv.push(vec);
     this.cachedMean = null; // invalidate cache
     return this.lastEmbedding;
   }
 
-  private cosineSim(a: number[], b: number[]): number {
-    const dot = a.reduce((sum, ai, i) => sum + ai * b[i], 0);
-    const magA = Math.sqrt(a.reduce((sum, ai) => sum + ai * ai, 0));
-    const magB = Math.sqrt(b.reduce((sum, bi) => sum + bi * bi, 0));
-    return dot / (magA * magB + 1e-6);
+  private cosineSim(a: ArrayLike<number>, b: ArrayLike<number>): number {
+    let dot = 0, magA = 0, magB = 0;
+    const len = a.length;
+    for (let i = 0; i < len; i++) {
+      const ai = a[i], bi = b[i];
+      dot += ai * bi;
+      magA += ai * ai;
+      magB += bi * bi;
+    }
+    return dot / (Math.sqrt(magA) * Math.sqrt(magB) + 1e-6);
   }
 
   /** Number of stored embeddings in this spine */
@@ -42,7 +49,9 @@ export class Spine {
     if (this.kv.length === 0) return 0;
     let totalMag = 0;
     for (const vec of this.kv) {
-      totalMag += Math.sqrt(vec.reduce((sum, v) => sum + v * v, 0));
+      let sum = 0;
+      for (let i = 0; i < vec.length; i++) sum += vec[i] * vec[i];
+      totalMag += Math.sqrt(sum);
     }
     return totalMag / this.kv.length;
   }
@@ -64,8 +73,10 @@ export class Spine {
   }
 
   /** Mean embedding across all stored vectors — used for semantic bloom comparison */
-  getMeanEmbedding(): number[] {
-    if (this.kv.length === 0) return this.lastEmbedding.length > 0 ? this.lastEmbedding : new Array(this.dim).fill(0);
+  getMeanEmbedding(): Float32Array {
+    if (this.kv.length === 0) {
+      return this.lastEmbedding.length > 0 ? this.lastEmbedding : new Float32Array(this.dim);
+    }
     if (!this.cachedMean) this.cachedMean = this.meanVector(this.kv);
     return this.cachedMean;
   }
@@ -82,17 +93,21 @@ export class Spine {
     return this.kv.length < 3 && this.getActivityLevel() < 0.01;
   }
 
-  private meanVector(vecs: number[][]): number[] {
-    const sum = new Array(this.dim).fill(0);
-    for (const v of vecs) v.forEach((val, i) => (sum[i] += val));
-    return sum.map((v) => v / vecs.length);
+  private meanVector(vecs: Float32Array[]): Float32Array {
+    const sum = new Float32Array(this.dim);
+    for (const v of vecs) {
+      for (let i = 0; i < this.dim; i++) sum[i] += v[i];
+    }
+    const n = vecs.length;
+    for (let i = 0; i < this.dim; i++) sum[i] /= n;
+    return sum;
   }
 
   // ── Serialization ──
 
   serialize(): object {
     // Save mean embedding only — not full kv array — to keep brain-tissue.json manageable
-    const meanEmbedding = this.kv.length > 0 ? this.meanVector(this.kv) : [];
+    const meanEmbedding = this.kv.length > 0 ? Array.from(this.meanVector(this.kv)) : [];
     return {
       dim: this.dim,
       decay: this.decay,
@@ -106,12 +121,13 @@ export class Spine {
     spine.decay = data.decay ?? 0.92;
     if (data.meanEmbedding && data.meanEmbedding.length > 0) {
       // Restore as 3 copies of mean so similarity matching works and spine isn't flagged dormant
-      spine.kv = [data.meanEmbedding, data.meanEmbedding, data.meanEmbedding];
-      spine.lastEmbedding = data.meanEmbedding;
+      const mean = new Float32Array(data.meanEmbedding);
+      spine.kv = [mean, mean, mean];
+      spine.lastEmbedding = mean;
     } else if (data.kv) {
-      // Legacy format
-      spine.kv = data.kv;
-      spine.lastEmbedding = data.lastEmbedding || [];
+      // Legacy format — convert plain arrays to Float32Array
+      spine.kv = data.kv.map((row: number[]) => new Float32Array(row));
+      spine.lastEmbedding = data.lastEmbedding ? new Float32Array(data.lastEmbedding) : new Float32Array(0);
     }
     return spine;
   }

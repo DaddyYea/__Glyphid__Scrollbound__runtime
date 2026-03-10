@@ -25,7 +25,7 @@ export class DendriticCell {
 
   tick(input: number[], globalTick: number): { affect: number[]; state: number[] } {
     const localTick = globalTick + this.clockOffset;
-    const spikes: number[][] = [];
+    const spikes: ArrayLike<number>[] = [];
 
     for (const spine of this.spines) {
       // Use raw similarity for gating — not multiplied by affect (affect was always 0)
@@ -123,9 +123,7 @@ export class DendriticCell {
     const active = this.spines.filter(s => !s.isDormant());
     if (active.length === 0) return new Array(this.dim).fill(0);
     const vecs = active.map(s => s.getMeanEmbedding());
-    const sum = new Array(this.dim).fill(0);
-    for (const v of vecs) v.forEach((val, i) => (sum[i] += val));
-    return sum.map(v => v / vecs.length);
+    return this.meanVector(vecs);
   }
 
   /**
@@ -198,10 +196,12 @@ export class DendriticCell {
     }
   }
 
-  private meanVector(vecs: number[][]): number[] {
+  private meanVector(vecs: ArrayLike<number>[]): number[] {
     if (vecs.length === 0) return new Array(this.dim).fill(0);
-    const sum = vecs[0].map((_, i) => vecs.reduce((acc, v) => acc + v[i], 0));
-    return sum.map((v) => v / vecs.length);
+    const sum = new Array(this.dim).fill(0);
+    for (const v of vecs) for (let i = 0; i < this.dim; i++) sum[i] += v[i];
+    const n = vecs.length;
+    return sum.map(v => v / n);
   }
 
   // ── Serialization ──
