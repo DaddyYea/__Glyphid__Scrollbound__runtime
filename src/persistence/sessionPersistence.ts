@@ -559,17 +559,29 @@ export class SessionPersistence {
       if (error?.code !== 'ENOENT') throw error;
     }
 
-    try {
-      await fs.rename(tempPath, filePath);
-      if (hadOriginal) {
-        await fs.unlink(backupPath).catch(() => {});
+    // Windows: EPERM/EBUSY on rename when antivirus or NTFS indexer briefly holds
+    // the temp file. Retry up to 5× with exponential back-off before giving up.
+    let renameErr: unknown;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        await fs.rename(tempPath, filePath);
+        renameErr = null;
+        break;
+      } catch (err: any) {
+        renameErr = err;
+        if (err?.code !== 'EPERM' && err?.code !== 'EBUSY') break;
+        await new Promise(r => setTimeout(r, 50 * (attempt + 1)));
       }
-    } catch (error) {
+    }
+    if (renameErr) {
       await fs.unlink(tempPath).catch(() => {});
       if (hadOriginal) {
         await fs.rename(backupPath, filePath).catch(() => {});
       }
-      throw error;
+      throw renameErr;
+    }
+    if (hadOriginal) {
+      await fs.unlink(backupPath).catch(() => {});
     }
   }
 
