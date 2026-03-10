@@ -335,7 +335,7 @@ export class CognitiveCore {
     this.stability     = data.stability     ?? 0;
     this.novelty       = data.novelty       ?? 0;
     this.p_speak       = data.p_speak       ?? 0;
-    this.lastSpeakBeat = data.lastSpeakBeat ?? -999;
+    this.lastSpeakBeat = -999; // always reset — beat count is session-relative, persisted value would break the 45-beat failsafe
     this.slotCounter   = data.slotCounter   ?? 0;
     this.Z_slots = (data.slots ?? []).map((s: any) => ({
       id:              s.id,
