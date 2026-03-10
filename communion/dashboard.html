@@ -4157,6 +4157,7 @@
             x: cx + Math.cos(angle) * dist,
             y: cy + Math.sin(angle) * dist,
             vx: 0, vy: 0,
+            angle,               // stable — never reassigned after creation
             targetX: cx + Math.cos(angle) * dist,
             targetY: cy + Math.sin(angle) * dist,
             importance: neuron.importance,
@@ -4173,15 +4174,11 @@
       // Drop nodes no longer in the top-N
       brainViz.nodes = brainViz.nodes.filter(n => keepIds.has(n.id));
 
-      // Compute target positions (radial layout by importance)
-      brainViz.nodes.sort((a, b) => b.importance - a.importance);
-      const count = brainViz.nodes.length;
-      for (let i = 0; i < count; i++) {
-        const node = brainViz.nodes[i];
-        const angle = (Math.PI * 2 * i / Math.max(1, count));
+      // Compute target positions — angle is stable per-node, only distance varies with importance
+      for (const node of brainViz.nodes) {
         const dist = maxR * (0.3 + 0.6 * (1 - node.importance));
-        node.targetX = cx + Math.cos(angle) * dist;
-        node.targetY = cy + Math.sin(angle) * dist;
+        node.targetX = cx + Math.cos(node.angle) * dist;
+        node.targetY = cy + Math.sin(node.angle) * dist;
       }
     }
 
