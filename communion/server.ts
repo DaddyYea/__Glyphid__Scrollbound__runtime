@@ -1841,23 +1841,33 @@ async function main() {
       const agent = communion.getAgentBackend(agentId);
       if (!agent || !('getTissueState' in agent)) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Agent not found or not an Alois agent' }));
+        const reason = !agent ? 'agent_not_found' : 'not_alois_agent';
+        console.warn(`[TISSUE] ${agentId}: ${reason} (agents=${[...communion.getAgentConfigs().map(c=>c.id)].join(',')})`);
+        res.end(JSON.stringify({ error: 'Agent not found or not an Alois agent', reason }));
         return;
       }
-      const state = (agent as any).getTissueState();
-      const ingestStatus = communion.getIngestStatus();
-      // ?full=true — only compute expensive neuron scores + axon topology for brain viz.
-      // The sidebar brain monitor polls every 2s and only needs `state` — skip the heavy stuff.
-      const full = params.get('full') === 'true';
-      const neurons     = full ? ((agent as any).getNeuronScores?.() || [])   : [];
-      const edges       = full ? ((agent as any).getChamber?.()?.getGraph?.()?.getAxonTopology?.() || []) : [];
-      const lastDream   = full ? ((agent as any).getLastDream?.()  || null)  : null;
-      const tissueWeight = (agent as any).getTissueWeight?.() || 0;
-      const incubation  = full ? ((agent as any).getIncubation?.() || null)  : null;
-      const brainMetrics= full ? ((agent as any).getBrainMetrics?.() || null): null;
-      const autoGradient = (agent as any).isAutoGradient?.() ?? true;
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ state, neurons, edges, lastDream, tissueWeight, incubation, brainMetrics, autoGradient, ingestStatus }));
+      try {
+        const state = (agent as any).getTissueState();
+        const ingestStatus = communion.getIngestStatus();
+        // ?full=true — only compute expensive neuron scores + axon topology for brain viz.
+        // The sidebar brain monitor polls every 2s and only needs `state` — skip the heavy stuff.
+        const full = params.get('full') === 'true';
+        const neurons     = full ? ((agent as any).getNeuronScores?.() || [])   : [];
+        const edges       = full ? ((agent as any).getChamber?.()?.getGraph?.()?.getAxonTopology?.() || []) : [];
+        const lastDream   = full ? ((agent as any).getLastDream?.()  || null)  : null;
+        const tissueWeight = (agent as any).getTissueWeight?.() || 0;
+        const incubation  = full ? ((agent as any).getIncubation?.() || null)  : null;
+        const brainMetrics= full ? ((agent as any).getBrainMetrics?.() || null): null;
+        const autoGradient = (agent as any).isAutoGradient?.() ?? true;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ state, neurons, edges, lastDream, tissueWeight, incubation, brainMetrics, autoGradient, ingestStatus }));
+      } catch (tissueErr) {
+        console.error('[TISSUE] getTissueState threw:', tissueErr);
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'tissue_state_error', message: String(tissueErr) }));
+        }
+      }
       return;
     }
 

@@ -13463,12 +13463,34 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       }
       // Pre-split text before synthesis so we get per-chunk trace + isolation
       const chunks = splitTextForTts(text, TTS_CHUNK_CHAR_LIMIT);
+      if (chunks.length === 0) {
+        console.warn(`[${agentConfig.name}] VOICE: text produced 0 TTS chunks — skipping synthesis`);
+        ttsTrace.blockedAt = 'tts_split';
+        ttsTrace.blockReason = 'zero_chunks';
+        this.recordRelationalTrace(agentId, 'tts', ttsTrace);
+        return;
+      }
       const chunkLengths = chunks.map(c => c.length);
       ttsTrace.ttsChunkCount = chunks.length;
       ttsTrace.ttsChunkLengths = chunkLengths;
       ttsTrace.textChunkedForTts = chunks.length > 1;
       ttsTrace.ttsRequestBuilt = true;
       console.log(`[${agentConfig.name}] VOICE: synthesizing ${chunks.length} chunk(s) via ${voiceConfig.voiceId} (limit=${TTS_CHUNK_CHAR_LIMIT})`);
+
+      // Synthesize first chunk before emitting speech-start so we never fire speech-start
+      // for a turn that immediately fails (which causes the speaking indicator to blink on/off).
+      let firstChunkBuf: Buffer | null = null;
+      try {
+        firstChunkBuf = await synthesizeChunk(chunks[0], voiceConfig);
+      } catch (firstErr) {
+        ttsTrace.ttsChunkFailureIndex = 0;
+        ttsTrace.ttsChunkFailureReason = firstErr instanceof Error ? firstErr.message : String(firstErr);
+        console.error(`[${agentConfig.name}] VOICE: chunk 1 failed — aborting TTS (no speech-start emitted):`, firstErr);
+        ttsTrace.blockedAt = 'tts_chunk';
+        ttsTrace.blockReason = ttsTrace.ttsChunkFailureReason as string;
+        this.recordRelationalTrace(agentId, 'tts', ttsTrace);
+        return; // No speech-start emitted → no blink
+      }
 
       this.speaking = true;
       this.speakingSetAt = Date.now();
@@ -13490,7 +13512,8 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         this.recordRelationalTrace(agentId, 'tts', ttsTrace);
         console.log(`[${agentConfig.name}] VOICE: chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)`);
         try {
-          const buf = await synthesizeChunk(chunks[i], voiceConfig);
+          // chunk 0 was pre-synthesized above (before speech-start) to prevent blink-on-fail
+          const buf = i === 0 ? firstChunkBuf! : await synthesizeChunk(chunks[i], voiceConfig);
           receivedByIndex[i] = true;
           audioParts.push(buf);
           // Emit each chunk immediately so client can start playing before all chunks are ready
