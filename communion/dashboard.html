@@ -1804,6 +1804,7 @@
     let config = null;
     let roomHasMessages = false;
     let journalPanels = {}; // agentId → { container, entries, hasEntries }
+    const brainMonitorIntervals = {}; // agentId → intervalId — cleared on every buildLayout
     let messageCount = 0;
     let voiceConfigs = {}; // agentId → { voiceId, enabled }
     let availableVoices = []; // flat array of VoiceOption
@@ -2277,8 +2278,9 @@
             .catch(() => { drawMycoCanvas(0.02, 0, 0); });
         }
 
+        if (brainMonitorIntervals[agentId]) clearInterval(brainMonitorIntervals[agentId]);
         refreshBrainMonitor();
-        setInterval(refreshBrainMonitor, 2000);
+        brainMonitorIntervals[agentId] = setInterval(refreshBrainMonitor, 2000);
       }
 
       const entries = document.createElement('div');
