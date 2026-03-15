@@ -1,0 +1,16 @@
+.git
+node_modules
+dist
+build
+coverage
+.env
+.venv
+__pycache__
+.pytest_cache
+*.pyc
+.claude
+training
+unsloth_compiled_cache
+llama.cpp
+runtime/models
+*.gguf

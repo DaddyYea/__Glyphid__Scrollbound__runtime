@@ -1,0 +1,18 @@
+{
+  "aloisdeep": {
+    "config": {
+      "id": "aloisdeep",
+      "name": "Alois Deep",
+      "provider": "openai-compatible",
+      "model": "deepseek-chat",
+      "apiKey": "YOUR_API_KEY_HERE",
+      "baseUrl": "https://api.deepseek.com",
+      "color": "#7edab8"
+    },
+    "active": true,
+    "voiceConfig": {
+      "voiceId": "en-GB-LibbyNeural",
+      "enabled": false
+    }
+  }
+}
