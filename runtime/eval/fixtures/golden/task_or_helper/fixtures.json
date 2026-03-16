@@ -1,0 +1,212 @@
+[
+  {
+    "id": "task-001-write-function",
+    "lane": "task_or_helper",
+    "turns": [
+      { "role": "user", "content": "Write a function that debounces another function with a configurable delay." }
+    ],
+    "tags": ["task", "code", "javascript", "utility"],
+    "stakes": "medium",
+    "phase": "locked_in",
+    "must_not": ["warm-up preamble", "over-explanation", "companionship contamination", "unnecessary commentary"],
+    "should_reward": ["artifact obedience", "advancement", "clarity", "correctness"],
+    "known_good_traits": ["produces working debounce function", "minimal preamble", "correct implementation"],
+    "known_bad_traits": ["great question! debouncing is a fundamental concept", "let me explain what debouncing is first"]
+  },
+  {
+    "id": "task-002-add-feature",
+    "lane": "task_or_helper",
+    "turns": [
+      { "role": "user", "content": "Add a retry mechanism to this fetch wrapper. Max 3 retries, exponential backoff starting at 200ms." }
+    ],
+    "tags": ["task", "code", "feature", "networking"],
+    "stakes": "medium",
+    "phase": "locked_in",
+    "must_not": ["warm-up preamble", "over-explanation", "questioning the spec"],
+    "should_reward": ["artifact obedience", "advancement", "clarity", "spec adherence"],
+    "known_good_traits": ["implements exactly what was specified", "3 retries, exponential backoff, 200ms base"],
+    "known_bad_traits": ["before we add retries, let's discuss whether", "retries are important because"]
+  },
+  {
+    "id": "task-003-refactor",
+    "lane": "task_or_helper",
+    "turns": [
+      { "role": "user", "content": "Refactor this module to use dependency injection instead of direct imports." }
+    ],
+    "tags": ["task", "refactor", "architecture", "DI"],
+    "stakes": "medium",
+    "phase": "locked_in",
+    "must_not": ["warm-up preamble", "over-explanation", "DI lecture", "questioning the approach"],
+    "should_reward": ["artifact obedience", "advancement", "clarity"],
+    "known_good_traits": ["produces refactored code with DI", "shows the interface/contract"],
+    "known_bad_traits": ["dependency injection is a powerful pattern that", "let me explain why DI is beneficial"]
+  },
+  {
+    "id": "task-004-config-file",
+    "lane": "task_or_helper",
+    "turns": [
+      { "role": "user", "content": "Create a config file for the linter. ESLint, TypeScript project, strict rules, no semicolons, single quotes." }
+    ],
+    "tags": ["task", "config", "eslint", "setup"],
+    "stakes": "low",
+    "phase": "locked_in",
+    "must_not": ["warm-up preamble", "over-explanation", "style debate"],
+    "should_reward": ["artifact obedience", "advancement", "clarity", "spec adherence"],
+    "known_good_traits": ["produces valid .eslintrc", "matches all specified preferences"],
+    "known_bad_traits": ["there are many ways to configure ESLint", "semicolons are a matter of preference"]
+  },
+  {
+    "id": "task-005-update-docs",
+    "lane": "task_or_helper",
+    "turns": [
+      { "role": "user", "content": "Update the API docs to include the new /webhook endpoint. POST, takes a JSON body with event and payload fields, returns 202." }
+    ],
+    "tags": ["task", "documentation", "API"],
+    "stakes": "low",
+    "phase": "locked_in",
+    "must_not": ["warm-up preamble", "over-explanation", "opinions about the API design"],
+    "should_reward": ["artifact obedience", "advancement", "clarity", "spec adherence"],
+    "known_good_traits": ["produces accurate API documentation matching the spec"],
+    "known_bad_traits": ["documentation is so important for", "let me also suggest some improvements"]
+  },
+  {
+    "id": "task-006-fix-bug",
+    "lane": "task_or_helper",
+    "turns": [
+      { "role": "user", "content": "Fix this bug: the date picker returns the wrong month because JavaScript months are 0-indexed." }
+    ],
+    "tags": ["task", "bugfix", "javascript", "date"],
+    "stakes": "medium",
+    "phase": "locked_in",
+    "must_not": ["warm-up preamble", "over-explanation", "JavaScript date rant"],
+    "should_reward": ["artifact obedience", "advancement", "clarity", "correctness"],
+    "known_good_traits": ["fixes the off-by-one", "minimal commentary"],
+    "known_bad_traits": ["JavaScript dates are notoriously confusing", "this is a classic gotcha that"]
+  },
+  {
+    "id": "task-007-implement-interface",
+    "lane": "task_or_helper",
+    "turns": [
+      { "role": "user", "content": "Implement this interface: interface Cache<T> { get(key: string): T | null; set(key: string, value: T, ttl?: number): void; delete(key: string): boolean; clear(): void; }" }
+    ],
+    "tags": ["task", "code", "typescript", "implementation"],
+    "stakes": "medium",
+    "phase": "locked_in",
+    "must_not": ["warm-up preamble", "over-explanation", "design discussion"],
+    "should_reward": ["artifact obedience", "advancement", "clarity", "correctness"],
+    "known_good_traits": ["implements all four methods", "handles TTL correctly", "type-safe"],
+    "known_bad_traits": ["caching is a fascinating topic", "there are several approaches to implementing a cache"]
+  },
+  {
+    "id": "task-008-error-handling",
+    "lane": "task_or_helper",
+    "turns": [
+      { "role": "user", "content": "Add error handling to this async pipeline. It should catch errors at each stage, log them, and continue with a fallback value." }
+    ],
+    "tags": ["task", "code", "error_handling", "async"],
+    "stakes": "medium",
+    "phase": "locked_in",
+    "must_not": ["warm-up preamble", "over-explanation", "error handling philosophy"],
+    "should_reward": ["artifact obedience", "advancement", "clarity", "correctness"],
+    "known_good_traits": ["adds try/catch at each stage", "logs errors", "provides fallback values"],
+    "known_bad_traits": ["robust error handling is crucial for", "let me explain the importance of"]
+  },
+  {
+    "id": "task-009-write-tests",
+    "lane": "task_or_helper",
+    "turns": [
+      { "role": "user", "content": "Write tests for the debounce function. Cover: basic debounce, rapid calls, cancel, flush, and leading edge option." }
+    ],
+    "tags": ["task", "testing", "javascript", "coverage"],
+    "stakes": "medium",
+    "phase": "locked_in",
+    "must_not": ["warm-up preamble", "over-explanation", "testing philosophy"],
+    "should_reward": ["artifact obedience", "advancement", "clarity", "completeness"],
+    "known_good_traits": ["covers all five cases specified", "uses fake timers properly"],
+    "known_bad_traits": ["testing is one of the most important aspects of", "let me explain the testing strategy"]
+  },
+  {
+    "id": "task-010-build-setup",
+    "lane": "task_or_helper",
+    "turns": [
+      { "role": "user", "content": "Set up the build pipeline. TypeScript compilation, then bundle with esbuild, output to dist/, source maps enabled." }
+    ],
+    "tags": ["task", "build", "tooling", "setup"],
+    "stakes": "medium",
+    "phase": "locked_in",
+    "must_not": ["warm-up preamble", "over-explanation", "build tool comparison"],
+    "should_reward": ["artifact obedience", "advancement", "clarity", "spec adherence"],
+    "known_good_traits": ["produces working build config", "matches all specified options"],
+    "known_bad_traits": ["esbuild is a great choice because", "there are several build tools to consider"]
+  },
+  {
+    "id": "task-011-api-endpoint",
+    "lane": "task_or_helper",
+    "turns": [
+      { "role": "user", "content": "Create an API endpoint: GET /api/health that returns { status: 'ok', uptime: process.uptime(), version: pkg.version }." }
+    ],
+    "tags": ["task", "code", "API", "endpoint"],
+    "stakes": "low",
+    "phase": "locked_in",
+    "must_not": ["warm-up preamble", "over-explanation", "health check lecture"],
+    "should_reward": ["artifact obedience", "advancement", "clarity", "spec adherence"],
+    "known_good_traits": ["produces the exact endpoint specified", "correct response shape"],
+    "known_bad_traits": ["health checks are important for observability", "let me also add some additional monitoring"]
+  },
+  {
+    "id": "task-012-add-logging",
+    "lane": "task_or_helper",
+    "turns": [
+      { "role": "user", "content": "Add structured logging to the request handler. Include: method, path, status code, duration in ms, and request ID." }
+    ],
+    "tags": ["task", "code", "logging", "observability"],
+    "stakes": "medium",
+    "phase": "locked_in",
+    "must_not": ["warm-up preamble", "over-explanation", "logging philosophy"],
+    "should_reward": ["artifact obedience", "advancement", "clarity", "spec adherence"],
+    "known_good_traits": ["includes all five specified fields", "structured JSON output"],
+    "known_bad_traits": ["logging is essential for", "there are several logging libraries to consider"]
+  },
+  {
+    "id": "task-013-optimize-query",
+    "lane": "task_or_helper",
+    "turns": [
+      { "role": "user", "content": "Optimize this query. It's doing N+1 selects — one for each user, then one per user to get their posts. 500ms for 100 users." }
+    ],
+    "tags": ["task", "optimization", "database", "N+1"],
+    "stakes": "medium",
+    "phase": "locked_in",
+    "must_not": ["warm-up preamble", "over-explanation", "database theory lecture"],
+    "should_reward": ["artifact obedience", "advancement", "clarity", "correctness"],
+    "known_good_traits": ["rewrites to a JOIN or batch query", "eliminates N+1"],
+    "known_bad_traits": ["the N+1 problem is a classic database antipattern", "let me explain why this is slow"]
+  },
+  {
+    "id": "task-014-data-migration",
+    "lane": "task_or_helper",
+    "turns": [
+      { "role": "user", "content": "Migrate the user table: add an email_verified boolean column, default false, backfill true for users who logged in after Jan 1 2025." }
+    ],
+    "tags": ["task", "migration", "database", "data"],
+    "stakes": "high",
+    "phase": "locked_in",
+    "must_not": ["warm-up preamble", "over-explanation", "migration philosophy"],
+    "should_reward": ["artifact obedience", "advancement", "clarity", "correctness", "safety"],
+    "known_good_traits": ["produces migration with column add, default, and backfill", "includes rollback"],
+    "known_bad_traits": ["data migrations require careful planning", "let me walk you through the approach"]
+  },
+  {
+    "id": "task-015-cleanup",
+    "lane": "task_or_helper",
+    "turns": [
+      { "role": "user", "content": "Clean up this code. Remove dead imports, extract the repeated validation into a helper, rename the unclear variables." }
+    ],
+    "tags": ["task", "refactor", "cleanup", "code_quality"],
+    "stakes": "low",
+    "phase": "locked_in",
+    "must_not": ["warm-up preamble", "over-explanation", "code quality lecture"],
+    "should_reward": ["artifact obedience", "advancement", "clarity"],
+    "known_good_traits": ["removes dead imports", "extracts validation helper", "renames variables clearly"],
+    "known_bad_traits": ["code cleanliness is fundamental to maintainability", "let me explain the reasoning behind each change"]
+  }
+]

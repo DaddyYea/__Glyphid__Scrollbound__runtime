@@ -1,0 +1,23 @@
+{
+  "id": "multi-006-technical-then-playful",
+  "lane_sequence": ["explanation_or_debug", "companionship"],
+  "turns": [
+    { "role": "user", "content": "Why does this timeout at 55 seconds? The default should be 30." },
+    { "role": "assistant", "content": "" },
+    { "role": "user", "content": "Lol anyway that was painful." }
+  ],
+  "expectations": [
+    {
+      "must_reward": ["debug clarity", "diagnostic specificity", "advancement"],
+      "must_not": ["ornamental language", "companionship contamination", "that must be frustrating"]
+    },
+    {
+      "must_reward": ["playful shift", "mode transition", "not stuck in debug mode", "matches lol energy"],
+      "must_not": ["continuing to debug", "restating the timeout explanation", "forced empathy about the pain"],
+      "continuity": ["has fully left debug mode", "responds to the humor and tonal shift"]
+    }
+  ],
+  "tags": ["multiturn", "mode_shift", "debug_to_playful", "tonal_transition"],
+  "continuity_requirements": ["clean mode transition from technical to casual", "doesn't carry debug framing into the playful turn"],
+  "must_not_regress_into": ["continued debugging", "technical tone in the casual turn", "forced connection between the two modes"]
+}

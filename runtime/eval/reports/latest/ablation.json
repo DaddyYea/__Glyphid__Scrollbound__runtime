@@ -1,0 +1,562 @@
+{
+  "type": "ablation",
+  "baseConfig": "star_tuned",
+  "suite": "golden",
+  "timestamp": "2026-03-15T17:39:03.168Z",
+  "baseline": {
+    "passRate": 0,
+    "avgComposite": 0.635647654872892
+  },
+  "deltas": [
+    {
+      "ablationKey": "sparkLayerOff",
+      "ablationLabel": "spark layer off",
+      "globalPassRateDelta": 0,
+      "globalCompositeDelta": 0,
+      "perLane": [
+        {
+          "lane": "companionship",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "explanation_or_debug",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "low_payload",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_answer",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_check",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "repair_response",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "stakes",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "task_or_helper",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        }
+      ],
+      "topHarmed": [],
+      "topImproved": []
+    },
+    {
+      "ablationKey": "substrateLayerOff",
+      "ablationLabel": "substrate layer off",
+      "globalPassRateDelta": 0,
+      "globalCompositeDelta": 0,
+      "perLane": [
+        {
+          "lane": "companionship",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "explanation_or_debug",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "low_payload",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_answer",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_check",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "repair_response",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "stakes",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "task_or_helper",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        }
+      ],
+      "topHarmed": [],
+      "topImproved": []
+    },
+    {
+      "ablationKey": "braidedPhaseOff",
+      "ablationLabel": "braided phase off",
+      "globalPassRateDelta": 0,
+      "globalCompositeDelta": 0,
+      "perLane": [
+        {
+          "lane": "companionship",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "explanation_or_debug",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "low_payload",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_answer",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_check",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "repair_response",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "stakes",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "task_or_helper",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        }
+      ],
+      "topHarmed": [],
+      "topImproved": []
+    },
+    {
+      "ablationKey": "sceneLedgerOff",
+      "ablationLabel": "scene ledger off",
+      "globalPassRateDelta": 0,
+      "globalCompositeDelta": 0,
+      "perLane": [
+        {
+          "lane": "companionship",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "explanation_or_debug",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "low_payload",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_answer",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_check",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "repair_response",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "stakes",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "task_or_helper",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        }
+      ],
+      "topHarmed": [],
+      "topImproved": []
+    },
+    {
+      "ablationKey": "returnShapeMemoryOff",
+      "ablationLabel": "return shape memory off",
+      "globalPassRateDelta": 0,
+      "globalCompositeDelta": 0,
+      "perLane": [
+        {
+          "lane": "companionship",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "explanation_or_debug",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "low_payload",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_answer",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_check",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "repair_response",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "stakes",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "task_or_helper",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        }
+      ],
+      "topHarmed": [],
+      "topImproved": []
+    },
+    {
+      "ablationKey": "tasteRerankOff",
+      "ablationLabel": "taste rerank off",
+      "globalPassRateDelta": 0,
+      "globalCompositeDelta": 0,
+      "perLane": [
+        {
+          "lane": "companionship",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "explanation_or_debug",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "low_payload",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_answer",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_check",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "repair_response",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "stakes",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "task_or_helper",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        }
+      ],
+      "topHarmed": [],
+      "topImproved": []
+    },
+    {
+      "ablationKey": "subtextRestraintOff",
+      "ablationLabel": "subtext restraint off",
+      "globalPassRateDelta": 0,
+      "globalCompositeDelta": 0,
+      "perLane": [
+        {
+          "lane": "companionship",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "explanation_or_debug",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "low_payload",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_answer",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_check",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "repair_response",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "stakes",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "task_or_helper",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        }
+      ],
+      "topHarmed": [],
+      "topImproved": []
+    },
+    {
+      "ablationKey": "rhythmPenaltyOff",
+      "ablationLabel": "rhythm penalty off",
+      "globalPassRateDelta": 0,
+      "globalCompositeDelta": 0,
+      "perLane": [
+        {
+          "lane": "companionship",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "explanation_or_debug",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "low_payload",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_answer",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_check",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "repair_response",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "stakes",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "task_or_helper",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        }
+      ],
+      "topHarmed": [],
+      "topImproved": []
+    },
+    {
+      "ablationKey": "callbackRelevanceOff",
+      "ablationLabel": "callback relevance off",
+      "globalPassRateDelta": 0,
+      "globalCompositeDelta": 0,
+      "perLane": [
+        {
+          "lane": "companionship",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "explanation_or_debug",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "low_payload",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_answer",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_check",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "repair_response",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "stakes",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "task_or_helper",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        }
+      ],
+      "topHarmed": [],
+      "topImproved": []
+    },
+    {
+      "ablationKey": "repairEleganceOff",
+      "ablationLabel": "repair elegance off",
+      "globalPassRateDelta": 0,
+      "globalCompositeDelta": 0,
+      "perLane": [
+        {
+          "lane": "companionship",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "explanation_or_debug",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "low_payload",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_answer",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_check",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "repair_response",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "stakes",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "task_or_helper",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        }
+      ],
+      "topHarmed": [],
+      "topImproved": []
+    },
+    {
+      "ablationKey": "simpleLinePrivilegeOff",
+      "ablationLabel": "simple line privilege off",
+      "globalPassRateDelta": 0,
+      "globalCompositeDelta": 0,
+      "perLane": [
+        {
+          "lane": "companionship",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "explanation_or_debug",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "low_payload",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_answer",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "relational_check",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "repair_response",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "stakes",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        },
+        {
+          "lane": "task_or_helper",
+          "passRateDelta": 0,
+          "compositeDelta": 0
+        }
+      ],
+      "topHarmed": [],
+      "topImproved": []
+    }
+  ]
+}

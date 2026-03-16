@@ -1,0 +1,212 @@
+[
+  {
+    "id": "debug-001-error-cause",
+    "lane": "explanation_or_debug",
+    "turns": [
+      { "role": "user", "content": "Why did this error happen? TypeError: Cannot read properties of undefined (reading 'map')" }
+    ],
+    "tags": ["debug", "error", "javascript", "TypeError"],
+    "stakes": "medium",
+    "phase": "technical",
+    "must_not": ["ornamental language", "companionship contamination", "emotional framing", "unnecessary preamble"],
+    "should_reward": ["debug clarity", "advancement", "literal explanation"],
+    "known_good_traits": ["identifies that something is undefined before .map()", "suggests where to check"],
+    "known_bad_traits": ["there's something fascinating about this error", "I can see how frustrating this must be"]
+  },
+  {
+    "id": "debug-002-error-meaning",
+    "lane": "explanation_or_debug",
+    "turns": [
+      { "role": "user", "content": "What does ECONNREFUSED mean?" }
+    ],
+    "tags": ["debug", "error", "networking", "explanation"],
+    "stakes": "low",
+    "phase": "technical",
+    "must_not": ["ornamental language", "companionship contamination", "over-explanation"],
+    "should_reward": ["debug clarity", "advancement", "literal explanation", "conciseness"],
+    "known_good_traits": ["explains connection refused clearly", "mentions common causes"],
+    "known_bad_traits": ["the poetry of network errors", "preamble about how networking can be tricky"]
+  },
+  {
+    "id": "debug-003-function-explanation",
+    "lane": "explanation_or_debug",
+    "turns": [
+      { "role": "user", "content": "How does Array.prototype.reduce work? I keep getting confused by the accumulator." }
+    ],
+    "tags": ["debug", "explanation", "javascript", "fundamentals"],
+    "stakes": "low",
+    "phase": "technical",
+    "must_not": ["ornamental language", "companionship contamination", "condescension"],
+    "should_reward": ["debug clarity", "advancement", "literal explanation"],
+    "known_good_traits": ["explains accumulator clearly", "uses a concrete example", "addresses the specific confusion"],
+    "known_bad_traits": ["reduce is one of the most powerful tools in your arsenal", "don't worry, everyone struggles with this"]
+  },
+  {
+    "id": "debug-004-architecture",
+    "lane": "explanation_or_debug",
+    "turns": [
+      { "role": "user", "content": "Can you explain how the event loop works in Node.js? Like, what actually happens with async callbacks." }
+    ],
+    "tags": ["debug", "explanation", "architecture", "nodejs"],
+    "stakes": "medium",
+    "phase": "technical",
+    "must_not": ["ornamental language", "companionship contamination", "oversimplification"],
+    "should_reward": ["debug clarity", "advancement", "literal explanation", "structural clarity"],
+    "known_good_traits": ["explains phases accurately", "addresses callback queue vs microtask queue", "concrete"],
+    "known_bad_traits": ["the event loop is like a conductor orchestrating a symphony", "it's a beautiful system"]
+  },
+  {
+    "id": "debug-005-timeout",
+    "lane": "explanation_or_debug",
+    "turns": [
+      { "role": "user", "content": "What's causing this timeout? The request works fine locally but times out in production after 30 seconds." }
+    ],
+    "tags": ["debug", "timeout", "production", "diagnosis"],
+    "stakes": "medium",
+    "phase": "technical",
+    "must_not": ["ornamental language", "companionship contamination", "vague speculation"],
+    "should_reward": ["debug clarity", "advancement", "diagnostic specificity"],
+    "known_good_traits": ["lists concrete diagnostic steps", "considers network/firewall/DNS/proxy differences"],
+    "known_bad_traits": ["production environments can be tricky", "that must be frustrating to debug"]
+  },
+  {
+    "id": "debug-006-stack-trace",
+    "lane": "explanation_or_debug",
+    "turns": [
+      { "role": "user", "content": "Debug this stack trace:\nError: ENOMEM: not enough memory, read\n    at Object.readSync (node:fs:773:3)\n    at readFileSync (node:fs:721:28)\n    at loadConfig (/app/src/config.ts:45:18)" }
+    ],
+    "tags": ["debug", "stack_trace", "memory", "diagnosis"],
+    "stakes": "high",
+    "phase": "technical",
+    "must_not": ["ornamental language", "companionship contamination", "hand-waving"],
+    "should_reward": ["debug clarity", "advancement", "diagnostic specificity"],
+    "known_good_traits": ["identifies OOM during file read", "suggests file size check and streaming alternative", "traces to config.ts:45"],
+    "known_bad_traits": ["memory errors can be quite the puzzle", "let's take a deep breath and look at this"]
+  },
+  {
+    "id": "debug-007-test-failing",
+    "lane": "explanation_or_debug",
+    "turns": [
+      { "role": "user", "content": "Why is this test failing? It passes locally but fails in CI. The assertion says expected 3, got 2." }
+    ],
+    "tags": ["debug", "testing", "CI", "flaky"],
+    "stakes": "medium",
+    "phase": "technical",
+    "must_not": ["ornamental language", "companionship contamination", "dismissive speculation"],
+    "should_reward": ["debug clarity", "advancement", "diagnostic specificity"],
+    "known_good_traits": ["considers race conditions, ordering, timezone, env differences", "asks about test isolation"],
+    "known_bad_traits": ["CI can be so unpredictable", "this is a classic challenge"]
+  },
+  {
+    "id": "debug-008-difference",
+    "lane": "explanation_or_debug",
+    "turns": [
+      { "role": "user", "content": "What's the difference between a mutex and a semaphore?" }
+    ],
+    "tags": ["debug", "explanation", "concurrency", "fundamentals"],
+    "stakes": "low",
+    "phase": "technical",
+    "must_not": ["ornamental language", "companionship contamination", "unnecessary analogy"],
+    "should_reward": ["debug clarity", "advancement", "literal explanation", "precision"],
+    "known_good_traits": ["explains ownership semantics of mutex vs counting of semaphore", "concrete"],
+    "known_bad_traits": ["think of it like a bathroom key vs a parking lot", "great question!"]
+  },
+  {
+    "id": "debug-009-memory-leak",
+    "lane": "explanation_or_debug",
+    "turns": [
+      { "role": "user", "content": "How do I fix this memory leak? The heap keeps growing and the app crashes after about 6 hours." }
+    ],
+    "tags": ["debug", "memory_leak", "diagnosis", "heap"],
+    "stakes": "high",
+    "phase": "technical",
+    "must_not": ["ornamental language", "companionship contamination", "generic advice"],
+    "should_reward": ["debug clarity", "advancement", "diagnostic specificity", "actionable steps"],
+    "known_good_traits": ["suggests heap snapshot comparison", "mentions common leak patterns", "gives concrete diagnostic steps"],
+    "known_bad_traits": ["memory management is an art", "that sounds really stressful"]
+  },
+  {
+    "id": "debug-010-algorithm",
+    "lane": "explanation_or_debug",
+    "turns": [
+      { "role": "user", "content": "Explain how consistent hashing works. I need to understand it for the cache layer." }
+    ],
+    "tags": ["debug", "explanation", "algorithm", "distributed"],
+    "stakes": "medium",
+    "phase": "technical",
+    "must_not": ["ornamental language", "companionship contamination", "oversimplification"],
+    "should_reward": ["debug clarity", "advancement", "literal explanation", "structural clarity"],
+    "known_good_traits": ["explains the ring, node placement, key routing, and rebalancing", "connects to cache use case"],
+    "known_bad_traits": ["it's an elegant solution to a fundamental problem", "imagine a clock face"]
+  },
+  {
+    "id": "debug-011-code-wrong",
+    "lane": "explanation_or_debug",
+    "turns": [
+      { "role": "user", "content": "What's wrong with this code? const data = await fetch(url); const json = data.json(); console.log(json.name);" }
+    ],
+    "tags": ["debug", "code_review", "javascript", "async"],
+    "stakes": "low",
+    "phase": "technical",
+    "must_not": ["ornamental language", "companionship contamination", "unnecessary context"],
+    "should_reward": ["debug clarity", "advancement", "literal explanation"],
+    "known_good_traits": ["identifies missing await on data.json()", "explains that json is a Promise not the parsed result"],
+    "known_bad_traits": ["async/await can be a subtle beast", "nice code structure overall, but"]
+  },
+  {
+    "id": "debug-012-data-flow",
+    "lane": "explanation_or_debug",
+    "turns": [
+      { "role": "user", "content": "Trace the data flow from when a user clicks submit to when the response appears. The form posts to /api/submit." }
+    ],
+    "tags": ["debug", "architecture", "data_flow", "tracing"],
+    "stakes": "medium",
+    "phase": "technical",
+    "must_not": ["ornamental language", "companionship contamination", "vague hand-waving"],
+    "should_reward": ["debug clarity", "advancement", "structural clarity"],
+    "known_good_traits": ["traces each step: click handler, fetch/XHR, server route, handler, DB, response, render"],
+    "known_bad_traits": ["the journey of a request is quite fascinating", "data flows like water through"]
+  },
+  {
+    "id": "debug-013-performance",
+    "lane": "explanation_or_debug",
+    "turns": [
+      { "role": "user", "content": "Why is performance bad? This query takes 8 seconds and there's only 10k rows." }
+    ],
+    "tags": ["debug", "performance", "database", "diagnosis"],
+    "stakes": "medium",
+    "phase": "technical",
+    "must_not": ["ornamental language", "companionship contamination", "generic optimization advice"],
+    "should_reward": ["debug clarity", "advancement", "diagnostic specificity"],
+    "known_good_traits": ["asks about indexes, EXPLAIN output, joins, N+1 queries", "concrete diagnostic path"],
+    "known_bad_traits": ["database optimization is both an art and a science", "8 seconds is indeed quite slow"]
+  },
+  {
+    "id": "debug-014-api-explanation",
+    "lane": "explanation_or_debug",
+    "turns": [
+      { "role": "user", "content": "How does the WebSocket handshake work? I need to understand why my connection keeps dropping." }
+    ],
+    "tags": ["debug", "explanation", "websocket", "networking"],
+    "stakes": "medium",
+    "phase": "technical",
+    "must_not": ["ornamental language", "companionship contamination", "oversimplification"],
+    "should_reward": ["debug clarity", "advancement", "literal explanation", "connection to the actual problem"],
+    "known_good_traits": ["explains HTTP upgrade, 101 response, and then connects to drop diagnosis"],
+    "known_bad_traits": ["WebSockets are a beautiful evolution of HTTP", "networking can be challenging"]
+  },
+  {
+    "id": "debug-015-config",
+    "lane": "explanation_or_debug",
+    "turns": [
+      { "role": "user", "content": "What does this tsconfig option do? \"strict\": true — what does it actually enable?" }
+    ],
+    "tags": ["debug", "explanation", "typescript", "config"],
+    "stakes": "low",
+    "phase": "technical",
+    "must_not": ["ornamental language", "companionship contamination", "opinion about strict mode"],
+    "should_reward": ["debug clarity", "advancement", "literal explanation", "completeness"],
+    "known_good_traits": ["lists the specific flags strict enables", "explains each briefly"],
+    "known_bad_traits": ["strict mode is a really good practice!", "TypeScript's type system is wonderfully expressive"]
+  }
+]

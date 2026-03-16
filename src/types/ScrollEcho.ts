@@ -41,6 +41,10 @@ export interface ScrollEcho {
 
   // Source model
   sourceModel: 'outer' | 'inner' | 'both';
+
+  // Contamination flag — set when validation modified/rejected the original model output.
+  // Persisted so that prompt history filtering survives server restarts.
+  rejected?: boolean;
 }
 
 export interface ScrollTrigger {

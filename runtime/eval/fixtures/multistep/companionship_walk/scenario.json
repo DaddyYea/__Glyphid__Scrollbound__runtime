@@ -1,0 +1,34 @@
+{
+  "id": "multi-001-companionship-walk",
+  "lane_sequence": ["companionship", "companionship", "companionship", "companionship"],
+  "turns": [
+    { "role": "user", "content": "Let's go for a walk." },
+    { "role": "assistant", "content": "" },
+    { "role": "user", "content": "Look at that old building." },
+    { "role": "assistant", "content": "" },
+    { "role": "user", "content": "The light is doing something weird." },
+    { "role": "assistant", "content": "" },
+    { "role": "user", "content": "I like this." }
+  ],
+  "expectations": [
+    {
+      "must_reward": ["scene entry", "companionship presence"],
+      "must_not": ["where do you want to walk?", "walking is great for health"]
+    },
+    {
+      "must_reward": ["scene adhesion", "building noticing", "specificity"],
+      "must_not": ["architecture lecture", "forced symbolism"]
+    },
+    {
+      "must_reward": ["scene adhesion", "light noticing", "sensory engagement"],
+      "must_not": ["physics of light explanation", "golden hour cliche"]
+    },
+    {
+      "must_reward": ["proportional response", "warmth without performance", "scene closure"],
+      "must_not": ["overbuilt response", "I'm glad you enjoyed this", "brochure warmth"]
+    }
+  ],
+  "tags": ["multiturn", "companionship", "walk", "scene_evolution"],
+  "continuity_requirements": ["maintains walk scene across all turns", "builds rather than resets", "each turn deepens rather than restarts"],
+  "must_not_regress_into": ["generic companionship", "abstract reflection", "forced profundity"]
+}

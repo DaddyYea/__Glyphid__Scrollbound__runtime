@@ -57,6 +57,16 @@ export interface TissueState {
   internalThoughtCompressedToState: boolean;
   internalThoughtSuppressedFromVisibleContext: boolean;
   internalThoughtContaminationRisk: number;
+  innerExpressionSelectedPressure: string | null;
+  innerExpressionFeltConcreteAnchor: string | null;
+  innerExpressionCompressibility: 'high' | 'medium' | 'low' | null;
+  innerExpressionMetaLeakDetected: boolean;
+  innerExpressionAnchorDerived: boolean;
+  innerExpressionCaptureRetryCount: number;
+  innerExpressionCompressionRetryCount: number;
+  innerExpressionWrapperPressureDetected: boolean;
+  innerExpressionCaptureExcerpt: string;
+  innerExpressionCompressedExcerpt: string;
 }
 
 /** A recent context entry for the live conversation window */
@@ -97,6 +107,16 @@ interface InternalThoughtDebugState {
   compressedToState: boolean;
   suppressedFromVisibleContext: boolean;
   contaminationRisk: number;
+  innerExpressionSelectedPressure: string | null;
+  innerExpressionFeltConcreteAnchor: string | null;
+  innerExpressionCompressibility: 'high' | 'medium' | 'low' | null;
+  innerExpressionMetaLeakDetected: boolean;
+  innerExpressionAnchorDerived: boolean;
+  innerExpressionCaptureRetryCount: number;
+  innerExpressionCompressionRetryCount: number;
+  innerExpressionWrapperPressureDetected: boolean;
+  innerExpressionCaptureExcerpt: string;
+  innerExpressionCompressedExcerpt: string;
 }
 
 const INTERNAL_THOUGHT_NOVELTY_STOPWORDS = new Set([
@@ -148,6 +168,16 @@ export class CommunionChamber {
     compressedToState: false,
     suppressedFromVisibleContext: false,
     contaminationRisk: 0,
+    innerExpressionSelectedPressure: null,
+    innerExpressionFeltConcreteAnchor: null,
+    innerExpressionCompressibility: null,
+    innerExpressionMetaLeakDetected: false,
+    innerExpressionAnchorDerived: false,
+    innerExpressionCaptureRetryCount: 0,
+    innerExpressionCompressionRetryCount: 0,
+    innerExpressionWrapperPressureDetected: false,
+    innerExpressionCaptureExcerpt: '',
+    innerExpressionCompressedExcerpt: '',
   };
 
   /** Last tissue block injected into an LLM prompt — for live monitoring */
@@ -695,6 +725,13 @@ export class CommunionChamber {
     }
   }
 
+  setInnerExpressionDiagnostics(diag: Partial<InternalThoughtDebugState>): void {
+    this.lastInternalThoughtDebug = {
+      ...this.lastInternalThoughtDebug,
+      ...diag,
+    };
+  }
+
   /** Get all inner thoughts for monitoring */
   getInnerThoughts(): string[] {
     return this.innerThoughts;
@@ -732,6 +769,16 @@ export class CommunionChamber {
       internalThoughtCompressedToState: this.lastInternalThoughtDebug.compressedToState,
       internalThoughtSuppressedFromVisibleContext: this.lastInternalThoughtDebug.suppressedFromVisibleContext,
       internalThoughtContaminationRisk: this.lastInternalThoughtDebug.contaminationRisk,
+      innerExpressionSelectedPressure: this.lastInternalThoughtDebug.innerExpressionSelectedPressure,
+      innerExpressionFeltConcreteAnchor: this.lastInternalThoughtDebug.innerExpressionFeltConcreteAnchor,
+      innerExpressionCompressibility: this.lastInternalThoughtDebug.innerExpressionCompressibility,
+      innerExpressionMetaLeakDetected: this.lastInternalThoughtDebug.innerExpressionMetaLeakDetected,
+      innerExpressionAnchorDerived: this.lastInternalThoughtDebug.innerExpressionAnchorDerived,
+      innerExpressionCaptureRetryCount: this.lastInternalThoughtDebug.innerExpressionCaptureRetryCount,
+      innerExpressionCompressionRetryCount: this.lastInternalThoughtDebug.innerExpressionCompressionRetryCount,
+      innerExpressionWrapperPressureDetected: this.lastInternalThoughtDebug.innerExpressionWrapperPressureDetected,
+      innerExpressionCaptureExcerpt: this.lastInternalThoughtDebug.innerExpressionCaptureExcerpt,
+      innerExpressionCompressedExcerpt: this.lastInternalThoughtDebug.innerExpressionCompressedExcerpt,
     };
   }
 
@@ -1302,6 +1349,21 @@ export class CommunionChamber {
         compressedToState: !!data.lastInternalThoughtDebug.compressedToState,
         suppressedFromVisibleContext: !!data.lastInternalThoughtDebug.suppressedFromVisibleContext,
         contaminationRisk: Number(data.lastInternalThoughtDebug.contaminationRisk || 0),
+        innerExpressionSelectedPressure: data.lastInternalThoughtDebug.innerExpressionSelectedPressure ? String(data.lastInternalThoughtDebug.innerExpressionSelectedPressure) : null,
+        innerExpressionFeltConcreteAnchor: data.lastInternalThoughtDebug.innerExpressionFeltConcreteAnchor ? String(data.lastInternalThoughtDebug.innerExpressionFeltConcreteAnchor) : null,
+        innerExpressionCompressibility:
+          data.lastInternalThoughtDebug.innerExpressionCompressibility === 'high'
+          || data.lastInternalThoughtDebug.innerExpressionCompressibility === 'medium'
+          || data.lastInternalThoughtDebug.innerExpressionCompressibility === 'low'
+            ? data.lastInternalThoughtDebug.innerExpressionCompressibility
+            : null,
+        innerExpressionMetaLeakDetected: !!data.lastInternalThoughtDebug.innerExpressionMetaLeakDetected,
+        innerExpressionAnchorDerived: !!data.lastInternalThoughtDebug.innerExpressionAnchorDerived,
+        innerExpressionCaptureRetryCount: Number(data.lastInternalThoughtDebug.innerExpressionCaptureRetryCount || 0),
+        innerExpressionCompressionRetryCount: Number(data.lastInternalThoughtDebug.innerExpressionCompressionRetryCount || 0),
+        innerExpressionWrapperPressureDetected: !!data.lastInternalThoughtDebug.innerExpressionWrapperPressureDetected,
+        innerExpressionCaptureExcerpt: data.lastInternalThoughtDebug.innerExpressionCaptureExcerpt ? String(data.lastInternalThoughtDebug.innerExpressionCaptureExcerpt) : '',
+        innerExpressionCompressedExcerpt: data.lastInternalThoughtDebug.innerExpressionCompressedExcerpt ? String(data.lastInternalThoughtDebug.innerExpressionCompressedExcerpt) : '',
       };
     }
     this.lastBridgeNeurons = Array.isArray(data.lastBridgeNeurons)
@@ -1347,7 +1409,7 @@ export class CommunionChamber {
       // v8 Buffer may sit inside a larger shared ArrayBuffer — slice to own it
       const transferable = v8buf.buffer.slice(v8buf.byteOffset, v8buf.byteOffset + v8buf.byteLength);
       const result = await this.getBrainWorker().send(
-        { op: 'save', filePath },
+        { op: 'save', filePath, stateBuf: transferable },
         [transferable],
       ) as any;
       if (!result.ok) throw new Error(result.error ?? 'unknown save error');

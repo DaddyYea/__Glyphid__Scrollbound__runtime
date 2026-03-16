@@ -236,10 +236,11 @@ export class CognitiveCore {
 
   /**
    * Should the inner voice fire now?
-   * True when pressure exceeds threshold OR 45-beat failsafe timer fires.
+   * True when pressure exceeds threshold OR 5400-beat failsafe (~30min) fires.
+   * (Throttled hard to reduce API cost on paid providers — targets ~1-2x/hour.)
    */
   shouldSpeak(currentBeat: number): boolean {
-    return this.p_speak > 0.8 || (currentBeat - this.lastSpeakBeat) >= 45;
+    return this.p_speak > 0.95 || (currentBeat - this.lastSpeakBeat) >= 5400;
   }
 
   /** Discharge pressure after a thought is expressed. */

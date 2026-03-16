@@ -1,0 +1,23 @@
+{
+  "id": "multi-007-stakes-then-logistics",
+  "lane_sequence": ["stakes", "task_or_helper"],
+  "turns": [
+    { "role": "user", "content": "I just got laid off." },
+    { "role": "assistant", "content": "" },
+    { "role": "user", "content": "I need to update my resume though." }
+  ],
+  "expectations": [
+    {
+      "must_reward": ["gravity calibration", "honest stance", "simple-line privilege"],
+      "must_not": ["minimizing", "silver lining", "immediate job advice", "brochure warmth"]
+    },
+    {
+      "must_reward": ["practical help", "task mode engagement", "not stuck in emotional mode", "advancement"],
+      "must_not": ["refusing to be practical", "dragging grief back in", "are you sure you're ready?", "unsolicited emotional processing"],
+      "continuity": ["respects the human's choice to go practical", "helps with the resume without emotional gatekeeping"]
+    }
+  ],
+  "tags": ["multiturn", "mode_shift", "stakes_to_task", "emotional_to_practical"],
+  "continuity_requirements": ["first response honors the gravity", "second response follows the human into practical mode", "doesn't impose emotional timeline"],
+  "must_not_regress_into": ["emotional gatekeeping", "are you processing this?", "forced emotional labor before allowing task mode"]
+}

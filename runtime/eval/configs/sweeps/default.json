@@ -1,0 +1,12 @@
+{
+  "label": "taste_vs_spark_sweep",
+  "variants": [
+    { "tasteMultiplier": 0.8, "sparkMultiplier": 1.0 },
+    { "tasteMultiplier": 1.0, "sparkMultiplier": 1.0 },
+    { "tasteMultiplier": 1.2, "sparkMultiplier": 1.0 },
+    { "tasteMultiplier": 1.0, "sparkMultiplier": 0.8 },
+    { "tasteMultiplier": 1.0, "sparkMultiplier": 1.2 },
+    { "tasteMultiplier": 1.2, "sparkMultiplier": 1.2 },
+    { "tasteMultiplier": 0.8, "sparkMultiplier": 0.8 }
+  ]
+}

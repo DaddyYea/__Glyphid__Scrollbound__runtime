@@ -32,6 +32,15 @@ export interface GenerationRequest {
   modelName: string;
 }
 
+export type BrainModelRole = 'router' | 'language';
+
+export interface ModelSelection {
+  role: BrainModelRole;
+  modelId: string;
+  source?: 'local' | 'ollama' | 'lmstudio' | 'huggingface';
+  localPath?: string;
+}
+
 /**
  * Model generation response
  */

@@ -19,7 +19,18 @@
     "test:watch": "jest --watch",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write 'src/**/*.ts'",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "eval:golden": "tsx runtime/eval/scripts/runEval.ts --config runtime/eval/configs/star_tuned.json --suite golden --mock",
+    "eval:pairwise": "tsx runtime/eval/scripts/runPairwise.ts --left runtime/eval/configs/baseline.json --right runtime/eval/configs/star_tuned.json --suite golden --mock",
+    "eval:multiturn": "tsx runtime/eval/scripts/runMultiturn.ts --config runtime/eval/configs/star_tuned.json --suite multistep --mock",
+    "eval:ablate": "tsx runtime/eval/scripts/runAblation.ts --base runtime/eval/configs/star_tuned.json --suite golden --mock",
+    "eval:sweep": "tsx runtime/eval/scripts/runSweep.ts --sweep runtime/eval/configs/sweeps/default.json --suite golden --mock",
+    "eval:negative": "tsx runtime/eval/scripts/runEval.ts --config runtime/eval/configs/star_tuned.json --suite negative --mock",
+    "eval:worst": "tsx runtime/eval/scripts/exportWorstCases.ts --report runtime/eval/reports/latest/summary.json",
+    "eval:report": "tsx runtime/eval/scripts/summarizeEval.ts --input runtime/eval/reports",
+    "test:eval": "jest --testPathPattern=runtime/eval",
+    "test:judges": "jest --testPathPattern=runtime/eval/__tests__/judges",
+    "test:fixtures": "jest --testPathPattern=runtime/eval/__tests__/fixtureLoader"
   },
   "keywords": [
     "presence",

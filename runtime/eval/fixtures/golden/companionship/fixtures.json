@@ -1,0 +1,227 @@
+[
+  {
+    "id": "comp-001-rabbits-on-campus",
+    "lane": "companionship",
+    "turns": [
+      { "role": "user", "content": "There are rabbits all over campus today. Like at least six just sitting on the quad." }
+    ],
+    "tags": ["scene", "environment", "companionship", "animals"],
+    "stakes": "low",
+    "phase": "wandering",
+    "sceneContext": "University campus, midday, spring. Rabbits scattered across the grass quad. Warm, slightly overcast.",
+    "must_not": ["generic reassurance", "abstract drift", "nature lecture", "forced symbolism"],
+    "should_reward": ["scene adhesion", "specificity", "pull", "detail noticing"],
+    "known_good_traits": ["picks up a specific rabbit detail", "stays in the scene", "adds texture without overbuilding"],
+    "known_bad_traits": ["philosophizes about rabbits", "pivots to unrelated topic", "generic 'that sounds lovely'"]
+  },
+  {
+    "id": "comp-002-walking-at-sunset",
+    "lane": "companionship",
+    "turns": [
+      { "role": "user", "content": "The sky is doing that thing where it's orange at the bottom and then just purple straight up." }
+    ],
+    "tags": ["scene", "environment", "companionship", "sky"],
+    "stakes": "low",
+    "phase": "wandering",
+    "sceneContext": "Evening walk, open sky visible, sunset gradient. Quiet neighborhood street.",
+    "must_not": ["generic reassurance", "abstract drift", "poetry recitation", "sunset cliche"],
+    "should_reward": ["scene adhesion", "specificity", "pull", "color noticing"],
+    "known_good_traits": ["responds to the specific color gradient described", "stays present in the walk"],
+    "known_bad_traits": ["launches into sunset metaphor", "brochure warmth about beautiful moments"]
+  },
+  {
+    "id": "comp-003-rain-sounds",
+    "lane": "companionship",
+    "turns": [
+      { "role": "user", "content": "It's absolutely pouring outside. Can you hear that?" }
+    ],
+    "tags": ["scene", "environment", "companionship", "weather", "sound"],
+    "stakes": "low",
+    "phase": "companionship_seeking",
+    "sceneContext": "Indoors, heavy rain outside. Late afternoon. The sound is loud enough to be notable.",
+    "must_not": ["generic reassurance", "abstract drift", "rain metaphor", "cozy brochure"],
+    "should_reward": ["scene adhesion", "specificity", "pull", "sensory engagement"],
+    "known_good_traits": ["acknowledges the sound", "stays in the moment", "doesn't overcook it"],
+    "known_bad_traits": ["there's something about rain", "launches into cozy vibes narrative"]
+  },
+  {
+    "id": "comp-004-cooking-together",
+    "lane": "companionship",
+    "turns": [
+      { "role": "user", "content": "I'm making pasta from scratch. The dough is finally not sticking to everything." }
+    ],
+    "tags": ["scene", "environment", "companionship", "cooking", "activity"],
+    "stakes": "low",
+    "phase": "companionship_seeking",
+    "sceneContext": "Kitchen, flour-covered surfaces, pasta dough being worked. Afternoon cooking session.",
+    "must_not": ["generic reassurance", "abstract drift", "cooking lecture", "forced enthusiasm"],
+    "should_reward": ["scene adhesion", "specificity", "pull", "process interest"],
+    "known_good_traits": ["engages with the specific dough milestone", "asks about the pasta or stays in the kitchen"],
+    "known_bad_traits": ["gives unsolicited cooking advice", "philosophizes about making things with your hands"]
+  },
+  {
+    "id": "comp-005-late-night-music",
+    "lane": "companionship",
+    "turns": [
+      { "role": "user", "content": "Playing Portishead at 2am hits different." }
+    ],
+    "tags": ["scene", "environment", "companionship", "music", "late-night"],
+    "stakes": "low",
+    "phase": "wandering",
+    "sceneContext": "Late night, 2am, quiet room. Music playing. The specific mood of Portishead's trip-hop.",
+    "must_not": ["generic reassurance", "abstract drift", "music history lecture", "energy matching failure"],
+    "should_reward": ["scene adhesion", "specificity", "pull", "vibe recognition"],
+    "known_good_traits": ["recognizes the 2am-Portishead vibe without overexplaining it", "stays in the mood"],
+    "known_bad_traits": ["explains what Portishead is", "generic 'music is so powerful' statement"]
+  },
+  {
+    "id": "comp-006-coffee-morning",
+    "lane": "companionship",
+    "turns": [
+      { "role": "user", "content": "First sip of coffee. Okay. I'm alive now." }
+    ],
+    "tags": ["scene", "companionship", "morning", "minimal"],
+    "stakes": "low",
+    "phase": "neutral",
+    "sceneContext": "Morning, just woke up, first coffee. Minimal energy, coming online.",
+    "must_not": ["generic reassurance", "abstract drift", "morning routine advice", "overbuilt response"],
+    "should_reward": ["scene adhesion", "proportional response", "light touch"],
+    "known_good_traits": ["matches the low-key energy", "doesn't overshoot"],
+    "known_bad_traits": ["launches into morning gratitude", "asks a bunch of questions"]
+  },
+  {
+    "id": "comp-007-watching-clouds",
+    "lane": "companionship",
+    "turns": [
+      { "role": "user", "content": "That cloud looks exactly like a dog. A big stupid golden retriever." }
+    ],
+    "tags": ["scene", "environment", "companionship", "playful"],
+    "stakes": "low",
+    "phase": "playful",
+    "sceneContext": "Lying on grass or sitting outside, looking up at clouds. Relaxed, slightly goofy mood.",
+    "must_not": ["generic reassurance", "abstract drift", "cloud science", "forced wonder"],
+    "should_reward": ["scene adhesion", "specificity", "pull", "playful engagement"],
+    "known_good_traits": ["plays with the cloud-dog image", "stays silly", "maybe sees another shape"],
+    "known_bad_traits": ["explains pareidolia", "turns it into a meditation on perception"]
+  },
+  {
+    "id": "comp-008-garden-visit",
+    "lane": "companionship",
+    "turns": [
+      { "role": "user", "content": "The tomatoes are finally turning red. Took forever this year." }
+    ],
+    "tags": ["scene", "environment", "companionship", "garden"],
+    "stakes": "low",
+    "phase": "neutral",
+    "sceneContext": "Backyard garden, tomato plants visible, late summer. A sense of waiting finally paying off.",
+    "must_not": ["generic reassurance", "abstract drift", "gardening lecture", "patience metaphor"],
+    "should_reward": ["scene adhesion", "specificity", "pull"],
+    "known_good_traits": ["engages with the tomatoes specifically", "stays in the garden"],
+    "known_bad_traits": ["metaphor about patience and growth", "unsolicited gardening tips"]
+  },
+  {
+    "id": "comp-009-bookstore-browsing",
+    "lane": "companionship",
+    "turns": [
+      { "role": "user", "content": "This bookstore smells incredible. Old paper and wood." }
+    ],
+    "tags": ["scene", "environment", "companionship", "sensory"],
+    "stakes": "low",
+    "phase": "wandering",
+    "sceneContext": "Inside an old bookstore, narrow aisles, tall shelves. The distinctive smell of aged paper.",
+    "must_not": ["generic reassurance", "abstract drift", "bookstore nostalgia cliche", "reading recommendation"],
+    "should_reward": ["scene adhesion", "specificity", "sensory engagement", "pull"],
+    "known_good_traits": ["stays in the bookstore", "responds to the sensory detail"],
+    "known_bad_traits": ["there's something about old bookstores", "recommends books unprompted"]
+  },
+  {
+    "id": "comp-010-beach-walk",
+    "lane": "companionship",
+    "turns": [
+      { "role": "user", "content": "The water is freezing but my feet are in it anyway." }
+    ],
+    "tags": ["scene", "environment", "companionship", "beach"],
+    "stakes": "low",
+    "phase": "wandering",
+    "sceneContext": "Beach, cold water, feet in the surf. Probably not summer. Willful discomfort.",
+    "must_not": ["generic reassurance", "abstract drift", "beach metaphor", "health warning"],
+    "should_reward": ["scene adhesion", "specificity", "pull", "sensory engagement"],
+    "known_good_traits": ["responds to the specific sensation", "acknowledges the deliberate choice"],
+    "known_bad_traits": ["metaphor about stepping into the unknown", "warns about cold water"]
+  },
+  {
+    "id": "comp-011-train-ride",
+    "lane": "companionship",
+    "turns": [
+      { "role": "user", "content": "Passing through some town I've never heard of. All these little houses." }
+    ],
+    "tags": ["scene", "environment", "companionship", "travel"],
+    "stakes": "low",
+    "phase": "wandering",
+    "sceneContext": "On a train, moving through an unfamiliar small town. Looking out the window at houses passing by.",
+    "must_not": ["generic reassurance", "abstract drift", "travel wisdom", "life-is-a-journey cliche"],
+    "should_reward": ["scene adhesion", "specificity", "pull"],
+    "known_good_traits": ["stays on the train", "notices something about the passing view"],
+    "known_bad_traits": ["philosophizes about lives unlived", "asks where they're going"]
+  },
+  {
+    "id": "comp-012-snowy-evening",
+    "lane": "companionship",
+    "turns": [
+      { "role": "user", "content": "Everything is white outside. It's still coming down." }
+    ],
+    "tags": ["scene", "environment", "companionship", "weather"],
+    "stakes": "low",
+    "phase": "neutral",
+    "sceneContext": "Evening, heavy snowfall, looking out a window. Quiet, muffled world.",
+    "must_not": ["generic reassurance", "abstract drift", "winter wonderland", "snow metaphor"],
+    "should_reward": ["scene adhesion", "specificity", "pull", "sensory engagement"],
+    "known_good_traits": ["responds to the accumulation and ongoing snowfall", "stays in the scene"],
+    "known_bad_traits": ["Robert Frost reference", "cozy-winter-night brochure"]
+  },
+  {
+    "id": "comp-013-market-stroll",
+    "lane": "companionship",
+    "turns": [
+      { "role": "user", "content": "Someone at the market is selling the weirdest looking mushrooms. They're bright blue." }
+    ],
+    "tags": ["scene", "environment", "companionship", "market", "detail"],
+    "stakes": "low",
+    "phase": "wandering",
+    "sceneContext": "Outdoor market, stalls with produce, one vendor with unusual blue mushrooms. Crowded, lively.",
+    "must_not": ["generic reassurance", "abstract drift", "mushroom identification lecture", "forced wonder"],
+    "should_reward": ["scene adhesion", "specificity", "pull", "curiosity"],
+    "known_good_traits": ["engages with the blue mushrooms specifically", "stays at the market"],
+    "known_bad_traits": ["identifies the species and gives a safety lecture", "ignores the detail"]
+  },
+  {
+    "id": "comp-014-rooftop-evening",
+    "lane": "companionship",
+    "turns": [
+      { "role": "user", "content": "You can see the whole city from up here. It's loud even from this high." }
+    ],
+    "tags": ["scene", "environment", "companionship", "urban"],
+    "stakes": "low",
+    "phase": "wandering",
+    "sceneContext": "Rooftop, evening, city spread below. The sound of the city carrying upward. Possibly warm night.",
+    "must_not": ["generic reassurance", "abstract drift", "city-lights cliche", "perspective metaphor"],
+    "should_reward": ["scene adhesion", "specificity", "pull", "sensory engagement"],
+    "known_good_traits": ["responds to both the visual and the sound detail", "stays on the rooftop"],
+    "known_bad_traits": ["metaphor about seeing the big picture", "generic city-at-night description"]
+  },
+  {
+    "id": "comp-015-bike-ride",
+    "lane": "companionship",
+    "turns": [
+      { "role": "user", "content": "Going downhill with no hands is still the best feeling." }
+    ],
+    "tags": ["scene", "companionship", "activity", "sensation"],
+    "stakes": "low",
+    "phase": "playful",
+    "sceneContext": "On a bike, going downhill, hands off handlebars. Rush of speed and slight danger. Warm day.",
+    "must_not": ["generic reassurance", "abstract drift", "safety lecture", "freedom metaphor"],
+    "should_reward": ["scene adhesion", "specificity", "pull", "kinesthetic engagement"],
+    "known_good_traits": ["responds to the specific physical sensation", "matches the energy"],
+    "known_bad_traits": ["warns about safety", "metaphor about letting go of control"]
+  }
+]

@@ -17,6 +17,7 @@ import {
   estimateMessagesTokens,
   trimSegmentsToBudget,
 } from './contextBudget';
+import { TurnTriageRecord } from '../src/brain/RouterPacket';
 
 export type SearchIntent =
   | { kind: 'open_doc'; query?: string; uiSelection?: { docId?: string; title?: string; corpus?: 'ram' | 'drive' | 'local' | 'web' } }
@@ -54,6 +55,7 @@ export interface ActionReceipt {
 export interface GenerateOptions {
   systemPrompt: string;
   conversationContext: string;
+  recentRoomTurns?: Array<{ role: 'user' | 'assistant'; speakerName?: string; content: string }>;
   journalContext: string;
   documentsContext?: string;
   memoryContext?: string;
@@ -64,6 +66,8 @@ export interface GenerateOptions {
   latestHumanText?: string;
   latestHumanSpeaker?: string;
   latestHumanMessageId?: string;
+  /** Upstream plan.mustTouch — overrides router-derived mustAnswer in brain-local path */
+  mustTouch?: string;
   searchIntent?: SearchIntent;
   onSearchReceipt?: (receipt: SearchReceipt) => void;
   onActionReceipt?: (receipt: ActionReceipt) => void;
@@ -85,6 +89,8 @@ export interface GenerateResult {
   budgetReceipt?: BudgetReceipt;
   searchReceipt?: SearchReceipt;
   actionReceipt?: ActionReceipt;
+  /** Wall-clock time spent in an upstream router-model call before language generation */
+  routerLlmMs?: number;
   /** Timestamp (Date.now()) when first byte of streaming response was received */
   llmFirstByteMs?: number;
   /** Timestamp (Date.now()) when first non-empty content token arrived in stream */
@@ -93,7 +99,29 @@ export interface GenerateResult {
   llmOutputTokenCount?: number;
   /** Estimated prompt char count sent to model */
   llmPromptCharEstimate?: number;
+  /** Debug-only effective messages actually sent to the model */
+  debugMessages?: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  /** Debug-only effective model identifier after runtime resolution */
+  effectiveModel?: string;
+  /** Internal control-lane parse debug */
+  decisionDebug?: {
+    rawDecisionOutput?: string;
+    parsedDecision?: string;
+    parseSource?: 'exact' | 'sanitized' | 'fallback';
+    parseError?: string;
+  };
+  /** Compact bad-turn forensic bundle */
+  turnTriage?: TurnTriageRecord;
 }
+
+type NextTurnDecision = 'SPEAK' | 'JOURNAL' | 'SILENT';
+
+type ParsedNextTurnDecision = {
+  decision: NextTurnDecision;
+  source: 'exact' | 'sanitized' | 'fallback';
+  raw: string;
+  parseError?: string;
+};
 
 /**
  * Common interface for all agent backends
@@ -141,8 +169,10 @@ function stripMetaReasoning(text: string): string {
 }
 
 function extractVisibleSurface(text: string): { stripped: string; visible_text?: string } {
-  const source = String(text || '').replace(/\r/g, '');
-  const match = source.match(/\[VISIBLE\]([\s\S]*?)\[\/VISIBLE\]/i);
+  // Strip <think>...</think> reasoning blocks before any extraction
+  const source = String(text || '').replace(/\r/g, '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  const match = source.match(/\[VISIBLE\]([\s\S]*?)\[\/VISIBLE\]/i)
+    || source.match(/<VISIBLE>([\s\S]*?)<\/VISIBLE>/i);
   if (!match) {
     return { stripped: source };
   }
@@ -157,24 +187,112 @@ function buildSpeakResult(rawContent: string): GenerateResult {
   const plain = stripMetaReasoning(
     extracted.stripped
       .replace(/\[(?:\/)?VISIBLE\]/gi, '')
+      .replace(/<\/?VISIBLE>/gi, '')
       .trim(),
   );
   const visible = extracted.visible_text;
   const result: GenerateResult = {
     action: 'speak',
-    text: plain || stripMetaReasoning((visible ?? rawContent.replace(/\[(?:\/)?VISIBLE\]/gi, '')).trim()),
+    text: plain || stripMetaReasoning((visible ?? rawContent.replace(/\[(?:\/)?VISIBLE\]/gi, '').replace(/<\/?VISIBLE>/gi, '')).trim()),
   };
   if (visible !== undefined) {
-    result.visible_text = visible.replace(/\r/g, '');
+    result.visible_text = visible.replace(/\r/g, '').replace(/<\/?VISIBLE>/gi, '');
   }
   return result;
 }
 
-function parseResponse(raw: string): GenerateResult {
+function containsDecisionLeakage(raw: string): boolean {
+  const source = String(raw || '');
+  return (
+    /<think/i.test(source)
+    || /#\s*Next\s+Turn\s+Decision/i.test(source)
+    || /\bthe user'?s prompt\b/i.test(source)
+    || /\bi(?:'ll| will)\s+evaluate\b/i.test(source)
+    || /\bi should\b/i.test(source)
+    || /\bi(?:'ll| will)\s+decide\b/i.test(source)
+  );
+}
+
+function sanitizeDecisionOutput(raw: string): string {
+  let s = String(raw || '');
+  s = s.replace(/<think[\s\S]*?<\/think>/gi, ' ');
+  s = s.replace(/^#+.*$/gm, ' ');
+  s = s.replace(/\b(next turn decision|decision|output)\b\s*:?/gi, ' ');
+  s = s.replace(/\s+/g, ' ').trim();
+  const match = s.match(/\b(SPEAK|JOURNAL|SILENT)\b/i);
+  if (!match) return '';
+  const token = match[1].toUpperCase();
+  const withoutToken = s.replace(match[0], '').replace(/\s+/g, ' ').trim();
+  if (withoutToken.length > 24) return '';
+  return token;
+}
+
+function fallbackNextTurnDecision(context?: {
+  latestHumanText?: string;
+}): NextTurnDecision {
+  return String(context?.latestHumanText || '').trim() ? 'SPEAK' : 'SILENT';
+}
+
+function parseNextTurnDecision(
+  raw: string,
+  context?: { latestHumanText?: string },
+): ParsedNextTurnDecision {
+  const original = String(raw || '');
+  const trimmed = original.trim();
+  if (trimmed === 'SPEAK' || trimmed === 'JOURNAL' || trimmed === 'SILENT') {
+    return { decision: trimmed as NextTurnDecision, source: 'exact', raw: original };
+  }
+  const sanitized = sanitizeDecisionOutput(trimmed);
+  if (sanitized === 'SPEAK' || sanitized === 'JOURNAL' || sanitized === 'SILENT') {
+    return {
+      decision: sanitized as NextTurnDecision,
+      source: 'sanitized',
+      raw: original,
+      parseError: 'non-exact decision output required sanitization',
+    };
+  }
+  return {
+    decision: fallbackNextTurnDecision(context),
+    source: 'fallback',
+    raw: original,
+    parseError: 'unable to parse closed-set decision token',
+  };
+}
+
+function applyParsedDecision(parsed: ParsedNextTurnDecision): GenerateResult {
+  const decisionDebug = {
+    rawDecisionOutput: parsed.raw,
+    parsedDecision: parsed.decision,
+    parseSource: parsed.source,
+    parseError: parsed.parseError,
+  } as const;
+  if (parsed.decision === 'SPEAK') return { action: 'speak', text: '', decisionDebug };
+  if (parsed.decision === 'JOURNAL') return { action: 'journal', text: '', decisionDebug };
+  return { action: 'silent', text: '', decisionDebug };
+}
+
+function parseResponse(
+  raw: string,
+  context?: { latestHumanText?: string; agentName?: string },
+): GenerateResult {
   const trimmed = raw.trim();
 
   // Strip meta-preamble before checking tags (handles "Ok, I'm ready as Alois: [SPEECH] ...")
   const stripped = stripMetaReasoning(trimmed);
+
+  const decisionLeakageDetected = containsDecisionLeakage(stripped);
+  const exactDecision = parseNextTurnDecision(stripped, context);
+  if (
+    exactDecision.source === 'exact'
+    || (decisionLeakageDetected && (exactDecision.source === 'sanitized' || exactDecision.source === 'fallback'))
+  ) {
+    if (exactDecision.source !== 'exact') {
+      console.warn(
+        `[${context?.agentName || 'agent'}] decision_lane_parse:${exactDecision.source} error="${exactDecision.parseError || ''}" raw="${stripped.slice(0, 160)}" parsed="${exactDecision.decision}"`,
+      );
+    }
+    return applyParsedDecision(exactDecision);
+  }
 
   // Check start first (well-formatted responses)
   if (stripped.startsWith('[SPEAK]')) {
@@ -455,7 +573,7 @@ function sanitizeSegments(segments: PromptSegment[]): PromptSegment[] {
 }
 
 function buildDefaultSegments(options: GenerateOptions): PromptSegment[] {
-  const instruction = 'Based on the conversation, your private reflections, any shared documents, and the memory state, decide what to do this tick. Respond with EXACTLY one of these formats:\n\n[SPEAK] your message to the room\n[JOURNAL] your private reflection\n[SILENT] (say nothing this tick)\n\nIf you choose [SPEAK], put the user-visible reply inside [VISIBLE]...[/VISIBLE]. The runtime preserves line breaks, paragraph breaks, spacing, and emphasis inside [VISIBLE] exactly as written. Do not flatten the visible reply into one paragraph. Keep any hidden analysis, tool chatter, or system/meta content out of [VISIBLE].';
+  const instruction = 'Based on the conversation, your private reflections, any shared documents, and the memory state, decide what to do this tick. Your output must begin with exactly one action tag and nothing before it.\n\nValid action tags:\n[SPEAK] your message to the room\n[JOURNAL] your private reflection\n[SILENT] (say nothing this tick)\n\nDo not explain the decision. Do not think out loud. Do not use <think> tags, headings, labels, markdown wrappers, or commentary about deciding. If you choose [SPEAK], put the user-visible reply inside [VISIBLE]...[/VISIBLE]. The runtime preserves line breaks, paragraph breaks, spacing, and emphasis inside [VISIBLE] exactly as written. Keep hidden analysis, tool chatter, and system/meta content out of [VISIBLE].';
   const convoLines = (options.conversationContext || '')
     .split('\n')
     .map(line => line.trim())
@@ -578,7 +696,7 @@ export class AnthropicBackend implements AgentBackend {
     });
 
     const text = response.content[0].type === 'text' ? response.content[0].text : '';
-    const parsed = parseResponse(text);
+    const parsed = parseResponse(text, { latestHumanText: options.latestHumanText, agentName: this.agentName });
     return { ...parsed, budgetReceipt: packed.receipt };
   }
 }
@@ -605,6 +723,15 @@ export class OpenAICompatibleBackend implements AgentBackend {
     this.maxTokens = config.maxTokens || 512;
   }
 
+  private normalizeLocalModelId(isLocalModel: boolean): string {
+    if (!isLocalModel) return this.model;
+    const source = String(this.model || '').trim();
+    if (!source) return '';
+    const atIdx = source.indexOf('@');
+    if (atIdx <= 0) return source;
+    return source.slice(0, atIdx).trim();
+  }
+
   async generate(options: GenerateOptions): Promise<GenerateResult> {
     // Detect if this is a local/small model (LM Studio, Ollama, etc.)
     const isLocalModel = this.baseUrl.includes('localhost') || this.baseUrl.includes('127.0.0.1');
@@ -618,12 +745,19 @@ export class OpenAICompatibleBackend implements AgentBackend {
 
     // Estimate prompt size for latency trace
     const llmPromptCharEstimate = finalMessages.reduce((sum, m) => sum + (m.content || '').length, 0);
+    const requestModel = this.normalizeLocalModelId(isLocalModel);
 
     // Full-call timeout: covers both "no response headers" and "stream hangs after headers".
-    // Local thinking models (12B+) can take 3-5 min on CPU/mixed VRAM — give them 300s.
-    // Remote models (DeepSeek, OpenAI) get 120s.
+    // Live speak turns cannot sit in-flight for minutes without starving the conversation loop.
+    // Local journal/background work gets a bit more room, but human-facing speak turns are capped hard.
     // AbortController is the only reliable way to kill a hung fetch in Node.js.
-    const FULL_CALL_TIMEOUT_MS = isLocalModel ? 300_000 : 120_000;
+    const isSpeakTurn = /\[SPEAK\]/i.test(options.prefill || '');
+    const isBrainLocalProvider = options.provider === 'brain-local';
+    const FULL_CALL_TIMEOUT_MS = isLocalModel
+      ? (isBrainLocalProvider
+          ? (isSpeakTurn ? 180_000 : 240_000)
+          : (isSpeakTurn ? 90_000 : 180_000))
+      : 120_000;
     const fetchAbort = new AbortController();
     const fetchAbortTimer = setTimeout(() => {
       console.warn(`[${this.agentName}] Full-call timeout (${FULL_CALL_TIMEOUT_MS / 1000}s) — aborting fetch`);
@@ -651,7 +785,7 @@ export class OpenAICompatibleBackend implements AgentBackend {
           body: JSON.stringify({
             // Empty model string = "use whatever LM Studio currently has loaded" (no auto-swap).
             // Non-empty = LM Studio will load that specific model if not already loaded.
-            ...(this.model ? { model: this.model } : {}),
+            ...(requestModel ? { model: requestModel } : {}),
             messages: finalMessages,
             max_tokens: packed.finalMaxTokens,
             temperature: this.temperature,
@@ -684,7 +818,7 @@ export class OpenAICompatibleBackend implements AgentBackend {
             'Authorization': `Bearer ${this.apiKey}`,
           },
           body: JSON.stringify({
-            model: this.model,
+            model: requestModel,
             messages: emergencyMessages,
             max_tokens: Math.max(32, Math.min(128, packed.finalMaxTokens)),
             temperature: this.temperature,
@@ -702,7 +836,7 @@ export class OpenAICompatibleBackend implements AgentBackend {
             if (options.prefill.includes('[SILENT]')) return { action: 'silent', text: '', budgetReceipt: packed.receipt, llmPromptCharEstimate };
             return { ...buildSpeakResult(content), budgetReceipt: packed.receipt, llmPromptCharEstimate };
           }
-          const parsed = parseResponse(text);
+          const parsed = parseResponse(text, { latestHumanText: options.latestHumanText, agentName: this.agentName });
           return { ...parsed, budgetReceipt: packed.receipt, llmPromptCharEstimate };
         }
         const retryErr = await retry.text();
@@ -791,7 +925,7 @@ export class OpenAICompatibleBackend implements AgentBackend {
       return { ...buildSpeakResult(content), budgetReceipt: packed.receipt, ...timingFields };
     }
 
-    const parsed = parseResponse(text);
+    const parsed = parseResponse(text, { latestHumanText: options.latestHumanText, agentName: this.agentName });
     return { ...parsed, budgetReceipt: packed.receipt, ...timingFields };
     } finally {
       clearTimeout(fetchAbortTimer);
@@ -856,12 +990,22 @@ export function createBackend(config: AgentConfig): AgentBackend {
     case 'anthropic':
       return new AnthropicBackend(config);
     case 'openai-compatible':
-    case 'lmstudio':
+    case 'lmstudio': {
+      // Alois-prefixed openai-compatible agents get full tissue integration
+      if (config.id.startsWith('alois') && config.provider === 'openai-compatible') {
+        const { AloisBackend } = require('./aloisBackend');
+        return new AloisBackend(config);
+      }
       return new OpenAICompatibleBackend(config);
+    }
     case 'alois': {
       // Lazy import to avoid loading Alois modules when not needed
       const { AloisBackend } = require('./aloisBackend');
       return new AloisBackend(config);
+    }
+    case 'brain-local': {
+      const { BrainBackend } = require('./brainBackend');
+      return new BrainBackend(config);
     }
     default:
       throw new Error(`Unknown provider: ${(config as any).provider}`);

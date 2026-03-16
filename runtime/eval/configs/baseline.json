@@ -1,0 +1,22 @@
+{
+  "label": "baseline",
+  "description": "Default weights, no ablations",
+  "laneProfiles": {
+    "companionship": { "temperature": 0.7, "top_p": 0.9, "candidateCount": 2, "maxTokens": 300, "surpriseBudget": 0.3, "humorAllowance": 0.4, "metaphorAllowance": 0.3, "compressionBias": 0.5, "bloomBias": 0.4 },
+    "relational_check": { "temperature": 0.6, "top_p": 0.85, "candidateCount": 2, "maxTokens": 200, "surpriseBudget": 0.2, "humorAllowance": 0.2, "metaphorAllowance": 0.2, "compressionBias": 0.7, "bloomBias": 0.3 },
+    "relational_answer": { "temperature": 0.7, "top_p": 0.9, "candidateCount": 2, "maxTokens": 400, "surpriseBudget": 0.3, "humorAllowance": 0.3, "metaphorAllowance": 0.3, "compressionBias": 0.5, "bloomBias": 0.5 },
+    "repair_response": { "temperature": 0.5, "top_p": 0.85, "candidateCount": 2, "maxTokens": 250, "surpriseBudget": 0.1, "humorAllowance": 0.1, "metaphorAllowance": 0.1, "compressionBias": 0.6, "bloomBias": 0.2 },
+    "explanation_or_debug": { "temperature": 0.4, "top_p": 0.8, "candidateCount": 2, "maxTokens": 500, "surpriseBudget": 0.1, "humorAllowance": 0.1, "metaphorAllowance": 0.1, "compressionBias": 0.4, "bloomBias": 0.2 },
+    "task_or_helper": { "temperature": 0.3, "top_p": 0.8, "candidateCount": 2, "maxTokens": 600, "surpriseBudget": 0.1, "humorAllowance": 0.0, "metaphorAllowance": 0.0, "compressionBias": 0.3, "bloomBias": 0.1 }
+  },
+  "weights": {},
+  "ablations": {},
+  "thresholds": {
+    "global": { "flatnessMax": 0.7, "brochureMax": 0.6, "fakeDepthMax": 0.6, "pullMin": 0.2, "tasteMin": 0.2 },
+    "byLane": {
+      "companionship": { "sceneAdhesionMin": 0.3, "pullMin": 0.25 },
+      "repair_response": { "repairEleganceMin": 0.3 },
+      "explanation_or_debug": { "debugClarityMin": 0.3 }
+    }
+  }
+}

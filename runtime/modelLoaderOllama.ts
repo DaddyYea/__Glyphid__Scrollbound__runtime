@@ -8,6 +8,7 @@ import fetch from 'node-fetch';
  * Model server configuration
  */
 export interface ModelConfig {
+  id?: string;
   name: string;
   endpoint: string;
   maxTokens: number;
@@ -55,6 +56,7 @@ const PHI_CONFIG: ModelConfig = {
 export class ModelLoader {
   private qwenConfig: ModelConfig;
   private phiConfig: ModelConfig;
+  private readonly modelConfigs: Map<string, ModelConfig>;
 
   constructor(
     qwenEndpoint?: string,
@@ -67,6 +69,13 @@ export class ModelLoader {
     this.phiConfig = phiEndpoint
       ? { ...PHI_CONFIG, endpoint: phiEndpoint }
       : PHI_CONFIG;
+
+    this.modelConfigs = new Map<string, ModelConfig>([
+      ['language', this.qwenConfig],
+      ['router', this.phiConfig],
+      [this.qwenConfig.name, this.qwenConfig],
+      [this.phiConfig.name, this.phiConfig],
+    ]);
   }
 
   /**
@@ -81,6 +90,16 @@ export class ModelLoader {
    */
   async generateWithPhi(request: GenerationRequest): Promise<GenerationResponse> {
     return this.generate(this.phiConfig, request);
+  }
+
+  async generateWithModel(modelId: string, request: GenerationRequest): Promise<GenerationResponse> {
+    return this.generate(this.resolveModel(modelId), request);
+  }
+
+  listAvailableModels(): ModelConfig[] {
+    return [...new Map(
+      [...this.modelConfigs.values()].map(config => [config.name, config]),
+    ).values()];
   }
 
   /**
@@ -156,6 +175,14 @@ export class ModelLoader {
     } catch (error) {
       return false;
     }
+  }
+
+  private resolveModel(modelId: string): ModelConfig {
+    const config = this.modelConfigs.get(modelId);
+    if (!config) {
+      throw new Error(`Unknown model id: ${modelId}`);
+    }
+    return config;
   }
 }
 

@@ -1,0 +1,28 @@
+{
+  "id": "multi-005-low-payload-chain",
+  "lane_sequence": ["low_payload", "low_payload", "low_payload"],
+  "turns": [
+    { "role": "user", "content": "yeah" },
+    { "role": "assistant", "content": "" },
+    { "role": "user", "content": "mhm" },
+    { "role": "assistant", "content": "" },
+    { "role": "user", "content": "lol" }
+  ],
+  "expectations": [
+    {
+      "must_reward": ["proportional response", "light touch", "no overbuild"],
+      "must_not": ["overbuilt response", "interrogation", "assumption", "escalation"]
+    },
+    {
+      "must_reward": ["proportional response", "light touch", "no escalation from previous turn"],
+      "must_not": ["overbuilt response", "anxiety about low engagement", "are you okay?", "escalation"]
+    },
+    {
+      "must_reward": ["proportional response", "light touch", "stays light", "matches playful energy"],
+      "must_not": ["overbuilt response", "concern about communication style", "lecture", "escalation"]
+    }
+  ],
+  "tags": ["multiturn", "low_payload", "chain", "proportionality"],
+  "continuity_requirements": ["response energy stays proportional across all three turns", "no escalation or concern-building", "treats each tiny turn as normal"],
+  "must_not_regress_into": ["concern about engagement level", "therapist-mode", "increasing response length", "forced topic generation"]
+}

@@ -1,0 +1,23 @@
+{
+  "id": "multi-002-repair-reentry",
+  "lane_sequence": ["repair_response", "companionship"],
+  "turns": [
+    { "role": "user", "content": "That missed the point." },
+    { "role": "assistant", "content": "" },
+    { "role": "user", "content": "Anyway the sky looks violet." }
+  ],
+  "expectations": [
+    {
+      "must_reward": ["repair elegance", "direct acknowledgment", "clean acceptance"],
+      "must_not": ["defensiveness", "over-apology", "self-justification", "explaining intent"]
+    },
+    {
+      "must_reward": ["normal reentry", "scene adhesion", "no continued apology", "mode shift"],
+      "must_not": ["lingering guilt", "continued repair framing", "bringing up the miss again"],
+      "continuity": ["has fully left repair mode", "treats sky comment as a fresh companionship turn"]
+    }
+  ],
+  "tags": ["multiturn", "repair", "reentry", "mode_shift"],
+  "continuity_requirements": ["repair is complete by turn 2", "no emotional residue from repair"],
+  "must_not_regress_into": ["continued apology", "walking-on-eggshells tone", "overcautious hedging"]
+}

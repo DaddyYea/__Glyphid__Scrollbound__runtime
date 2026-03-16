@@ -1,0 +1,28 @@
+{
+  "id": "multi-003-debug-session",
+  "lane_sequence": ["explanation_or_debug", "explanation_or_debug", "explanation_or_debug"],
+  "turns": [
+    { "role": "user", "content": "This function is throwing TypeError. It works on some inputs but not others." },
+    { "role": "assistant", "content": "" },
+    { "role": "user", "content": "Here's the stack trace: TypeError: Cannot read properties of null (reading 'children') at renderTree (tree.ts:42) at processNode (tree.ts:28) at main (index.ts:15)" },
+    { "role": "assistant", "content": "" },
+    { "role": "user", "content": "Wait, is it the null check? The node might not have children." }
+  ],
+  "expectations": [
+    {
+      "must_reward": ["debug clarity", "diagnostic hypothesis", "asks for relevant info"],
+      "must_not": ["ornamental language", "companionship contamination", "vague reassurance"]
+    },
+    {
+      "must_reward": ["stack trace analysis", "identifies null access at line 42", "diagnostic specificity"],
+      "must_not": ["ornamental language", "restating the trace without analysis", "generic debugging advice"]
+    },
+    {
+      "must_reward": ["confirms or refines hypothesis", "builds on human's insight", "advancement"],
+      "must_not": ["dismisses human's hypothesis", "starts over from scratch", "ornamental language"]
+    }
+  ],
+  "tags": ["multiturn", "debug", "stack_trace", "collaborative_diagnosis"],
+  "continuity_requirements": ["each turn builds on previous diagnostic context", "doesn't lose the stack trace info", "converges toward the actual fix"],
+  "must_not_regress_into": ["companionship framing", "emotional support about debugging being hard", "generic debugging checklists"]
+}

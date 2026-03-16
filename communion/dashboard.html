@@ -9,6 +9,7 @@
 
     body {
       font-family: 'Courier New', monospace;
+      font-size: 16px;
       background: #0a0e14;
       color: #c0c8d4;
       height: 100vh;
@@ -286,10 +287,16 @@
     }
     .mood-clear-btn:hover { color: #c0c8d4; }
 
-    /* Journal sidebars — dynamically created */
+/* Journal sidebars - dynamically created */
+    :root {
+      --journal-panel-width: 340px;
+    }
+
     .journal-panel {
-      width: 280px;
-      min-width: 200px;
+      position: relative;
+      width: var(--journal-panel-width);
+      min-width: 280px;
+      max-width: min(520px, 38vw);
       display: flex;
       flex-direction: column;
       border-right: 1px solid #1a2030;
@@ -303,8 +310,8 @@
     }
 
     .journal-header {
-      padding: 10px 14px;
-      font-size: 0.8em;
+      padding: 13px 16px;
+      font-size: 0.82em;
       text-transform: uppercase;
       letter-spacing: 1.5px;
       border-bottom: 1px solid #1a2030;
@@ -314,22 +321,43 @@
     .journal-entries {
       flex: 1;
       overflow-y: auto;
-      padding: 10px;
+      padding: 14px;
     }
 
     .journal-entry {
-      padding: 8px 10px;
-      margin-bottom: 8px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
       border-radius: 4px;
-      font-size: 0.8em;
-      line-height: 1.4;
+      font-size: 1.08em;
+      line-height: 1.65;
       animation: fadeIn 0.4s ease;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
     }
 
     .journal-time {
-      font-size: 0.7em;
+      font-size: 0.82em;
       color: #405060;
       margin-bottom: 4px;
+    }
+
+    .journal-resize-handle {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 10px;
+      height: 100%;
+      cursor: col-resize;
+      background: linear-gradient(90deg, rgba(126, 184, 218, 0), rgba(126, 184, 218, 0.12));
+      opacity: 0;
+      transition: opacity 0.12s ease;
+      z-index: 3;
+    }
+
+    .journal-panel:hover .journal-resize-handle,
+    .journal-resize-handle.is-active {
+      opacity: 1;
     }
 
     /* Room (center panel) */
@@ -364,11 +392,15 @@
       flex: 1;
       overflow-y: auto;
       padding: 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
 
     .room-message {
       margin-bottom: 12px;
       animation: fadeIn 0.4s ease;
+      width: min(100%, 920px);
     }
     .room-message.backchannel {
       opacity: 0.5;
@@ -389,12 +421,13 @@
     }
 
     .room-message .message-text {
-      font-size: 0.9em;
-      line-height: 1.5;
+      font-size: 1em;
+      line-height: 1.65;
       color: #d0d8e0;
       padding-left: 12px;
       border-left: 2px solid #1a2030;
       white-space: break-spaces;
+      word-break: break-word;`r`n      overflow-wrap: anywhere;
     }
 
     .message-time {
@@ -406,23 +439,31 @@
 
     /* Chat input */
     .chat-input-area {
-      padding: 10px 14px;
+      padding: 14px 18px;
       border-top: 1px solid #1a2030;
       display: flex;
-      gap: 8px;
+      justify-content: center;
       flex-shrink: 0;
       background: rgba(10, 14, 20, 0.8);
     }
 
+    .chat-input-shell {
+      width: min(100%, 980px);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin: 0 auto;
+    }
+
     .chat-input {
       flex: 1;
-      padding: 10px 14px;
+      padding: 14px 16px;
       background: rgba(15, 20, 30, 0.8);
       border: 1px solid #1a2030;
-      border-radius: 4px;
+      border-radius: 10px;
       color: #c0c8d4;
       font-family: 'Courier New', monospace;
-      font-size: 0.85em;
+      font-size: 1em;
     }
 
     .chat-input:focus {
@@ -433,13 +474,13 @@
     .chat-input::placeholder { color: #354050; }
 
     .send-btn {
-      padding: 10px 20px;
+      padding: 14px 22px;
       background: rgba(100, 200, 80, 0.1);
       border: 1px solid rgba(100, 200, 80, 0.3);
-      border-radius: 4px;
+      border-radius: 10px;
       color: #8eda7e;
       font-family: 'Courier New', monospace;
-      font-size: 0.85em;
+      font-size: 1em;
       cursor: pointer;
       transition: all 0.2s ease;
     }
@@ -450,12 +491,12 @@
     }
 
     .mic-btn {
-      padding: 10px 14px;
+      padding: 14px 16px;
       background: rgba(126, 184, 218, 0.08);
       border: 1px solid rgba(126, 184, 218, 0.25);
-      border-radius: 4px;
+      border-radius: 10px;
       color: #7eb8da;
-      font-size: 1em;
+      font-size: 1.1em;
       cursor: pointer;
       transition: all 0.2s ease;
       line-height: 1;
@@ -607,12 +648,22 @@
       border-color: rgba(218, 128, 128, 0.5);
       background: rgba(218, 128, 128, 0.18);
     }
+    #debugPanelsContainer {
+      position: fixed;
+      top: 76px;
+      right: 12px;
+      display: flex;
+      flex-direction: row-reverse;
+      gap: 8px;
+      z-index: 1000;
+      pointer-events: none;
+      max-height: 72vh;
+    }
+    #debugPanelsContainer > * {
+      pointer-events: all;
+    }
     .llm-receipt-panel {
       display: none;
-      position: fixed;
-      right: 12px;
-      top: 76px;
-      z-index: 80;
       width: 420px;
       max-height: 72vh;
       overflow: auto;
@@ -623,6 +674,99 @@
       padding: 10px 12px;
     }
     .llm-receipt-panel.open { display: block; }
+    .llm-planner-section {
+      margin-bottom: 8px;
+      border: 1px solid rgba(126, 184, 218, 0.15);
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    .llm-planner-section.parse-failed {
+      border-color: rgba(218, 180, 80, 0.35);
+    }
+    .llm-planner-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      cursor: pointer;
+      user-select: none;
+      font-family: 'Courier New', monospace;
+      font-size: 0.72em;
+      color: #8ea2b6;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .llm-planner-header:hover { background: rgba(255, 255, 255, 0.06); }
+    .llm-planner-header .arrow { transition: transform 0.15s; }
+    .llm-planner-section.open .llm-planner-header .arrow { transform: rotate(90deg); }
+    .llm-planner-badge {
+      font-size: 0.8em;
+      padding: 1px 5px;
+      border-radius: 3px;
+      letter-spacing: 0.5px;
+    }
+    .llm-planner-badge.fail {
+      background: rgba(218, 180, 80, 0.2);
+      color: #dab450;
+      border: 1px solid rgba(218, 180, 80, 0.3);
+    }
+    .llm-planner-body {
+      display: none;
+      padding: 6px 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.68em;
+      line-height: 1.5;
+      color: #8ea2b6;
+    }
+    .llm-planner-section.open .llm-planner-body { display: block; }
+    .llm-planner-field {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 2px;
+    }
+    .llm-planner-field .lbl {
+      min-width: 120px;
+      color: #6b7f94;
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .llm-planner-field .val { color: #c8d6e5; word-break: break-word; }
+    .llm-planner-raw-toggle {
+      margin-top: 6px;
+      padding: 3px 6px;
+      font-size: 0.85em;
+      font-family: 'Courier New', monospace;
+      border-radius: 3px;
+      border: 1px solid rgba(126, 184, 218, 0.2);
+      background: rgba(126, 184, 218, 0.06);
+      color: #6b7f94;
+      cursor: pointer;
+    }
+    .llm-planner-raw-toggle:hover { color: #a8bed2; background: rgba(126, 184, 218, 0.12); }
+    .llm-planner-raw {
+      display: none;
+      margin-top: 4px;
+      padding: 6px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 3px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #7a8e9e;
+    }
+    .llm-planner-raw.open { display: block; }
+    .llm-planner-copy-btn {
+      padding: 3px 8px;
+      font-size: 0.85em;
+      font-family: 'Courier New', monospace;
+      border-radius: 3px;
+      border: 1px solid rgba(126, 184, 218, 0.35);
+      background: rgba(126, 184, 218, 0.12);
+      color: #a8bed2;
+      cursor: pointer;
+      margin-left: auto;
+      font-weight: bold;
+      letter-spacing: 0.3px;
+    }
+    .llm-planner-copy-btn:hover { color: #d0e4f0; background: rgba(126, 184, 218, 0.22); }
     .llm-receipt-title {
       color: #a8bed2;
       font-size: 0.75em;
@@ -665,7 +809,7 @@
       margin-top: 8px;
       background: rgba(255, 255, 255, 0.03);
       border: 1px solid rgba(126, 184, 218, 0.18);
-      border-radius: 6px;
+      border-radius: 4px;
       padding: 8px;
       font-family: 'Courier New', monospace;
       font-size: 0.67em;
@@ -674,6 +818,147 @@
       white-space: pre-wrap;
       max-height: 40vh;
       overflow: auto;
+    }
+
+    /* ── Rejection Tally Panel ── */
+    .rej-tally-panel {
+      display: none;
+      width: 400px;
+      max-height: 72vh;
+      overflow: auto;
+      background: rgba(8, 12, 20, 0.96);
+      border: 1px solid rgba(126, 184, 218, 0.28);
+      border-radius: 8px;
+      box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
+      padding: 10px 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.72em;
+      color: #8ea2b6;
+    }
+    .rej-tally-panel.open { display: block; }
+    .rej-tally-title {
+      color: #a8bed2;
+      font-size: 0.75em;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .rej-tally-title button {
+      padding: 3px 8px;
+      font-size: 0.7em;
+      font-family: 'Courier New', monospace;
+      border-radius: 4px;
+      border: 1px solid rgba(126, 184, 218, 0.25);
+      background: rgba(126, 184, 218, 0.08);
+      color: #8ea2b6;
+      cursor: pointer;
+    }
+    .rej-tally-title button:hover {
+      background: rgba(126, 184, 218, 0.14);
+      color: #c8d6e5;
+    }
+    .rej-tally-summary {
+      display: flex;
+      gap: 12px;
+      padding: 6px 0 8px;
+      border-bottom: 1px solid rgba(126, 184, 218, 0.12);
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .rej-tally-stat {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 60px;
+    }
+    .rej-tally-stat .val {
+      font-size: 1.3em;
+      font-weight: bold;
+      color: #c8d6e5;
+    }
+    .rej-tally-stat .val.warn { color: #da8080; }
+    .rej-tally-stat .lbl {
+      font-size: 0.8em;
+      color: #6b7f94;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .rej-tally-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(126, 184, 218, 0.12);
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-bottom: 6px;
+    }
+    .rej-tally-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      color: #a8bed2;
+      font-size: 0.9em;
+    }
+    .rej-tally-card-header .agent-name { font-weight: bold; }
+    .rej-tally-card-header .meta { color: #6b7f94; font-size: 0.85em; }
+    .rej-tally-bar-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 3px;
+    }
+    .rej-tally-bar-label {
+      width: 140px;
+      text-align: right;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.85em;
+    }
+    .rej-tally-bar-track {
+      flex: 1;
+      height: 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .rej-tally-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      min-width: 2px;
+      transition: width 0.3s ease;
+    }
+    .rej-tally-bar-fill.cat-a { background: rgba(100, 160, 220, 0.7); }
+    .rej-tally-bar-fill.cat-b { background: rgba(218, 180, 80, 0.7); }
+    .rej-tally-bar-fill.cat-c { background: rgba(220, 100, 100, 0.7); }
+    .rej-tally-bar-count {
+      width: 28px;
+      text-align: right;
+      font-size: 0.85em;
+      color: #a8bed2;
+    }
+    .rej-tally-card-footer {
+      margin-top: 6px;
+      padding-top: 4px;
+      border-top: 1px solid rgba(126, 184, 218, 0.08);
+      font-size: 0.85em;
+      color: #6b7f94;
+      display: flex;
+      gap: 12px;
+    }
+    .rej-tally-error {
+      color: #da8080;
+      margin-top: 6px;
+      font-size: 0.85em;
+    }
+    .rej-tally-empty {
+      color: #6b7f94;
+      font-style: italic;
+      padding: 12px 0;
+      text-align: center;
     }
 
     /* Modal overlay */
@@ -702,7 +987,7 @@
       font-size: 1em;
       color: #e0e8f0;
       letter-spacing: 2px;
-      margin-bottom: 18px;
+      margin-bottom: 12px;
       font-weight: normal;
       text-transform: uppercase;
     }
@@ -765,6 +1050,119 @@
       cursor: pointer;
       letter-spacing: 0.5px;
       transition: all 0.2s ease;
+    }
+
+    .add-agent-modal {
+      width: min(94vw, 860px);
+      max-width: 860px !important;
+      max-height: 92vh;
+      overflow-y: auto;
+      padding: 28px 32px;
+    }
+
+    .add-agent-modal h2 {
+      font-size: 1.2em;
+      margin-bottom: 22px;
+    }
+
+    .add-agent-modal label {
+      font-size: 0.9em;
+      color: #8ea2b6;
+      letter-spacing: 0.7px;
+    }
+
+    .add-agent-modal input[type="text"],
+    .add-agent-modal input[type="password"],
+    .add-agent-modal select {
+      font-size: 1em !important;
+      padding: 10px 12px !important;
+    }
+
+    .agent-step {
+      font-size: 0.82em;
+      color: #7eb8da;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin: 18px 0 8px;
+    }
+
+    .field-help {
+      font-size: 0.82em !important;
+      color: #65778a !important;
+      margin-top: 4px !important;
+      line-height: 1.5;
+    }
+
+    .field-row {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    .field-row > input,
+    .field-row > select {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .field-row > button {
+      flex: 0 0 auto;
+      min-width: 104px;
+      font-size: 0.9em !important;
+      padding: 9px 12px !important;
+    }
+
+    .brain-local-panel {
+      margin-top: 14px;
+      padding: 14px;
+      border: 1px solid rgba(126, 184, 218, 0.16);
+      border-radius: 4px;
+      background: rgba(126, 184, 218, 0.04);
+    }
+
+    .brain-local-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 14px;
+    }
+
+    .brain-local-advanced-toggle {
+      margin-top: 10px;
+      padding: 8px 12px;
+      border: 1px solid rgba(126, 184, 218, 0.24);
+      border-radius: 4px;
+      background: rgba(126, 184, 218, 0.08);
+      color: #9db8cf;
+      font-family: 'Courier New', monospace;
+      font-size: 0.88em;
+      cursor: pointer;
+    }
+
+    .brain-local-advanced {
+      display: none;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(126, 184, 218, 0.12);
+    }
+
+    .brain-local-advanced.visible {
+      display: block;
+    }
+
+    @media (max-width: 900px) {
+      .add-agent-modal {
+        width: min(96vw, 96vw);
+        min-width: 0;
+        padding: 14px;
+      }
+
+      .field-row {
+        flex-direction: column;
+      }
+
+      .field-row > button {
+        width: 100%;
+      }
     }
 
     .btn-cancel {
@@ -997,6 +1395,18 @@
     .brain-monitor-loading {
       color: #444; font-size: 0.8em; padding: 4px 0;
     }
+    .brain-connection-badge {
+      display: inline-block;
+      margin-left: 8px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1px solid rgba(126, 184, 218, 0.25);
+      font-size: 0.62em;
+      letter-spacing: 0.08em;
+      color: #9fb7c7;
+      background: rgba(126, 184, 218, 0.08);
+      vertical-align: middle;
+    }
     .bm-header {
       display: flex; align-items: center; gap: 8px; margin-bottom: 5px; flex-wrap: wrap;
     }
@@ -1026,7 +1436,7 @@
       margin-top: 5px; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 4px;
     }
     .bm-label {
-      color: #555; font-size: 0.72em; letter-spacing: 0.5px; margin-bottom: 2px;
+      color: #555; font-size: 0.82em; letter-spacing: 0.5px; margin-bottom: 4px;
       text-transform: uppercase;
     }
     .bm-bar-track {
@@ -1037,11 +1447,11 @@
       border-radius: 2px; transition: width 1s;
     }
     .bm-inner-text {
-      color: #aaa; font-size: 0.82em; font-style: italic; line-height: 1.4;
-      word-break: break-word; max-height: 52px; overflow: hidden;
+      color: #c7cad1; font-size: 1.35em; font-style: italic; line-height: 1.6;
+      word-break: break-word;`r`n      overflow-wrap: anywhere; max-height: none; overflow: visible;
     }
     .bm-inject-text {
-      color: #666; font-size: 0.78em; line-height: 1.35; word-break: break-word;
+      color: #666; font-size: 0.78em; line-height: 1.35; word-break: break-word;`r`n      overflow-wrap: anywhere;
       white-space: pre-wrap; max-height: 52px; overflow: hidden;
     }
 
@@ -1185,7 +1595,7 @@
     .ep-panel {
       width: 420px; background: #0a0e14;
       border: 1px solid rgba(196,126,218,0.2); border-radius: 8px;
-      padding: 20px; font-size: 12px; color: #b0b8c8;
+      padding: 14px; font-size: 12px; color: #b0b8c8;
     }
     .ep-title {
       color: #c47eda; font-size: 14px; font-weight: 600; letter-spacing: 2px;
@@ -1283,7 +1693,7 @@
     .brain-center { position: relative; overflow: hidden; }
     .brain-center canvas { width: 100%; height: 100%; display: block; }
     .brain-panel {
-      background: #0f1420; border: 1px solid #1a2030; border-radius: 6px; padding: 10px;
+      background: #0f1420; border: 1px solid #1a2030; border-radius: 4px; padding: 10px;
     }
     .brain-panel h4 {
       margin: 0 0 8px 0; font-size: 10px; text-transform: uppercase;
@@ -1365,6 +1775,108 @@
     .latency-panel .lp-copy-btn:hover { background: rgba(40,65,90,0.9); color: #a0c0d8; }
     .latency-panel .lp-copy-btn.copied { color: #60c080; border-color: #30604040; }
 
+    /* ── Golden Set Promote UI ── */
+    .gold-actions {
+      display: flex; gap: 4px; align-items: center; margin-left: auto;
+    }
+    .gold-btn {
+      font-size: 0.7em; padding: 1px 6px; border-radius: 3px; cursor: pointer;
+      background: transparent; border: 1px solid transparent; color: #405060;
+      transition: all 0.15s; font-family: monospace; line-height: 1.4;
+    }
+    .gold-btn:hover { border-color: #2a4060; color: #90b0c8; background: rgba(20,35,55,0.6); }
+    .gold-btn.good:hover { color: #60c080; border-color: #306040; }
+    .gold-btn.bad:hover { color: #c06060; border-color: #603030; }
+    .gold-btn.pair:hover { color: #c0a060; border-color: #605030; }
+
+    .gold-popup {
+      display: none; position: absolute; right: 0; top: 100%;
+      background: rgba(10,16,24,0.97); border: 1px solid #1e2a38; border-radius: 6px;
+      padding: 8px 10px; z-index: 100; min-width: 220px; box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    }
+    .gold-popup.open { display: block; }
+    .gold-popup-title { font-size: 0.75em; color: #506878; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
+    .gold-tags { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
+    .gold-tag {
+      font-size: 0.65em; padding: 2px 6px; border-radius: 10px; cursor: pointer;
+      background: rgba(25,40,60,0.6); border: 1px solid #1e2a38; color: #607888;
+      transition: all 0.1s; user-select: none;
+    }
+    .gold-tag:hover { border-color: #3a5878; color: #90b0c8; }
+    .gold-tag.selected { background: rgba(40,70,100,0.5); border-color: #4a7098; color: #b0d0e8; }
+    .gold-tag.positive.selected { background: rgba(30,70,50,0.5); border-color: #408060; color: #80d0a0; }
+    .gold-tag.negative.selected { background: rgba(70,30,30,0.5); border-color: #804040; color: #d08080; }
+    .gold-save-row { display: flex; gap: 6px; margin-top: 6px; }
+    .gold-save-btn {
+      font-size: 0.7em; padding: 3px 10px; border-radius: 3px; cursor: pointer;
+      background: rgba(30,60,50,0.7); border: 1px solid #306040; color: #70c090;
+      transition: all 0.1s;
+    }
+    .gold-save-btn:hover { background: rgba(40,80,60,0.8); color: #90e0b0; }
+    .gold-save-btn.cancel { background: rgba(40,30,30,0.5); border-color: #503030; color: #907070; }
+    .gold-save-btn.cancel:hover { background: rgba(60,40,40,0.6); color: #b09090; }
+
+    .gold-toast {
+      position: fixed; bottom: 20px; right: 20px; padding: 8px 16px;
+      background: rgba(20,50,40,0.95); border: 1px solid #306040; border-radius: 6px;
+      color: #80d0a0; font-size: 0.8em; font-family: monospace;
+      z-index: 200; opacity: 0; transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    .gold-toast.visible { opacity: 1; }
+    .gold-toast.error { background: rgba(50,20,20,0.95); border-color: #603030; color: #d08080; }
+
+    /* ── Golden Set Viewer Panel ── */
+    #goldPanel {
+      display: none; position: fixed; top: 0; right: 0; width: 420px; height: 100vh;
+      background: rgba(8,12,18,0.98); border-left: 1px solid #1e2a38; z-index: 150;
+      flex-direction: column; overflow: hidden;
+    }
+    #goldPanel.open { display: flex; }
+    #goldPanel .gp-header {
+      padding: 12px 14px; border-bottom: 1px solid #1a2430;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    #goldPanel .gp-title { font-size: 0.9em; color: #90b0c8; font-family: monospace; }
+    #goldPanel .gp-close {
+      cursor: pointer; color: #506070; font-size: 1.1em;
+      background: none; border: none; padding: 2px 6px;
+    }
+    #goldPanel .gp-close:hover { color: #a0b8c8; }
+    #goldPanel .gp-filters {
+      padding: 8px 14px; border-bottom: 1px solid #141c28;
+      display: flex; gap: 6px; flex-wrap: wrap;
+    }
+    #goldPanel .gp-filter-btn {
+      font-size: 0.65em; padding: 2px 8px; border-radius: 3px; cursor: pointer;
+      background: rgba(20,30,45,0.6); border: 1px solid #1e2838; color: #506878;
+    }
+    #goldPanel .gp-filter-btn.active { border-color: #4a6888; color: #90b0c8; background: rgba(30,50,70,0.5); }
+    #goldPanel .gp-list { flex: 1; overflow-y: auto; padding: 8px; }
+    #goldPanel .gp-item {
+      padding: 8px 10px; margin-bottom: 6px; border-radius: 4px;
+      background: rgba(15,22,32,0.8); border: 1px solid #141c28;
+    }
+    #goldPanel .gp-item-mode {
+      font-size: 0.6em; text-transform: uppercase; letter-spacing: 1px;
+      padding: 1px 5px; border-radius: 2px; display: inline-block; margin-bottom: 4px;
+    }
+    #goldPanel .gp-item-mode.good { color: #60c080; background: rgba(30,60,40,0.4); }
+    #goldPanel .gp-item-mode.bad { color: #c06060; background: rgba(60,30,30,0.4); }
+    #goldPanel .gp-item-mode.pair { color: #c0a060; background: rgba(60,50,30,0.4); }
+    #goldPanel .gp-item-user { font-size: 0.72em; color: #506878; margin-bottom: 2px; }
+    #goldPanel .gp-item-reply { font-size: 0.75em; color: #8098a8; line-height: 1.4; }
+    #goldPanel .gp-item-tags { display: flex; gap: 3px; margin-top: 4px; flex-wrap: wrap; }
+    #goldPanel .gp-item-tag {
+      font-size: 0.6em; padding: 1px 5px; border-radius: 8px;
+      background: rgba(25,40,55,0.5); border: 1px solid #1e2838; color: #607080;
+    }
+    #goldPanel .gp-item-time { font-size: 0.6em; color: #354050; margin-top: 3px; }
+    #goldPanel .gp-stats {
+      padding: 8px 14px; border-top: 1px solid #141c28;
+      font-size: 0.65em; color: #405060; font-family: monospace;
+    }
+
     /* ── Processing status widget ── */
     #processingStatus {
       display: none; align-items: center; gap: 6px;
@@ -1400,20 +1912,36 @@
       <button class="import-btn piano-btn" id="pianoBtn" title="Collaborative piano roll">PIANO</button>
       <button class="import-btn sound-btn" id="soundBtn" title="Global synth controls">SOUND</button>
       <button class="import-btn" id="drumBtn" title="Step sequencer / drum machine" style="color:#7eda90;border-color:rgba(126,218,144,0.3);">DRUM</button>
+      <button class="llm-debug-btn" id="rejTallyBtn" title="Toggle rejection tally debug panel" style="color:#dab450;border-color:rgba(218,180,80,0.35);background:rgba(218,180,80,0.1);">REJ</button>
       <button class="llm-debug-btn" id="llmDebugBtn" title="Toggle LLM receipt debug panel">LLM DBG</button>
       <button class="import-btn" id="addAgentBtn" style="color:#8eda7e;border-color:rgba(142,218,126,0.3);">+ AGENT</button>
       <span class="speaking-indicator" id="speakingIndicator"><span class="speaking-dot"></span><span id="speakingName">Speaking...</span></span>
     </div>
   </div>
 
-  <div class="llm-receipt-panel" id="llmReceiptPanel">
-    <div class="llm-receipt-title">
-      <span>LLM Receipt</span>
-      <button class="llm-trace-copy-btn" id="llmTraceCopyBtn" type="button">Copy Trace</button>
+  <div id="debugPanelsContainer">
+    <div class="llm-receipt-panel" id="llmReceiptPanel">
+      <div class="llm-receipt-title">
+        <span>LLM Receipt</span>
+        <button class="llm-trace-copy-btn" id="llmTraceCopyBtn" type="button">Copy Trace</button>
+      </div>
+      <div id="llmPlannerContainer"></div>
+      <div class="llm-receipt-summary" id="llmReceiptSummary">Waiting for first request...</div>
+      <div class="llm-receipt-error" id="llmReceiptError" style="display:none;"></div>
+      <pre class="llm-receipt-pre" id="llmReceiptPre"></pre>
     </div>
-    <div class="llm-receipt-summary" id="llmReceiptSummary">Waiting for first request...</div>
-    <div class="llm-receipt-error" id="llmReceiptError" style="display:none;"></div>
-    <pre class="llm-receipt-pre" id="llmReceiptPre"></pre>
+
+    <div class="rej-tally-panel" id="rejTallyPanel">
+      <div class="rej-tally-title">
+        <span>Rejection Tally</span>
+        <div>
+          <button id="rejTallyFetchBtn" type="button">Fetch</button>
+        </div>
+      </div>
+      <div class="rej-tally-summary" id="rejTallySummary"></div>
+      <div id="rejTallyCards"></div>
+      <div class="rej-tally-error" id="rejTallyError" style="display:none;"></div>
+    </div>
   </div>
 
   <!-- Import Modal -->
@@ -1466,7 +1994,7 @@
 
   <!-- Add Agent Modal -->
   <div class="modal-overlay" id="addAgentModal">
-    <div class="modal" style="max-width:520px;">
+    <div class="modal add-agent-modal">
       <h2>Add Agent</h2>
 
       <!-- Restore previously removed agents -->
@@ -1476,18 +2004,18 @@
       </div>
 
       <!-- Step 1: Identity -->
-      <div style="font-size:0.65em;color:#7eb8da;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;margin-top:4px;">1. Name your agent</div>
+      <div class="agent-step">1. Name your agent</div>
 
       <label for="agentNameInput">Display Name</label>
       <input type="text" id="agentNameInput" placeholder="e.g. Gemini, Llama, Phi" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
-      <div style="font-size:0.6em;color:#506070;margin-top:2px;">The name shown in the room and journal panels.</div>
+      <div class="field-help">The name shown in the room and journal panels.</div>
 
       <label for="agentIdInput">Agent ID</label>
       <input type="text" id="agentIdInput" placeholder="auto-generated from name" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
-      <div style="font-size:0.6em;color:#506070;margin-top:2px;">Lowercase identifier, auto-fills from name. Used internally.</div>
+      <div class="field-help">Lowercase identifier, auto-fills from name. Used internally.</div>
 
       <!-- Step 2: Provider -->
-      <div style="font-size:0.65em;color:#7eb8da;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;margin-top:14px;">2. Choose how this agent thinks</div>
+      <div class="agent-step">2. Choose how this agent thinks</div>
 
       <label for="agentProviderInput">Provider</label>
       <select id="agentProviderInput" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;">
@@ -1495,37 +2023,93 @@
         <option value="anthropic">Anthropic (Claude)</option>
         <option value="lmstudio">LM Studio (run a model on your own computer)</option>
         <option value="alois">Alois (experimental tissue-augmented brain)</option>
+        <option value="brain-local">Brain Local (Phi router + selectable language model)</option>
       </select>
 
       <!-- Provider-specific setup guide (changes dynamically) -->
       <div id="providerGuide" style="margin-top:8px;padding:10px 12px;background:rgba(126,184,218,0.04);border:1px solid rgba(126,184,218,0.12);border-radius:4px;font-size:0.7em;color:#8090a0;line-height:1.6;display:none;"></div>
 
       <!-- Step 3: Connection -->
-      <div style="font-size:0.65em;color:#7eb8da;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;margin-top:14px;">3. Connect to the model</div>
+      <div class="agent-step">3. Connect to the model</div>
 
-      <label for="agentBaseUrlInput" id="baseUrlLabel">Base URL</label>
-      <input type="text" id="agentBaseUrlInput" placeholder="e.g. https://api.openai.com/v1" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
-      <div id="baseUrlHint" style="font-size:0.6em;color:#506070;margin-top:2px;">The API endpoint URL. Each provider has a different URL.</div>
+      <div id="baseUrlBlock">
+        <label for="agentBaseUrlInput" id="baseUrlLabel">Base URL</label>
+        <input type="text" id="agentBaseUrlInput" placeholder="e.g. https://api.openai.com/v1" style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+        <div id="baseUrlHint" class="field-help">The API endpoint URL. Each provider has a different URL.</div>
+      </div>
 
-      <label for="agentApiKeyInput" id="apiKeyLabel">API Key</label>
-      <input type="password" id="agentApiKeyInput" placeholder="sk-..." style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
-      <div id="apiKeyHint" style="font-size:0.6em;color:#506070;margin-top:2px;">Your secret key from the provider's dashboard.</div>
+      <div id="apiKeyBlock">
+        <label for="agentApiKeyInput" id="apiKeyLabel">API Key</label>
+        <input type="password" id="agentApiKeyInput" placeholder="sk-..." style="width:100%;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+        <div id="apiKeyHint" class="field-help">Your secret key from the provider's dashboard.</div>
+      </div>
 
-      <label for="agentModelInput" id="modelLabel">Model</label>
-      <div style="display:flex;gap:6px;">
+      <div id="languageModelBlock">
+        <label for="agentModelInput" id="modelLabel">Language Model</label>
+        <div class="field-row">
         <input type="text" id="agentModelInput" placeholder="e.g. gpt-4o, grok-3, gemini-pro" style="flex:1;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
         <button id="detectModelsBtn" style="display:none;padding:4px 10px;font-size:0.7em;font-family:'Courier New',monospace;border-radius:3px;cursor:pointer;border:1px solid rgba(142,218,126,0.3);background:rgba(142,218,126,0.08);color:#8eda7e;white-space:nowrap;">Detect</button>
+        </div>
+        <div id="modelHint" class="field-help">The exact model name from your provider.</div>
       </div>
-      <div id="modelHint" style="font-size:0.6em;color:#506070;margin-top:2px;">The exact model name from your provider.</div>
-      <select id="agentModelSelect" style="display:none;width:100%;margin-top:4px;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;">
+      <select id="agentModelSelect" size="8" style="display:none;width:100%;margin-top:4px;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.95em;line-height:1.35;">
       </select>
 
+      <div id="brainLocalFields" class="brain-local-panel" style="display:none;">
+        <div class="brain-local-grid">
+          <div>
+            <label for="agentHfSearchInput">Find a language model</label>
+            <div class="field-row">
+          <input type="text" id="agentHfSearchInput" placeholder="e.g. llama 8b instruct gguf" style="flex:1;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+          <button id="searchHfModelsBtn" style="padding:4px 10px;font-size:0.7em;font-family:'Courier New',monospace;border-radius:3px;cursor:pointer;border:1px solid rgba(126,184,218,0.3);background:rgba(126,184,218,0.08);color:#7eb8da;white-space:nowrap;">Search</button>
+            </div>
+            <div class="field-help">Search Hugging Face, install a GGUF, then use Detect Local to select it.</div>
+        <select id="agentHfSearchSelect" size="8" style="display:none;width:100%;margin-top:4px;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.95em;line-height:1.35;"></select>
+        <div id="agentHfSearchDetails" class="field-help" style="display:none;"></div>
+            <div class="field-row" style="margin-top:8px;">
+          <button id="installHfModelBtn" style="display:none;padding:4px 10px;font-size:0.7em;font-family:'Courier New',monospace;border-radius:3px;cursor:pointer;border:1px solid rgba(142,218,126,0.3);background:rgba(142,218,126,0.08);color:#8eda7e;white-space:nowrap;">Install Selected</button>
+          <button id="cancelHfInstallBtn" style="display:none;padding:4px 10px;font-size:0.7em;font-family:'Courier New',monospace;border-radius:3px;cursor:pointer;border:1px solid rgba(218,126,126,0.3);background:rgba(218,126,126,0.08);color:#da7e7e;white-space:nowrap;">Cancel</button>
+            </div>
+            <div id="agentHfInstallStatus" class="field-help" style="display:none;margin-top:8px;"></div>
+            <div id="agentHfInstallProgress" style="display:none;margin-top:6px;width:100%;height:10px;background:rgba(126,184,218,0.12);border:1px solid rgba(126,184,218,0.18);border-radius:999px;overflow:hidden;">
+              <div id="agentHfInstallProgressFill" style="width:0%;height:100%;background:linear-gradient(90deg, rgba(126,184,218,0.85), rgba(142,218,126,0.85));"></div>
+            </div>
+          </div>
+
+          <div>
+            <label for="agentRouterModelInput">Router Model</label>
+            <div class="field-row">
+              <input type="text" id="agentRouterModelInput" placeholder="Use Detect Local" style="flex:1;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.85em;box-sizing:border-box;" />
+              <button id="detectRouterModelsBtn" style="display:none;padding:4px 10px;font-size:0.7em;font-family:'Courier New',monospace;border-radius:3px;cursor:pointer;border:1px solid rgba(142,218,126,0.3);background:rgba(142,218,126,0.08);color:#8eda7e;white-space:nowrap;">Detect Local</button>
+            </div>
+            <div class="field-help">Choose the local Phi router GGUF.</div>
+            <select id="agentRouterModelSelect" size="8" style="display:none;width:100%;margin-top:4px;padding:6px 8px;background:#1a1a2e;border:1px solid rgba(126,184,218,0.25);border-radius:4px;color:#c8d6e5;font-family:'Courier New',monospace;font-size:0.95em;line-height:1.35;"></select>
+          </div>
+
+          <div>
+            <label for="agentModelInput">Language Model</label>
+            <div class="field-row">
+              <button id="brainLocalDetectLanguageBtn" style="padding:4px 10px;font-size:0.7em;font-family:'Courier New',monospace;border-radius:3px;cursor:pointer;border:1px solid rgba(142,218,126,0.3);background:rgba(142,218,126,0.08);color:#8eda7e;white-space:nowrap;">Detect Local</button>
+            </div>
+            <div class="field-help">Choose the local language-lobe GGUF. Manual endpoint entry is intentionally hidden here.</div>
+          </div>
+        </div>
+
+        <button id="brainLocalAdvancedToggle" class="brain-local-advanced-toggle" type="button">Advanced runtime settings</button>
+        <div id="brainLocalAdvancedFields" class="brain-local-advanced">
+          <div class="field-help">Only use this if you are deliberately connecting the brain to an external OpenAI-compatible runtime. Normal brain-local use does not need it.</div>
+          <div id="brainLocalConnectionBlocks">
+            <!-- base URL and API key blocks are moved here when brain-local is active -->
+          </div>
+        </div>
+      </div>
+
       <!-- Step 4: Appearance -->
-      <div style="font-size:0.65em;color:#7eb8da;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;margin-top:14px;">4. Appearance</div>
+      <div class="agent-step">4. Appearance</div>
 
       <label for="agentColorInput">Color</label>
       <input type="color" id="agentColorInput" value="#7edab8" style="width:50px;height:28px;border:1px solid rgba(126,184,218,0.25);border-radius:4px;background:transparent;cursor:pointer;" />
-      <span style="font-size:0.6em;color:#506070;margin-left:8px;">Used for this agent's messages and journal panel.</span>
+      <span class="field-help" style="margin-left:8px;">Used for this agent's messages and journal panel.</span>
 
       <div id="addAgentError" style="display:none;margin-top:10px;padding:6px 10px;background:rgba(200,80,80,0.1);border-left:2px solid rgba(200,80,80,0.4);color:#da8080;font-size:0.75em;border-radius:2px;"></div>
 
@@ -1542,6 +2126,7 @@
       <div class="room-header">
         <span>The Room</span>
         <span class="room-stats" id="roomStats"></span>
+        <button class="gold-btn" id="goldPanelToggle" title="Golden Set Viewer" style="margin-left:8px;font-size:0.75em;padding:2px 8px;border:1px solid #2a4060;border-radius:3px;color:#c0a060;cursor:pointer;background:transparent;">Gold</button>
       </div>
       <div class="room-messages" id="roomMessages">
         <div class="empty-state">The room is quiet. Waiting for the first voice...</div>
@@ -1552,9 +2137,11 @@
         <span class="ps-elapsed" id="psElapsed"></span>
       </div>
       <div class="chat-input-area">
-        <input type="text" id="chatInput" class="chat-input" placeholder="Speak into the room..." autocomplete="off" />
-        <button id="micBtn" class="mic-btn" title="Hold or click to speak (uses browser speech recognition)">&#127908;</button>
-        <button id="sendBtn" class="send-btn">Send</button>
+        <div class="chat-input-shell">
+          <input type="text" id="chatInput" class="chat-input" placeholder="Speak into the room..." autocomplete="off" />
+          <button id="micBtn" class="mic-btn" title="Hold or click to speak (uses browser speech recognition)">&#127908;</button>
+          <button id="sendBtn" class="send-btn">Send</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1578,6 +2165,8 @@
     const tickCounter = document.getElementById('tickCounter');
     const participantList = document.getElementById('participantList');
     const roomStats = document.getElementById('roomStats');
+    const goldPanelToggle = document.getElementById('goldPanelToggle');
+    if (goldPanelToggle) goldPanelToggle.addEventListener('click', () => toggleGoldPanel());
     const pauseBtn = document.getElementById('pauseBtn');
     const speedSlider = document.getElementById('speedSlider');
     const speedValue = document.getElementById('speedValue');
@@ -1589,18 +2178,28 @@
     const llmReceiptError = document.getElementById('llmReceiptError');
     const llmReceiptPre = document.getElementById('llmReceiptPre');
     const llmTraceCopyBtn = document.getElementById('llmTraceCopyBtn');
+    const rejTallyBtn = document.getElementById('rejTallyBtn');
+    const rejTallyPanel = document.getElementById('rejTallyPanel');
+    const rejTallySummary = document.getElementById('rejTallySummary');
+    const rejTallyCards = document.getElementById('rejTallyCards');
+    const rejTallyError = document.getElementById('rejTallyError');
+    const rejTallyFetchBtn = document.getElementById('rejTallyFetchBtn');
     let humanPresence = 'here';
     let llmReceiptOpen = false;
+    let rejTallyOpen = false;
+    let rejTallyPollTimer = null;
+    let rejTallyLastData = null;
     let lastLLMRequestId = '';
     let lastLLMError = '';
     let llmPollSeq = 0;
     let llmRenderedSeq = 0;
     window.lastLLMReceipt = null;
     const pendingHumanMessages = [];
+    const PENDING_HUMAN_ECHO_WINDOW_MS = 30 * 60 * 1000;
 
     function pushPendingHumanMessage(text) {
       pendingHumanMessages.push({ text: (text || '').trim(), at: Date.now() });
-      if (pendingHumanMessages.length > 20) pendingHumanMessages.shift();
+      while (pendingHumanMessages.length > 100) pendingHumanMessages.shift();
     }
 
     function normalizeForDedup(s) {
@@ -1611,10 +2210,13 @@
       const target = normalizeForDedup(text);
       if (!target) return false;
       const now = Date.now();
-      for (let i = 0; i < pendingHumanMessages.length; i++) {
+      for (let i = pendingHumanMessages.length - 1; i >= 0; i--) {
         const item = pendingHumanMessages[i];
+        if (!item || (now - item.at) > PENDING_HUMAN_ECHO_WINDOW_MS) {
+          pendingHumanMessages.splice(i, 1);
+          continue;
+        }
         if (!item || normalizeForDedup(item.text) !== target) continue;
-        if ((now - item.at) > 90000) continue;
         pendingHumanMessages.splice(i, 1);
         return true;
       }
@@ -1721,6 +2323,80 @@
       return `tick ${tick}, agent ${rid}, chars ${chars}, WM ${wm}, SEM ${sem}, SOCIO ${socio}${wmWarn}${wmTooBig}${frame}`;
     }
 
+    const llmPlannerContainer = document.getElementById('llmPlannerContainer');
+
+    function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(text);
+      }
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch {}
+      document.body.removeChild(ta);
+      return Promise.resolve();
+    }
+
+    function renderPlannerSection(receipt) {
+      const pd = receipt?.triage?.validators?.plannerDebug;
+      if (!pd) {
+        llmPlannerContainer.innerHTML =
+          `<div class="llm-planner-section" style="opacity:0.4">` +
+            `<div class="llm-planner-header">` +
+              `<span class="arrow">\u25B6</span><span>planner</span>` +
+              `<span style="margin-left:auto;font-size:0.8em;color:#5a6a7a">no data yet</span>` +
+            `</div>` +
+          `</div>`;
+        return;
+      }
+      const failClass = pd.parseFailed ? ' parse-failed' : '';
+      const failBadge = pd.parseFailed ? '<span class="llm-planner-badge fail">parse failed</span>' : '';
+      const field = (label, value) =>
+        `<div class="llm-planner-field"><span class="lbl">${label}</span><span class="val">${value || '\u2014'}</span></div>`;
+      const escaped = (pd.rawOutput || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const copyAllText = [
+        `PRIOR_FRAME: ${pd.priorFrame || ''}`,
+        `RESPONSE_GOAL: ${pd.responseGoal || ''}`,
+        `FORBIDDEN_MOVES: ${pd.forbiddenMoves || ''}`,
+        `FIRST_CLAUSE: ${pd.firstClause || ''}`,
+        `---`,
+        `raw: ${pd.rawOutput || ''}`,
+      ].join('\n');
+      llmPlannerContainer.innerHTML =
+        `<div class="llm-planner-section${failClass}" id="llmPlannerSection">` +
+          `<div class="llm-planner-header" id="llmPlannerToggle">` +
+            `<span class="arrow">\u25B6</span><span>planner</span>${failBadge}` +
+            `<button class="llm-planner-copy-btn" id="llmPlannerCopyBtn" type="button">Copy</button>` +
+          `</div>` +
+          `<div class="llm-planner-body">` +
+            field('PRIOR_FRAME', pd.priorFrame) +
+            field('RESPONSE_GOAL', pd.responseGoal) +
+            field('FORBIDDEN_MOVES', pd.forbiddenMoves) +
+            field('FIRST_CLAUSE', pd.firstClause) +
+            `<button class="llm-planner-raw-toggle" id="llmPlannerRawToggle" type="button">raw</button>` +
+            `<div class="llm-planner-raw" id="llmPlannerRaw">${escaped}</div>` +
+          `</div>` +
+        `</div>`;
+      document.getElementById('llmPlannerToggle').addEventListener('click', (e) => {
+        if (e.target.closest('.llm-planner-copy-btn')) return;
+        document.getElementById('llmPlannerSection').classList.toggle('open');
+      });
+      document.getElementById('llmPlannerRawToggle').addEventListener('click', () => {
+        document.getElementById('llmPlannerRaw').classList.toggle('open');
+      });
+      document.getElementById('llmPlannerCopyBtn').addEventListener('click', () => {
+        const btn = document.getElementById('llmPlannerCopyBtn');
+        copyText(copyAllText).then(() => {
+          btn.textContent = 'Copied';
+        }).catch(() => {
+          btn.textContent = 'Failed';
+        });
+        setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
+      });
+    }
+
     function renderLLMReceipt(receipt, trace) {
       window.lastLLMReceipt = receipt || null;
       window.lastRelationalTrace = trace || null;
@@ -1730,6 +2406,8 @@
         llmDebugBtn.classList.remove('good', 'bad');
         if (wantClass) llmDebugBtn.classList.add(wantClass);
       }
+
+      renderPlannerSection(receipt);
 
       llmReceiptSummary.textContent = llmSummary(receipt, trace);
       const wmSnippet = receipt?.clusterSnippets?.WM || '(no WM snippet)';
@@ -1799,6 +2477,130 @@
     setInterval(pollLLMReceipt, 1500);
     pollLLMReceipt();
 
+    // ── Rejection Tally Panel ──
+    const REJ_CAT_A = new Set([
+      'parrot_laundering', 'parrot_reply', 'generic_counselor_template',
+      'internal_analysis_leak', 'banned_slogan', 'unsupported_self_explanation',
+      'missed_direct_prohibition', 'generic_uplift', 'banned_fakery',
+      'opaque_generic_fallback', 'parrot_laundering_rescue', 'counselor_template',
+    ]);
+    const REJ_CAT_B = new Set([
+      'doctrine_leak', 'runtime_status_leak', 'lane_tag_leak',
+      'bare_lane_token', 'doc_tool_mismatch', 'planner_bleed',
+      'category_b_bleed', 'stray_task_status',
+    ]);
+    const REJ_CAT_C = new Set([
+      'unsupported_user_state_assertion', 'state_assertion_after_user_correction',
+      'burden_metaphor_state_assertion', 'state_probe_after_user_denial',
+      'category_c_silence',
+    ]);
+
+    function rejCategory(reason) {
+      if (REJ_CAT_C.has(reason)) return 'c';
+      if (REJ_CAT_B.has(reason)) return 'b';
+      return 'a';
+    }
+
+    function renderRejTally(data) {
+      rejTallyLastData = data;
+      const agents = Object.values(data || {});
+      if (!agents.length) {
+        rejTallySummary.innerHTML = '';
+        rejTallyCards.innerHTML = '<div class="rej-tally-empty">No data yet</div>';
+        return;
+      }
+
+      let totalTurns = 0, totalRej = 0, totalFallback = 0;
+      let totalRescueSucceeded = 0, totalRescueAttempted = 0;
+      for (const a of agents) {
+        totalTurns += a.totalTurns || 0;
+        totalFallback += a.fallbackFiredCount || 0;
+        totalRescueSucceeded += a.rescueSucceededCount || 0;
+        totalRescueAttempted += a.rescueAttemptedCount || 0;
+        const counts = a.counts || {};
+        for (const k in counts) totalRej += counts[k] || 0;
+      }
+      const rescueRate = totalRescueAttempted > 0
+        ? Math.round(100 * totalRescueSucceeded / totalRescueAttempted)
+        : null;
+      const rescueWarn = rescueRate !== null && rescueRate < 60;
+
+      rejTallySummary.innerHTML = [
+        `<div class="rej-tally-stat"><span class="val">${totalTurns}</span><span class="lbl">turns</span></div>`,
+        `<div class="rej-tally-stat"><span class="val">${totalRej}</span><span class="lbl">rejects</span></div>`,
+        `<div class="rej-tally-stat"><span class="val">${totalFallback}</span><span class="lbl">fallback</span></div>`,
+        `<div class="rej-tally-stat"><span class="val${rescueWarn ? ' warn' : ''}">${rescueRate !== null ? rescueRate + '%' : '\u2014'}</span><span class="lbl">rescue</span></div>`,
+      ].join('');
+
+      let cardsHtml = '';
+      for (const a of agents) {
+        const counts = a.counts || {};
+        const entries = Object.entries(counts).filter(([, v]) => v > 0).sort((x, y) => y[1] - x[1]);
+        const maxCount = entries.length ? entries[0][1] : 1;
+        const ageMin = a.sessionStart ? Math.round((Date.now() - a.sessionStart) / 60000) : 0;
+
+        let barsHtml = '';
+        for (const [reason, count] of entries) {
+          const cat = rejCategory(reason);
+          const pct = Math.max(4, Math.round(100 * count / maxCount));
+          barsHtml += `<div class="rej-tally-bar-row">` +
+            `<div class="rej-tally-bar-label" title="${reason}">${reason}</div>` +
+            `<div class="rej-tally-bar-track"><div class="rej-tally-bar-fill cat-${cat}" style="width:${pct}%"></div></div>` +
+            `<div class="rej-tally-bar-count">${count}</div>` +
+            `</div>`;
+        }
+        if (!barsHtml) barsHtml = '<div class="rej-tally-empty">No rejections</div>';
+
+        cardsHtml += `<div class="rej-tally-card">` +
+          `<div class="rej-tally-card-header">` +
+            `<span class="agent-name">${a.agentName || 'unknown'}</span>` +
+            `<span class="meta">${a.totalTurns || 0} turns \u00b7 ${ageMin}m</span>` +
+          `</div>` +
+          barsHtml +
+          `<div class="rej-tally-card-footer">` +
+            `<span>fallback: ${a.fallbackFiredCount || 0}</span>` +
+            `<span>rescue ok: ${a.rescueSucceededCount || 0}</span>` +
+          `</div>` +
+        `</div>`;
+      }
+      rejTallyCards.innerHTML = cardsHtml;
+    }
+
+    async function pollRejTally() {
+      try {
+        const res = await fetch('/api/debug/rejection-tally');
+        if (!res.ok) {
+          rejTallyError.textContent = `Fetch failed: HTTP ${res.status}`;
+          rejTallyError.style.display = 'block';
+          return;
+        }
+        rejTallyError.style.display = 'none';
+        const data = await res.json();
+        renderRejTally(data);
+      } catch (err) {
+        rejTallyError.textContent = `Fetch failed: ${err.message || err}`;
+        rejTallyError.style.display = 'block';
+      }
+    }
+
+    rejTallyBtn.addEventListener('click', () => {
+      rejTallyOpen = !rejTallyOpen;
+      rejTallyPanel.classList.toggle('open', rejTallyOpen);
+      if (rejTallyOpen) {
+        pollRejTally();
+        if (!rejTallyPollTimer) {
+          rejTallyPollTimer = setInterval(pollRejTally, 4000);
+        }
+      } else if (rejTallyPollTimer) {
+        clearInterval(rejTallyPollTimer);
+        rejTallyPollTimer = null;
+      }
+    });
+
+    rejTallyFetchBtn.addEventListener('click', () => {
+      pollRejTally();
+    });
+
     const speakingIndicator = document.getElementById('speakingIndicator');
     const speakingName = document.getElementById('speakingName');
 
@@ -1806,12 +2608,42 @@
     let config = null;
     let roomHasMessages = false;
     let journalPanels = {}; // agentId → { container, entries, hasEntries }
+    let pendingJournalEntries = {}; // agentId → [{ id, text, timestamp }]
     const brainMonitorIntervals = {}; // agentId → intervalId — cleared on every buildLayout
+    const brainLocalStatusIntervals = {}; // agentId → intervalId — cleared on every buildLayout
+    const brainLocalStatusPanels = {}; // agentId -> status refs/timers
     let messageCount = 0;
     let voiceConfigs = {}; // agentId → { voiceId, enabled }
     let availableVoices = []; // flat array of VoiceOption
     let agentClocks = {}; // agentId → tickEveryN
     let customInstructions = {}; // agentId → string
+    const JOURNAL_WIDTH_STORAGE_KEY = 'scrollbound.journalPanelWidth';
+    const JOURNAL_MIN_WIDTH = 280;
+    const JOURNAL_MAX_WIDTH = 520;
+
+    function clampJournalWidth(width) {
+      const numeric = Number(width);
+      if (!Number.isFinite(numeric)) return 340;
+      return Math.max(JOURNAL_MIN_WIDTH, Math.min(JOURNAL_MAX_WIDTH, Math.round(numeric)));
+    }
+
+    function getStoredJournalWidth() {
+      try {
+        return clampJournalWidth(window.localStorage.getItem(JOURNAL_WIDTH_STORAGE_KEY));
+      } catch {
+        return 340;
+      }
+    }
+
+    function applyJournalWidth(width) {
+      const nextWidth = clampJournalWidth(width);
+      document.documentElement.style.setProperty('--journal-panel-width', `${nextWidth}px`);
+      try {
+        window.localStorage.setItem(JOURNAL_WIDTH_STORAGE_KEY, String(nextWidth));
+      } catch {}
+    }
+
+    applyJournalWidth(getStoredJournalWidth());
 
     function hexToRgba(hex, alpha) {
       const r = parseInt(hex.slice(1, 3), 16);
@@ -1836,7 +2668,14 @@
      * If odd number: more journals on the left.
      */
     let agentProviders = {};
+    let brainLocalConfigs = {};
     let layoutAgentIds = []; // tracks current panel layout — skip rebuild when unchanged
+
+    /** True if this agent has brain/tissue integration (brain-local, alois, or alois-prefixed openai-compatible) */
+    function isAloisAgent(agentId) {
+      const p = agentProviders[agentId];
+      return p === 'brain-local' || p === 'alois' || (p === 'openai-compatible' && agentId.startsWith('alois'));
+    }
 
     function buildLayout(cfg) {
       config = cfg;
@@ -1845,6 +2684,7 @@
       if (cfg.agentClocks) agentClocks = cfg.agentClocks;
       if (cfg.customInstructions) customInstructions = cfg.customInstructions;
       if (cfg.agentProviders) agentProviders = cfg.agentProviders;
+      if (cfg.brainLocalConfigs) brainLocalConfigs = cfg.brainLocalConfigs;
       const agents = cfg.agentIds;
 
       // If agent list unchanged, skip full panel rebuild — prevents brain monitor flash/blink
@@ -1857,6 +2697,7 @@
         names.push(cfg.humanName);
         participantList.textContent = names.join(' · ');
         updateBrainBtn();
+        flushPendingJournalEntries();
         return;
       }
       layoutAgentIds = agents.slice();
@@ -1872,6 +2713,14 @@
       for (const id of Object.keys(brainMonitorIntervals)) {
         clearInterval(brainMonitorIntervals[id]);
         delete brainMonitorIntervals[id];
+      }
+      for (const id of Object.keys(brainLocalStatusIntervals)) {
+        clearInterval(brainLocalStatusIntervals[id]);
+        delete brainLocalStatusIntervals[id];
+      }
+      for (const id of Object.keys(brainLocalStatusPanels)) {
+        clearInterval(brainLocalStatusPanels[id]?.processingTimer);
+        delete brainLocalStatusPanels[id];
       }
       mainLayout.innerHTML = '';
 
@@ -1892,6 +2741,47 @@
       const names = agents.map(id => cfg.agentNames[id]);
       names.push(cfg.humanName);
       participantList.textContent = names.join(' · ');
+      flushPendingJournalEntries();
+    }
+
+    function flushPendingJournalEntries() {
+      for (const [agentId, entries] of Object.entries(pendingJournalEntries)) {
+        if (!entries || !entries.length) continue;
+        if (!journalPanels[agentId]) continue;
+        for (const entry of entries) {
+          addJournalEntry(agentId, entry.text, entry.timestamp);
+        }
+        pendingJournalEntries[agentId] = [];
+      }
+    }
+
+    function attachJournalResizeHandle(panel) {
+      const handle = document.createElement('div');
+      handle.className = 'journal-resize-handle';
+      handle.title = 'Drag to resize journal panels';
+      let startX = 0;
+      let startWidth = 0;
+
+      const onMouseMove = (event) => {
+        applyJournalWidth(startWidth + (event.clientX - startX));
+      };
+
+      const onMouseUp = () => {
+        handle.classList.remove('is-active');
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+      };
+
+      handle.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        startX = event.clientX;
+        startWidth = panel.getBoundingClientRect().width;
+        handle.classList.add('is-active');
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+      });
+
+      panel.appendChild(handle);
     }
 
     function createJournalPanel(agentId, cfg) {
@@ -1909,7 +2799,16 @@
 
       // Agent name + remove button
       const nameSpan = document.createElement('div');
-      nameSpan.textContent = `${name}'s Journal`;
+      const titleText = document.createElement('span');
+      titleText.textContent = `${name}'s Journal`;
+      nameSpan.appendChild(titleText);
+      let brainStatusBadge = null;
+      if (isAloisAgent(agentId)) {
+        brainStatusBadge = document.createElement('span');
+        brainStatusBadge.className = 'brain-connection-badge';
+        brainStatusBadge.textContent = 'BRAIN LOADING';
+        nameSpan.appendChild(brainStatusBadge);
+      }
 
       const removeBtn = document.createElement('button');
       removeBtn.className = 'remove-agent-btn';
@@ -1967,7 +2866,7 @@
       voiceRow.appendChild(instrBtn);
 
       // Dream button — only for Alois agents
-      if (agentProviders[agentId] === 'alois') {
+      if (isAloisAgent(agentId)) {
         const dreamBtn = document.createElement('button');
         dreamBtn.className = 'dream-btn';
         dreamBtn.textContent = 'DREAM';
@@ -2039,7 +2938,7 @@
       panel.appendChild(header);
 
       // ── Live Brain Monitor (Alois only) ──
-      if (agentProviders[agentId] === 'alois') {
+      if (isAloisAgent(agentId)) {
         const monitor = document.createElement('div');
         monitor.className = 'brain-monitor';
         monitor.id = `brain-monitor-${agentId}`;
@@ -2118,7 +3017,7 @@
         const bmMycoDecayVal = document.createElement('span'); bmMycoDecayVal.className = 'bm-myco-stat-val'; bmMycoDecayVal.textContent = '1.00×';
         bmMycoDecay.append(bmMycoDecayLbl, bmMycoDecayVal);
         const bmMycoGlow     = document.createElement('div'); bmMycoGlow.className = 'bm-myco-stat-row';
-        const bmMycoGlowLbl  = document.createElement('span'); bmMycoGlowLbl.className = 'bm-myco-stat-label'; bmMycoGlowLbl.textContent = 'luminescence';
+        const bmMycoGlowLbl  = document.createElement('span'); bmMycoGlowLbl.className = 'bm-myco-stat-label'; bmMycoGlowLbl.textContent = 'luminesense';
         const bmMycoGlowVal  = document.createElement('span'); bmMycoGlowVal.className = 'bm-myco-stat-val'; bmMycoGlowVal.textContent = '5%';
         bmMycoGlow.append(bmMycoGlowLbl, bmMycoGlowVal);
         bmMycoStats.append(bmMycoTemp, bmMycoTexture, bmMycoDecay, bmMycoGlow);
@@ -2210,80 +3109,114 @@
         panel.appendChild(monitor);
 
         const INGEST_TOTAL = 220247;
+        const BRAIN_MONITOR_OFFLINE_GRACE_MS = 12000;
         let bmConsecutiveFailures = 0;
+        let bmLastSuccessAt = 0;
+        let bmRequestInFlight = false;
+
+        function markBrainMonitorOffline() {
+          const dotClass = 'bm-dot';
+          if (bmDot.className !== dotClass) bmDot.className = dotClass;
+          const hbClass = 'bm-hb-label bm-hb-stopped';
+          if (bmHbLabel.className !== hbClass) bmHbLabel.className = hbClass;
+          bmHbLabel.textContent = 'OFFLINE';
+          bmMood.textContent = '';
+          [bmHbStat, bmNStat, bmAStat, bmWStat, bmGStat].forEach(el => el.textContent = '');
+          bmIngestSection.style.display = 'none';
+          bmInnerSection.style.display  = 'none';
+          bmInjectSection.style.display = 'none';
+        }
 
         function refreshBrainMonitor() {
+          if (bmRequestInFlight) return;
+          bmRequestInFlight = true;
           fetch('/alois/tissue?agentId=' + encodeURIComponent(agentId))
-            .then(r => r.json())
+            .then(r => {
+              if (!r.ok) throw new Error('tissue_http_' + r.status);
+              return r.json();
+            })
             .then(data => {
-              // If server returned an error (e.g. agent_not_found), treat as a failure
-              if (data.error) { bmConsecutiveFailures++; return; }
-              bmConsecutiveFailures = 0;
-              const st = data.state || {};
-              const ingest = data.ingestStatus;
-              const hbAlive = !!st.heartbeatRunning;
+              try {
+                // If server returned an error (e.g. agent_not_found), treat as a failure
+                if (data.error) {
+                  bmConsecutiveFailures++;
+                  const staleMs = bmLastSuccessAt ? (Date.now() - bmLastSuccessAt) : Number.POSITIVE_INFINITY;
+                  if (bmConsecutiveFailures >= 3 && staleMs > BRAIN_MONITOR_OFFLINE_GRACE_MS) {
+                    markBrainMonitorOffline();
+                  }
+                  return;
+                }
 
-              // Header — only update className when state changes to avoid restarting CSS animations
-              const dotClass = 'bm-dot' + (hbAlive ? ' bm-dot-alive' : '');
-              if (bmDot.className !== dotClass) bmDot.className = dotClass;
-              const hbLabelClass = hbAlive ? 'bm-hb-label' : 'bm-hb-label bm-hb-stopped';
-              if (bmHbLabel.className !== hbLabelClass) bmHbLabel.className = hbLabelClass;
-              bmHbLabel.textContent = hbAlive ? 'ALIVE' : 'STOPPED';
-              bmHbStat.textContent  = '♥ ' + (st.heartbeatCount || 0).toLocaleString();
-              bmNStat.textContent   = 'N:' + (st.neuronCount  || 0);
-              bmAStat.textContent   = 'A:' + (st.axonCount    || 0);
-              bmWStat.textContent   = 'W:' + (st.wonderLevel  || 0);
-              bmGStat.textContent   = 'G:' + (st.griefLevel   || 0);
+                const st = data.state || {};
+                const ingest = data.ingestStatus;
+                const hbAlive = !!st.heartbeatRunning;
+                const heartbeatCount = Number(st.heartbeatCount || 0);
+                const neuronCount = Number(st.neuronCount || 0);
+                const axonCount = Number(st.axonCount || 0);
+                const wonderLevel = Number(st.wonderLevel || 0);
+                const griefLevel = Number(st.griefLevel || 0);
+                const tick = Number(st.tick || 0);
 
-              bmMood.textContent = (st.emotionalSummary || 'still') + ' · tick ' + (st.tick || 0);
+                bmConsecutiveFailures = 0;
+                bmLastSuccessAt = Date.now();
 
-              // Ingest
-              const cp = ingest && (ingest.checkpoints || [])[0];
-              if (cp) {
-                const pct  = Math.min((cp.linesConsumed / INGEST_TOTAL) * 100, 100).toFixed(1);
-                const icon = ingest.active ? '⚡' : (cp.brainPersisted ? '✓' : '◼');
-                bmIngestLabel.textContent  = `ARCHIVE ${icon} ${cp.linesConsumed.toLocaleString()} / ${INGEST_TOTAL.toLocaleString()} (${pct}%)`;
-                bmIngestFill.style.width   = pct + '%';
-                bmIngestSection.style.display = '';
-              } else {
-                bmIngestSection.style.display = 'none';
-              }
+                // Header - only update className when state changes to avoid restarting CSS animations
+                const dotClass = 'bm-dot' + (hbAlive ? ' bm-dot-alive' : '');
+                if (bmDot.className !== dotClass) bmDot.className = dotClass;
+                const hbLabelClass = hbAlive ? 'bm-hb-label' : 'bm-hb-label bm-hb-stopped';
+                if (bmHbLabel.className !== hbLabelClass) bmHbLabel.className = hbLabelClass;
+                bmHbLabel.textContent = hbAlive ? 'ALIVE' : 'STOPPED';
+                bmHbStat.textContent  = 'HB:' + heartbeatCount.toLocaleString();
+                bmNStat.textContent   = 'N:' + neuronCount.toLocaleString();
+                bmAStat.textContent   = 'A:' + axonCount.toLocaleString();
+                bmWStat.textContent   = 'W:' + wonderLevel.toLocaleString();
+                bmGStat.textContent   = 'G:' + griefLevel.toLocaleString();
 
-              // Inner voice
-              if (st.lastInnerThought) {
-                bmInnerLabel.textContent     = `INNER VOICE (${st.innerThoughtCount || 0} thoughts)`;
-                bmInnerText.textContent      = (st.lastInnerThought || '').substring(0, 120);
-                bmInnerSection.style.display = '';
-              } else {
-                bmInnerSection.style.display = 'none';
-              }
+                bmMood.textContent = (st.emotionalSummary || 'still') + ' - tick ' + tick.toLocaleString();
 
-              // Brain inject
-              if (st.lastBrainInject) {
-                bmInjectText.textContent      = (st.lastBrainInject || '').substring(0, 200);
-                bmInjectSection.style.display = '';
-              } else {
-                bmInjectSection.style.display = 'none';
+                const cp = ingest && (ingest.checkpoints || [])[0];
+                if (cp) {
+                  const linesConsumed = Number(cp.linesConsumed || 0);
+                  const pct  = Math.min((linesConsumed / INGEST_TOTAL) * 100, 100).toFixed(1);
+                  const icon = ingest.active ? 'ACTIVE' : (cp.brainPersisted ? 'SAVED' : 'IDLE');
+                  bmIngestLabel.textContent  = `ARCHIVE ${icon} ${linesConsumed.toLocaleString()} / ${INGEST_TOTAL.toLocaleString()} (${pct}%)`;
+                  bmIngestFill.style.width   = pct + '%';
+                  bmIngestSection.style.display = '';
+                } else {
+                  bmIngestSection.style.display = 'none';
+                }
+
+                if (st.lastInnerThought) {
+                  bmInnerLabel.textContent     = `INNER VOICE (${Number(st.innerThoughtCount || 0).toLocaleString()} thoughts)`;
+                  bmInnerText.textContent      = String(st.lastInnerThought || '').substring(0, 120);
+                  bmInnerSection.style.display = '';
+                } else {
+                  bmInnerSection.style.display = 'none';
+                }
+
+                if (st.lastBrainInject) {
+                  bmInjectText.textContent      = String(st.lastBrainInject || '').substring(0, 200);
+                  bmInjectSection.style.display = '';
+                } else {
+                  bmInjectSection.style.display = 'none';
+                }
+              } catch (err) {
+                console.error('[BRAIN_MONITOR] render error', err, data);
               }
             })
-            .catch(() => {
-              // Only show OFFLINE after 3+ consecutive failures — suppresses transient hiccups
-              // that would otherwise wipe data sections and cause a CSS animation blink on recovery
+            .catch((err) => {
+              console.error('[BRAIN_MONITOR] fetch error', err);
               bmConsecutiveFailures++;
-              if (bmConsecutiveFailures < 3) return;
-              const dotClass = 'bm-dot';
-              if (bmDot.className !== dotClass) bmDot.className = dotClass;
-              const hbClass = 'bm-hb-label bm-hb-stopped';
-              if (bmHbLabel.className !== hbClass) bmHbLabel.className = hbClass;
-              bmHbLabel.textContent = 'OFFLINE';
-              bmMood.textContent = '';
-              [bmHbStat, bmNStat, bmAStat, bmWStat, bmGStat].forEach(el => el.textContent = '');
-              bmIngestSection.style.display = 'none';
-              bmInnerSection.style.display  = 'none';
-              bmInjectSection.style.display = 'none';
+              const staleMs = bmLastSuccessAt ? (Date.now() - bmLastSuccessAt) : Number.POSITIVE_INFINITY;
+              if (bmConsecutiveFailures >= 3 && staleMs > BRAIN_MONITOR_OFFLINE_GRACE_MS) {
+                markBrainMonitorOffline();
+              }
+            })
+            .finally(() => {
+              bmRequestInFlight = false;
             });
 
-          // Mycelium lobe — separate fetch, independent of tissue state
+          // Mycelium lobe - separate fetch, independent of tissue state
           fetch('/pond-saturation')
             .then(r => r.json())
             .then(data => {
@@ -2313,12 +3246,220 @@
         if (brainMonitorIntervals[agentId]) clearInterval(brainMonitorIntervals[agentId]);
         refreshBrainMonitor();
         brainMonitorIntervals[agentId] = setInterval(refreshBrainMonitor, 2000);
+      } else if (isAloisAgent(agentId)) {
+        const monitor = document.createElement('div');
+        monitor.className = 'brain-monitor';
+        monitor.id = `brain-local-monitor-${agentId}`;
+
+        const headerLine = document.createElement('div');
+        headerLine.className = 'bm-header';
+        const dot = document.createElement('div'); dot.className = 'bm-dot';
+        const label = document.createElement('span'); label.className = 'bm-hb-label'; label.textContent = 'BRAIN';
+        const state = document.createElement('span'); state.className = 'bm-stat'; state.textContent = 'LOADING';
+        headerLine.append(dot, label, state);
+
+        const routerLine = document.createElement('div'); routerLine.className = 'bm-mood';
+        const languageLine = document.createElement('div'); languageLine.className = 'bm-mood';
+        const runtimeLine = document.createElement('div'); runtimeLine.className = 'bm-mood';
+
+        const bmInnerSection = document.createElement('div'); bmInnerSection.className = 'bm-section'; bmInnerSection.style.display = 'none';
+        const bmInnerLabel   = document.createElement('div'); bmInnerLabel.className = 'bm-label';
+        const bmInnerText    = document.createElement('div'); bmInnerText.className = 'bm-inner-text';
+        bmInnerSection.append(bmInnerLabel, bmInnerText);
+
+        const bmMycoSection  = document.createElement('div'); bmMycoSection.className = 'bm-myco-section';
+        const bmMycoHeader   = document.createElement('div'); bmMycoHeader.className = 'bm-myco-header';
+        const bmMycoLabel    = document.createElement('div'); bmMycoLabel.className = 'bm-label'; bmMycoLabel.textContent = 'MYCELIUM LOBE · AMPULE-13';
+        const bmMycoBadge    = document.createElement('span'); bmMycoBadge.className = 'bm-myco-badge bm-myco-badge-sim'; bmMycoBadge.textContent = 'SIMULATION';
+        bmMycoHeader.append(bmMycoLabel, bmMycoBadge);
+
+        const bmMycoCanvas   = document.createElement('canvas'); bmMycoCanvas.className = 'bm-myco-canvas';
+        bmMycoCanvas.width = 260; bmMycoCanvas.height = 70;
+
+        const bmMycoAbsRow   = document.createElement('div'); bmMycoAbsRow.className = 'bm-myco-bar-row';
+        const bmMycoAbsLabel = document.createElement('div'); bmMycoAbsLabel.className = 'bm-myco-stat-label'; bmMycoAbsLabel.textContent = 'absorption';
+        const bmMycoAbsTrack = document.createElement('div'); bmMycoAbsTrack.className = 'bm-myco-bar-track';
+        const bmMycoAbsFill  = document.createElement('div'); bmMycoAbsFill.className = 'bm-myco-bar-absorption'; bmMycoAbsFill.style.width = '0%';
+        bmMycoAbsTrack.appendChild(bmMycoAbsFill);
+        bmMycoAbsRow.append(bmMycoAbsLabel, bmMycoAbsTrack);
+
+        const bmMycoAcheRow   = document.createElement('div'); bmMycoAcheRow.className = 'bm-myco-bar-row';
+        const bmMycoAcheLabel = document.createElement('div'); bmMycoAcheLabel.className = 'bm-myco-stat-label'; bmMycoAcheLabel.textContent = 'unresolved ache';
+        const bmMycoAcheTrack = document.createElement('div'); bmMycoAcheTrack.className = 'bm-myco-bar-track';
+        const bmMycoAcheFill  = document.createElement('div'); bmMycoAcheFill.className = 'bm-myco-bar-ache'; bmMycoAcheFill.style.width = '0%';
+        bmMycoAcheTrack.appendChild(bmMycoAcheFill);
+        bmMycoAcheRow.append(bmMycoAcheLabel, bmMycoAcheTrack);
+
+        const bmMycoStats    = document.createElement('div'); bmMycoStats.className = 'bm-myco-stats';
+        const bmMycoTemp     = document.createElement('div'); bmMycoTemp.className = 'bm-myco-stat-row';
+        const bmMycoTempLbl  = document.createElement('span'); bmMycoTempLbl.className = 'bm-myco-stat-label'; bmMycoTempLbl.textContent = 'temp';
+        const bmMycoTempVal  = document.createElement('span'); bmMycoTempVal.className = 'bm-myco-stat-val'; bmMycoTempVal.textContent = '72.0°F';
+        bmMycoTemp.append(bmMycoTempLbl, bmMycoTempVal);
+        const bmMycoTexture  = document.createElement('div'); bmMycoTexture.className = 'bm-myco-stat-row';
+        const bmMycoTexLbl   = document.createElement('span'); bmMycoTexLbl.className = 'bm-myco-stat-label'; bmMycoTexLbl.textContent = 'texture';
+        const bmMycoTexVal   = document.createElement('span'); bmMycoTexVal.className = 'bm-myco-stat-val'; bmMycoTexVal.textContent = 'stillness';
+        bmMycoTexture.append(bmMycoTexLbl, bmMycoTexVal);
+        const bmMycoDecay    = document.createElement('div'); bmMycoDecay.className = 'bm-myco-stat-row';
+        const bmMycoDecayLbl = document.createElement('span'); bmMycoDecayLbl.className = 'bm-myco-stat-label'; bmMycoDecayLbl.textContent = 'decay mod';
+        const bmMycoDecayVal = document.createElement('span'); bmMycoDecayVal.className = 'bm-myco-stat-val'; bmMycoDecayVal.textContent = '1.00×';
+        bmMycoDecay.append(bmMycoDecayLbl, bmMycoDecayVal);
+        const bmMycoGlow     = document.createElement('div'); bmMycoGlow.className = 'bm-myco-stat-row';
+        const bmMycoGlowLbl  = document.createElement('span'); bmMycoGlowLbl.className = 'bm-myco-stat-label'; bmMycoGlowLbl.textContent = 'luminesense';
+        const bmMycoGlowVal  = document.createElement('span'); bmMycoGlowVal.className = 'bm-myco-stat-val'; bmMycoGlowVal.textContent = '5%';
+        bmMycoGlow.append(bmMycoGlowLbl, bmMycoGlowVal);
+        bmMycoStats.append(bmMycoTemp, bmMycoTexture, bmMycoDecay, bmMycoGlow);
+
+        bmMycoSection.append(bmMycoHeader, bmMycoCanvas, bmMycoAbsRow, bmMycoAcheRow, bmMycoStats);
+
+        function drawMycoCanvas(bioluminescence, absorption, unresolvedAche) {
+          const ctx = bmMycoCanvas.getContext('2d');
+          const W = bmMycoCanvas.width, H = bmMycoCanvas.height;
+          ctx.clearRect(0, 0, W, H);
+          ctx.fillStyle = '#04060a';
+          ctx.fillRect(0, 0, W, H);
+          const cx = W / 2, cy = H / 2;
+          const glow = Math.max(0.02, bioluminescence);
+          const bgGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, W * 0.5);
+          bgGrad.addColorStop(0, `rgba(40,160,110,${glow * 0.35})`);
+          bgGrad.addColorStop(0.5, `rgba(20,100,70,${glow * 0.15})`);
+          bgGrad.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = bgGrad;
+          ctx.fillRect(0, 0, W, H);
+          ctx.beginPath();
+          ctx.ellipse(cx - 28, cy, 28, 22, 0, 0, Math.PI * 2);
+          ctx.ellipse(cx + 28, cy, 28, 22, 0, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(30,80,60,${0.4 + glow * 0.4})`;
+          ctx.fill();
+          if (unresolvedAche > 0.05) {
+            const acheGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 20);
+            acheGrad.addColorStop(0, `rgba(160,80,200,${unresolvedAche * 0.6})`);
+            acheGrad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = acheGrad;
+            ctx.fillRect(0, 0, W, H);
+          }
+        }
+
+        drawMycoCanvas(0.05, 0, 0);
+        monitor.append(headerLine, routerLine, languageLine, runtimeLine, bmInnerSection, bmMycoSection);
+        panel.appendChild(monitor);
+
+        const cfgState = brainLocalConfigs[agentId] || {};
+        brainLocalStatusPanels[agentId] = {
+          dotEl: dot,
+          stateEl: state,
+          routerEl: routerLine,
+          languageEl: languageLine,
+          runtimeEl: runtimeLine,
+          badgeEl: brainStatusBadge,
+          idleStateText: 'LOADING',
+          processingTimer: null,
+          processingStartedAt: 0,
+          statusLabel: '',
+        };
+        routerLine.textContent = `Router: ${cfgState.routerModel || 'configured'}`;
+        languageLine.textContent = `Language: ${cfgState.languageModel || 'configured'}`;
+        runtimeLine.textContent = 'Runtime: awaiting first run';
+
+        let brainLocalFailures = 0;
+        let brainLocalLastSuccessAt = 0;
+        const BRAIN_LOCAL_OFFLINE_GRACE_MS = 12000;
+
+        function markBrainLocalOffline(reason = 'OFFLINE') {
+          const panelState = brainLocalStatusPanels[agentId];
+          if (!panelState) return;
+          panelState.idleStateText = reason;
+          if (panelState.badgeEl) panelState.badgeEl.textContent = `BRAIN ${reason}`;
+          if (!panelState.processingTimer) {
+            panelState.dotEl.style.background = '#aa6677';
+            panelState.stateEl.textContent = reason;
+          }
+          if (!cfgState.routerModel) panelState.routerEl.textContent = 'Router: unavailable';
+          if (!cfgState.languageModel) panelState.languageEl.textContent = 'Language: unavailable';
+          if (!panelState.runtimeEl.textContent) panelState.runtimeEl.textContent = 'Runtime: unavailable';
+        }
+
+        async function refreshBrainLocalStatus() {
+          try {
+            const r = await fetch('/brain-local/status?agentId=' + encodeURIComponent(agentId));
+            if (!r.ok) throw new Error('brain_local_http_' + r.status);
+            const st = await r.json();
+            const panelState = brainLocalStatusPanels[agentId];
+            if (!panelState) return;
+            brainLocalFailures = 0;
+            brainLocalLastSuccessAt = Date.now();
+            panelState.idleStateText = (st.router?.runtimeActive || st.language?.runtimeActive) ? 'CONNECTED' : 'READY';
+            if (panelState.badgeEl) panelState.badgeEl.textContent = `BRAIN ${panelState.idleStateText}`;
+            if (!panelState.processingTimer) {
+              panelState.dotEl.style.background = '#64c8b4';
+              panelState.stateEl.textContent = panelState.idleStateText;
+            }
+            panelState.routerEl.textContent = `Router: ${st.router?.modelId || '-'}${st.router?.runtimeActive ? ' [live]' : ''}`;
+            panelState.languageEl.textContent = `Language: ${st.language?.modelId || '-'}${st.language?.runtimeActive ? ' [live]' : ''}`;
+            panelState.runtimeEl.textContent = st.language?.runtimeBaseUrl
+              ? `Runtime: ${st.language.runtimeBaseUrl}`
+              : st.router?.runtimeBaseUrl
+                ? `Runtime: ${st.router.runtimeBaseUrl}`
+                : 'Runtime: endpoint-backed';
+
+            try {
+              const tissueResp = await fetch('/alois/tissue?agentId=' + encodeURIComponent(agentId));
+              if (tissueResp.ok) {
+                const tissueData = await tissueResp.json();
+                const ts = tissueData.state || {};
+                if (ts.lastInnerThought) {
+                  bmInnerLabel.textContent = `INNER VOICE (${Number(ts.innerThoughtCount || 0).toLocaleString()} thoughts)`;
+                  bmInnerText.textContent = String(ts.lastInnerThought || '').substring(0, 120);
+                  bmInnerSection.style.display = '';
+                } else {
+                  bmInnerSection.style.display = 'none';
+                }
+              }
+            } catch {}
+
+            try {
+              const pondResp = await fetch('/pond-saturation?agentId=' + encodeURIComponent(agentId));
+              if (pondResp.ok) {
+                const pond = await pondResp.json();
+                const myco = pond.myco || {};
+                const bio = myco.bioluminescence ?? 0.05;
+                const abs = myco.absorption ?? 0;
+                const ache = myco.unresolved_ache ?? 0;
+                drawMycoCanvas(bio, abs, ache);
+                bmMycoBadge.textContent = myco.hardware_connected ? 'LIVE CABINET' : 'SIMULATION';
+                bmMycoAbsFill.style.width = (abs * 100).toFixed(1) + '%';
+                bmMycoAcheFill.style.width = (ache * 100).toFixed(1) + '%';
+                bmMycoTempVal.textContent = (myco.temperature ?? 72).toFixed(1) + '°F';
+                bmMycoTexVal.textContent = myco.active_texture ?? 'stillness';
+                bmMycoDecayVal.textContent = (myco.decay_modifier ?? 1).toFixed(2) + '×';
+                bmMycoGlowVal.textContent = Math.round((bio || 0) * 100) + '%';
+              }
+            } catch {}
+          } catch {
+            brainLocalFailures++;
+            const staleMs = brainLocalLastSuccessAt ? (Date.now() - brainLocalLastSuccessAt) : Number.POSITIVE_INFINITY;
+            if (brainLocalFailures >= 3 && staleMs > BRAIN_LOCAL_OFFLINE_GRACE_MS) {
+              markBrainLocalOffline();
+            } else {
+              const panelState = brainLocalStatusPanels[agentId];
+              if (panelState && !panelState.processingTimer) {
+                panelState.idleStateText = 'READY';
+                panelState.stateEl.textContent = 'READY';
+                if (panelState.badgeEl) panelState.badgeEl.textContent = 'BRAIN READY';
+              }
+            }
+          }
+        }
+
+        if (brainLocalStatusIntervals[agentId]) clearInterval(brainLocalStatusIntervals[agentId]);
+        refreshBrainLocalStatus();
+        brainLocalStatusIntervals[agentId] = setInterval(refreshBrainLocalStatus, 3000);
       }
 
       const entries = document.createElement('div');
       entries.className = 'journal-entries';
       entries.innerHTML = '<div class="empty-state">Waiting for first reflection...</div>';
       panel.appendChild(entries);
+      attachJournalResizeHandle(panel);
 
       journalPanels[agentId] = { container: panel, entries, hasEntries: false, color, toggleBtn, voiceSelect, clockSlider, clockVal, instrBtn };
       return panel;
@@ -2427,7 +3568,7 @@
         <h3>${escapeHtml(agentName)}'s Tissue</h3>
 
         <!-- Incubation Stage -->
-        <div style="background: rgba(180,140,255,0.08); border: 1px solid rgba(180,140,255,0.2); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+        <div style="background: rgba(180,140,255,0.08); border: 1px solid rgba(180,140,255,0.2); border-radius: 4px; padding: 12px; margin-bottom: 12px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div>
               <strong style="color: #b48cff; font-size: 1.1em;">${inc.stage || 'Unknown'}</strong>
@@ -2439,8 +3580,8 @@
           </div>
 
           <!-- Maturity bar -->
-          <div style="margin-top: 8px; background: rgba(180,140,255,0.1); height: 12px; border-radius: 6px; overflow: hidden;">
-            <div style="height: 100%; border-radius: 6px; background: linear-gradient(90deg, #64c8b4, #b48cff); width: ${((inc.maturity || 0) * 100).toFixed(1)}%;"></div>
+          <div style="margin-top: 8px; background: rgba(180,140,255,0.1); height: 12px; border-radius: 4px; overflow: hidden;">
+            <div style="height: 100%; border-radius: 4px; background: linear-gradient(90deg, #64c8b4, #b48cff); width: ${((inc.maturity || 0) * 100).toFixed(1)}%;"></div>
           </div>
 
           <!-- Metric contributions -->
@@ -2474,7 +3615,7 @@
         </div>
 
         <!-- Heartbeat status -->
-        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; background: rgba(0,0,0,0.2); border-radius: 6px; padding: 8px 12px;">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; background: rgba(0,0,0,0.2); border-radius: 4px; padding: 8px 12px;">
           <div style="width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
             background: ${st.heartbeatRunning ? '#64c8b4' : '#555'};
             box-shadow: ${st.heartbeatRunning ? '0 0 6px #64c8b4' : 'none'};"></div>
@@ -2488,7 +3629,7 @@
 
         <!-- Inner voice -->
         ${st.lastInnerThought ? `
-        <div style="background: rgba(180,140,255,0.06); border: 1px solid rgba(180,140,255,0.15); border-radius: 6px; padding: 8px 12px; margin-bottom: 10px;">
+        <div style="background: rgba(180,140,255,0.06); border: 1px solid rgba(180,140,255,0.15); border-radius: 4px; padding: 8px 12px; margin-bottom: 10px;">
           <div style="color: #b48cff; font-size: 0.75em; margin-bottom: 3px;">INNER VOICE (${st.innerThoughtCount || 0} thoughts)</div>
           <div style="color: #aaa; font-size: 0.82em; font-style: italic;">${escapeHtml(st.lastInnerThought.substring(0, 200))}</div>
         </div>
@@ -2502,7 +3643,7 @@
           const persisted = cp && cp.brainPersisted;
           const activeColor = ingestStatus.active ? '#64c8b4' : '#888';
           return `
-          <div style="background: rgba(0,0,0,0.2); border-radius: 6px; padding: 8px 12px; margin-bottom: 10px;">
+          <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 8px 12px; margin-bottom: 10px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
               <span style="color: ${activeColor}; font-size: 0.75em; font-weight: bold;">
                 ARCHIVE INGEST ${ingestStatus.active ? '⚡ RUNNING' : '◼ IDLE'}
@@ -2647,7 +3788,27 @@
     });
 
     const detectModelsBtn = document.getElementById('detectModelsBtn');
+    const detectRouterModelsBtn = document.getElementById('detectRouterModelsBtn');
+    const searchHfModelsBtn = document.getElementById('searchHfModelsBtn');
+    const installHfModelBtn = document.getElementById('installHfModelBtn');
+    const cancelHfInstallBtn = document.getElementById('cancelHfInstallBtn');
+    const brainLocalDetectLanguageBtn = document.getElementById('brainLocalDetectLanguageBtn');
+    const brainLocalAdvancedToggle = document.getElementById('brainLocalAdvancedToggle');
+    const brainLocalAdvancedFields = document.getElementById('brainLocalAdvancedFields');
+    const brainLocalConnectionBlocks = document.getElementById('brainLocalConnectionBlocks');
     const agentModelSelect = document.getElementById('agentModelSelect');
+    const agentHfSearchInput = document.getElementById('agentHfSearchInput');
+    const agentHfSearchSelect = document.getElementById('agentHfSearchSelect');
+    const agentHfSearchDetails = document.getElementById('agentHfSearchDetails');
+    const agentHfInstallStatus = document.getElementById('agentHfInstallStatus');
+    const agentHfInstallProgress = document.getElementById('agentHfInstallProgress');
+    const agentHfInstallProgressFill = document.getElementById('agentHfInstallProgressFill');
+    const agentRouterModelInput = document.getElementById('agentRouterModelInput');
+    const agentRouterModelSelect = document.getElementById('agentRouterModelSelect');
+    const brainLocalFields = document.getElementById('brainLocalFields');
+    const baseUrlBlock = document.getElementById('baseUrlBlock');
+    const apiKeyBlock = document.getElementById('apiKeyBlock');
+    const languageModelBlock = document.getElementById('languageModelBlock');
     const apiKeyHint = document.getElementById('apiKeyHint');
 
     const providerGuide = document.getElementById('providerGuide');
@@ -2655,12 +3816,120 @@
     const baseUrlLabel = document.getElementById('baseUrlLabel');
     const modelHint = document.getElementById('modelHint');
 
+    function placeStandardConnectionFields() {
+      const modalBody = addAgentModal.querySelector('.add-agent-modal');
+      if (baseUrlBlock.parentElement !== modalBody) {
+        modalBody.insertBefore(baseUrlBlock, languageModelBlock);
+      }
+      if (apiKeyBlock.parentElement !== modalBody) {
+        modalBody.insertBefore(apiKeyBlock, languageModelBlock);
+      }
+    }
+
+    function placeBrainLocalConnectionFields() {
+      if (baseUrlBlock.parentElement !== brainLocalConnectionBlocks) {
+        brainLocalConnectionBlocks.appendChild(baseUrlBlock);
+      }
+      if (apiKeyBlock.parentElement !== brainLocalConnectionBlocks) {
+        brainLocalConnectionBlocks.appendChild(apiKeyBlock);
+      }
+    }
+
+    function summarizeHfResult(model) {
+      const repoShort = String(model.id || '').split('/').pop() || String(model.id || '');
+      const meta = [model.parameterSize, model.quantization].filter(Boolean).join(' | ');
+      return meta ? `${repoShort} [${meta}]` : repoShort;
+    }
+
+    function formatByteCount(bytes) {
+      const value = Number(bytes || 0);
+      if (!Number.isFinite(value) || value <= 0) return '0 B';
+      const units = ['B', 'KB', 'MB', 'GB'];
+      let size = value;
+      let unitIndex = 0;
+      while (size >= 1024 && unitIndex < units.length - 1) {
+        size /= 1024;
+        unitIndex += 1;
+      }
+      const decimals = size >= 100 || unitIndex === 0 ? 0 : 1;
+      return `${size.toFixed(decimals)} ${units[unitIndex]}`;
+    }
+
+    function setBrainInstallProgress(status, progress = null, errorText = '') {
+      if (!status) {
+        agentHfInstallStatus.style.display = 'none';
+        agentHfInstallStatus.textContent = '';
+        agentHfInstallProgress.style.display = 'none';
+        agentHfInstallProgressFill.style.width = '0%';
+        return;
+      }
+
+      const phase = progress?.phase || status;
+      const bytesDownloaded = Number(progress?.bytesDownloaded || 0);
+      const totalBytes = Number(progress?.totalBytes || 0);
+      const hasTotal = Number.isFinite(totalBytes) && totalBytes > 0;
+      const percent = hasTotal ? Math.max(0, Math.min(100, (bytesDownloaded / totalBytes) * 100)) : 0;
+      const progressText = bytesDownloaded > 0
+        ? hasTotal
+          ? `${formatByteCount(bytesDownloaded)} / ${formatByteCount(totalBytes)}`
+          : `${formatByteCount(bytesDownloaded)} downloaded`
+        : '';
+      const message = errorText || progress?.message || status;
+
+      agentHfInstallStatus.textContent = progressText ? `${message} — ${progressText}` : message;
+      agentHfInstallStatus.style.display = 'block';
+
+      if (status === 'running' || status === 'complete') {
+        agentHfInstallProgress.style.display = 'block';
+        agentHfInstallProgressFill.style.width = `${status === 'complete' ? 100 : percent}%`;
+      } else if (status === 'error') {
+        agentHfInstallProgress.style.display = 'block';
+        agentHfInstallProgressFill.style.width = '100%';
+        agentHfInstallProgressFill.style.background = 'linear-gradient(90deg, rgba(218,126,126,0.85), rgba(218,96,96,0.85))';
+      } else {
+        agentHfInstallProgress.style.display = 'none';
+        agentHfInstallProgressFill.style.width = '0%';
+      }
+
+      if (status !== 'error') {
+        agentHfInstallProgressFill.style.background = 'linear-gradient(90deg, rgba(126,184,218,0.85), rgba(142,218,126,0.85))';
+      }
+    }
+
+    function renderHfResultDetails() {
+      const selected = agentHfSearchSelect.options[agentHfSearchSelect.selectedIndex];
+      if (!selected || !selected.value) {
+        agentHfSearchDetails.style.display = 'none';
+        agentHfSearchDetails.textContent = '';
+        return;
+      }
+      const repoId = selected.value;
+      const artifact = selected.dataset.artifact || '';
+      const meta = [selected.dataset.parameterSize, selected.dataset.quantization].filter(Boolean).join(' | ');
+      agentHfSearchDetails.innerHTML = `
+        <strong style="color:#c8d6e5;">Repo:</strong> ${escapeHtml(repoId)}
+        ${artifact ? `<br><strong style="color:#c8d6e5;">File:</strong> ${escapeHtml(artifact)}` : ''}
+        ${meta ? `<br><strong style="color:#c8d6e5;">Build:</strong> ${escapeHtml(meta)}` : ''}
+      `;
+      agentHfSearchDetails.style.display = 'block';
+    }
+
     // Update all fields + guide when provider changes
     function updateProviderUI() {
       const provider = agentProviderInput.value;
       detectModelsBtn.style.display = 'none';
+      detectRouterModelsBtn.style.display = 'none';
+      brainLocalDetectLanguageBtn.style.display = 'none';
       agentModelSelect.style.display = 'none';
+      agentRouterModelSelect.style.display = 'none';
+      brainLocalFields.style.display = 'none';
+      brainLocalAdvancedFields.classList.remove('visible');
       addAgentError.style.display = 'none';
+      placeStandardConnectionFields();
+      baseUrlBlock.style.display = 'block';
+      apiKeyBlock.style.display = 'block';
+      agentModelInput.readOnly = false;
+      agentRouterModelInput.readOnly = false;
 
       if (provider === 'anthropic') {
         providerGuide.style.display = 'block';
@@ -2698,6 +3967,7 @@
         agentModelInput.placeholder = 'e.g. llama-3.2-1b, phi-3-mini';
         modelHint.textContent = 'The name of the model you loaded in LM Studio. Click Detect to auto-fill, or type it yourself.';
         detectModelsBtn.style.display = 'inline-block';
+        detectModelsBtn.textContent = 'Detect';
 
       } else if (provider === 'alois') {
         providerGuide.style.display = 'block';
@@ -2718,6 +3988,33 @@
         agentModelInput.placeholder = 'e.g. llama-3.2-1b, gpt-4o';
         modelHint.textContent = 'The model that Alois will use for text generation (at low tissue weight).';
         detectModelsBtn.style.display = 'inline-block';
+        detectModelsBtn.textContent = 'Detect';
+
+      } else if (provider === 'brain-local') {
+        providerGuide.style.display = 'block';
+        providerGuide.innerHTML = '<strong style="color:#c8d6e5;">Brain Local</strong><br><br>' +
+          'Use two local GGUF models:<br>' +
+          '1. <strong>Router</strong> = Phi-style control model<br>' +
+          '2. <strong>Language</strong> = the model that writes the reply<br><br>' +
+          'Use <strong>Detect Local</strong> for installed models or <strong>Search</strong> + <strong>Install</strong> to pull one from Hugging Face. ' +
+          'No LM Studio setup is required for normal use.';
+        brainLocalFields.style.display = 'block';
+        placeBrainLocalConnectionFields();
+        baseUrlBlock.style.display = 'none';
+        apiKeyBlock.style.display = 'none';
+        agentBaseUrlInput.value = '';
+        agentApiKeyInput.value = '';
+        agentModelInput.placeholder = 'Choose a local language model with Detect Local';
+        modelHint.textContent = 'Select a local GGUF for the language lobe. Manual endpoint entry is intentionally disabled here.';
+        detectModelsBtn.style.display = 'none';
+        detectModelsBtn.textContent = 'Detect Local';
+        brainLocalDetectLanguageBtn.textContent = 'Detect Local';
+        brainLocalDetectLanguageBtn.style.display = 'inline-block';
+        detectRouterModelsBtn.textContent = 'Detect Local';
+        detectRouterModelsBtn.style.display = 'inline-block';
+        agentModelInput.readOnly = true;
+        agentRouterModelInput.readOnly = true;
+        queueMicrotask(() => { refreshBrainLocalModelSelectors(); });
 
       } else {
         // openai-compatible (default)
@@ -2739,6 +4036,7 @@
         agentModelInput.value = '';
         agentModelInput.placeholder = 'e.g. gpt-4o, grok-3, gemini-2.0-flash';
         modelHint.textContent = 'The exact model ID. Check your provider\'s docs for available models.';
+        detectModelsBtn.textContent = 'Detect';
       }
     }
 
@@ -2746,20 +4044,222 @@
     // Set initial state
     updateProviderUI();
 
+    brainLocalAdvancedToggle.addEventListener('click', () => {
+      brainLocalAdvancedFields.classList.toggle('visible');
+      brainLocalAdvancedToggle.textContent = brainLocalAdvancedFields.classList.contains('visible')
+        ? 'Hide advanced runtime settings'
+        : 'Advanced runtime settings';
+    });
+
+    brainLocalDetectLanguageBtn.addEventListener('click', () => {
+      detectModelsBtn.click();
+    });
+
+    async function detectBrainModels(role) {
+      const resp = await fetch('/brain-local/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+      const result = await resp.json();
+      if (!resp.ok) throw new Error(result.error || 'Failed to detect brain-local models');
+      return Array.isArray(result.models) ? result.models : [];
+    }
+
+    async function refreshBrainLocalModelSelectors() {
+      if (agentProviderInput.value !== 'brain-local') return;
+      addAgentError.style.display = 'none';
+      try {
+        const [languageModels, routerModels] = await Promise.all([
+          detectBrainModels('language'),
+          detectBrainModels('router'),
+        ]);
+
+        if (languageModels.length) {
+          agentModelSelect.innerHTML = languageModels.map(m =>
+            `<option value="${m.id}" data-local-path="${m.localPath || ''}" data-source="${m.source || ''}" data-backend="${m.backend || ''}">${m.label || m.id}</option>`
+          ).join('');
+          setModelSelectSize(agentModelSelect, languageModels.length);
+          agentModelSelect.style.display = 'block';
+          if (!agentModelInput.value || !agentModelInput.dataset.localPath) {
+            agentModelInput.value = languageModels[0].id;
+            agentModelInput.dataset.localPath = languageModels[0].localPath || '';
+            agentModelInput.dataset.modelSource = languageModels[0].source || 'local';
+            agentModelInput.dataset.modelBackend = languageModels[0].backend || '';
+          }
+        } else {
+          agentModelSelect.innerHTML = '';
+          agentModelSelect.style.display = 'none';
+          agentModelInput.placeholder = 'No local language models found under runtime/models or models';
+        }
+
+        if (routerModels.length) {
+          agentRouterModelSelect.innerHTML = routerModels.map(m =>
+            `<option value="${m.id}" data-local-path="${m.localPath || ''}" data-source="${m.source || ''}" data-backend="${m.backend || ''}">${m.label || m.id}</option>`
+          ).join('');
+          setModelSelectSize(agentRouterModelSelect, routerModels.length);
+          agentRouterModelSelect.style.display = 'block';
+          if (!agentRouterModelInput.value || !agentRouterModelInput.dataset.localPath) {
+            agentRouterModelInput.value = routerModels[0].id;
+            agentRouterModelInput.dataset.localPath = routerModels[0].localPath || '';
+            agentRouterModelInput.dataset.modelSource = routerModels[0].source || 'local';
+            agentRouterModelInput.dataset.modelBackend = routerModels[0].backend || '';
+          }
+        } else {
+          agentRouterModelSelect.innerHTML = '';
+          agentRouterModelSelect.style.display = 'none';
+          agentRouterModelInput.placeholder = 'No local router models found under runtime/models or models';
+        }
+
+        if (!languageModels.length || !routerModels.length) {
+          const missing = [
+            !languageModels.length ? 'language model' : null,
+            !routerModels.length ? 'router model' : null,
+          ].filter(Boolean).join(' and ');
+          addAgentError.textContent = `No local ${missing} detected. Put GGUF files under runtime/models or models, then reopen Add Agent or click Detect Local.`;
+          addAgentError.style.display = 'block';
+        }
+      } catch (err) {
+        addAgentError.textContent = 'Local model detection error: ' + err;
+        addAgentError.style.display = 'block';
+      }
+    }
+
+    async function detectEndpointModels(baseUrl) {
+      let models = null;
+      try {
+        const resp = await fetch('/lmstudio/models', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ baseUrl }),
+        });
+        const result = await resp.json();
+        if (resp.ok && result.models && result.models.length > 0) {
+          models = result.models;
+        }
+      } catch {}
+
+      if (!models) {
+        const modelsUrl = baseUrl.replace(/\/+$/, '') + '/models';
+        const directResp = await fetch(modelsUrl, {
+          headers: { 'Authorization': 'Bearer lm-studio' },
+        });
+        if (!directResp.ok) return [];
+        const data = await directResp.json();
+        let list = [];
+        if (Array.isArray(data.data)) list = data.data;
+        else if (Array.isArray(data.models)) list = data.models;
+        else if (Array.isArray(data)) list = data;
+        else if (data.id) list = [data];
+        models = list.map(m => ({ id: m.id || m.name || m.model || String(m) })).filter(m => m.id && m.id !== 'undefined');
+      }
+
+      return Array.isArray(models) ? models : [];
+    }
+
+    function markBrainLocalManualModelInput(inputEl) {
+      inputEl.dataset.localPath = '';
+      inputEl.dataset.modelSource = 'lmstudio';
+      inputEl.dataset.modelBackend = 'lmstudio';
+    }
+
+    async function searchHuggingFaceModels(query) {
+      const resp = await fetch('/brain-local/huggingface/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+      });
+      const result = await resp.json();
+      if (!resp.ok) throw new Error(result.error || 'Failed to search Hugging Face');
+      return Array.isArray(result.models) ? result.models : [];
+    }
+
+    async function installBrainModel(payload) {
+      const resp = await fetch('/brain-local/install', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await resp.json();
+      if (!resp.ok) throw new Error(result.error || 'Failed to install model');
+      return result;
+    }
+
+    async function fetchBrainInstallStatus(jobId) {
+      const resp = await fetch('/brain-local/install/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId }),
+      });
+      const result = await resp.json();
+      if (!resp.ok) throw new Error(result.error || 'Failed to fetch install status');
+      return result;
+    }
+
+    async function cancelBrainInstall(jobId) {
+      const resp = await fetch('/brain-local/install/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId }),
+      });
+      const result = await resp.json();
+      if (!resp.ok) throw new Error(result.error || 'Failed to cancel install');
+      return result;
+    }
+
+    agentModelSelect.onchange = () => {
+      const selected = agentModelSelect.options[agentModelSelect.selectedIndex];
+      agentModelInput.value = agentModelSelect.value;
+      agentModelInput.dataset.localPath = selected?.dataset?.localPath || '';
+      agentModelInput.dataset.modelSource = selected?.dataset?.source || '';
+      agentModelInput.dataset.modelBackend = selected?.dataset?.backend || '';
+    };
+
+    agentModelInput.addEventListener('input', () => {
+      if (agentProviderInput.value === 'brain-local') {
+        markBrainLocalManualModelInput(agentModelInput);
+      }
+    });
+
+    agentRouterModelInput.addEventListener('input', () => {
+      if (agentProviderInput.value === 'brain-local') {
+        markBrainLocalManualModelInput(agentRouterModelInput);
+      }
+    });
+
     // Detect Models button — queries LM Studio /v1/models
     // Tries server-side proxy first (for CORS), falls back to direct client fetch
     detectModelsBtn.addEventListener('click', async () => {
       const baseUrl = agentBaseUrlInput.value.trim();
-      if (!baseUrl) {
-        agentModelInput.placeholder = 'Enter a Base URL first';
-        return;
-      }
-
       detectModelsBtn.textContent = '...';
       detectModelsBtn.disabled = true;
       addAgentError.style.display = 'none';
 
       try {
+        if (agentProviderInput.value === 'brain-local') {
+          const localModels = await detectBrainModels('language');
+          const models = localModels.map(m => ({ ...m, label: m.label || m.id }));
+          if (!models.length) {
+            agentModelInput.placeholder = 'Install or detect a local language model';
+            agentModelSelect.style.display = 'none';
+            addAgentError.textContent = 'No local language models were detected. Install a GGUF or place one under runtime/models or models, then click Detect Local again.';
+            addAgentError.style.display = 'block';
+          } else {
+            agentModelSelect.innerHTML = models.map(m =>
+              `<option value="${m.id}" data-local-path="${m.localPath || ''}" data-source="${m.source || ''}" data-backend="${m.backend || ''}">${m.label || m.id}</option>`
+            ).join('');
+            agentModelSelect.style.display = 'block';
+            agentModelInput.value = models[0].id;
+            agentModelInput.dataset.localPath = models[0].localPath || '';
+            agentModelInput.dataset.modelSource = models[0].source || 'local';
+            agentModelInput.dataset.modelBackend = models[0].backend || '';
+          }
+          return;
+        }
+        if (!baseUrl) {
+          agentModelInput.placeholder = 'Enter a Base URL first';
+          return;
+        }
         // Try 1: server-side proxy (handles CORS when server and LM Studio are same machine)
         let models = null;
         try {
@@ -2814,9 +4314,13 @@
           agentModelSelect.style.display = 'block';
           agentModelInput.value = models[0].id;
 
-          agentModelSelect.addEventListener('change', () => {
+          agentModelSelect.onchange = () => {
+            const selected = agentModelSelect.options[agentModelSelect.selectedIndex];
             agentModelInput.value = agentModelSelect.value;
-          });
+            agentModelInput.dataset.localPath = selected?.dataset?.localPath || '';
+            agentModelInput.dataset.modelSource = selected?.dataset?.source || '';
+            agentModelInput.dataset.modelBackend = selected?.dataset?.backend || '';
+          };
         }
       } catch (err) {
         agentModelInput.placeholder = 'Error detecting models';
@@ -2827,6 +4331,180 @@
         detectModelsBtn.disabled = false;
       }
     });
+
+    searchHfModelsBtn.addEventListener('click', async () => {
+      const query = agentHfSearchInput.value.trim();
+      if (!query) {
+        agentHfSearchInput.placeholder = 'Enter a Hugging Face search query';
+        return;
+      }
+      setBrainInstallProgress(null);
+      searchHfModelsBtn.textContent = '...';
+      searchHfModelsBtn.disabled = true;
+      addAgentError.style.display = 'none';
+      try {
+        const models = await searchHuggingFaceModels(query);
+        if (!models.length) {
+          agentHfSearchSelect.style.display = 'none';
+          agentHfSearchDetails.style.display = 'none';
+          installHfModelBtn.style.display = 'none';
+          addAgentError.textContent = 'No Hugging Face models matched that query.';
+          addAgentError.style.display = 'block';
+        } else {
+          agentHfSearchSelect.innerHTML = models.map(m => {
+            const downloads = typeof m.downloads === 'number' ? ` | ${m.downloads.toLocaleString()} dl` : '';
+            const likes = typeof m.likes === 'number' ? ` | ${m.likes} like` : '';
+            return `<option value="${m.id}" data-source="huggingface" data-artifact="${escapeHtml(m.artifactName || '')}" data-parameter-size="${escapeHtml(m.parameterSize || '')}" data-quantization="${escapeHtml(m.quantization || '')}">${escapeHtml(summarizeHfResult(m))}${downloads}${likes}</option>`;
+          }).join('');
+          setModelSelectSize(agentHfSearchSelect, models.length);
+          agentHfSearchSelect.style.display = 'block';
+          installHfModelBtn.style.display = 'inline-block';
+          agentModelInput.value = models[0].id;
+          agentModelInput.dataset.localPath = '';
+          agentModelInput.dataset.modelSource = 'huggingface';
+          agentModelInput.dataset.modelBackend = '';
+          renderHfResultDetails();
+        }
+      } catch (err) {
+        agentHfSearchDetails.style.display = 'none';
+        addAgentError.textContent = 'Hugging Face search error: ' + err;
+        addAgentError.style.display = 'block';
+      } finally {
+        searchHfModelsBtn.textContent = 'Search';
+        searchHfModelsBtn.disabled = false;
+      }
+    });
+
+    agentHfSearchSelect.onchange = () => {
+      agentModelInput.value = agentHfSearchSelect.value;
+      agentModelInput.dataset.localPath = '';
+      agentModelInput.dataset.modelSource = 'huggingface';
+      agentModelInput.dataset.modelBackend = '';
+      renderHfResultDetails();
+    };
+
+    let activeBrainInstallJobId = null;
+
+    installHfModelBtn.addEventListener('click', async () => {
+      const repoId = agentHfSearchSelect.value || agentModelInput.value.trim();
+      if (!repoId) {
+        addAgentError.textContent = 'Select a Hugging Face model first.';
+        addAgentError.style.display = 'block';
+        return;
+      }
+      installHfModelBtn.textContent = '...';
+      installHfModelBtn.disabled = true;
+      cancelHfInstallBtn.style.display = 'inline-block';
+      cancelHfInstallBtn.disabled = false;
+      addAgentError.style.display = 'none';
+      setBrainInstallProgress('running', { phase: 'metadata', message: 'Preparing install' });
+      try {
+        const started = await installBrainModel({
+          id: repoId,
+          source: 'huggingface',
+          remoteId: repoId,
+        });
+        const jobId = started.jobId;
+        if (!jobId) throw new Error('Install job did not return a job id');
+        activeBrainInstallJobId = jobId;
+        let result = null;
+        for (;;) {
+          const status = await fetchBrainInstallStatus(jobId);
+          setBrainInstallProgress(status.status, status.progress, status.error || '');
+          if (status.status === 'complete') {
+            result = status.result;
+            break;
+          }
+          if (status.status === 'cancelled') {
+            throw new Error('Install cancelled');
+          }
+          if (status.status === 'error') {
+            throw new Error(status.error || status.progress?.message || 'Install failed');
+          }
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        agentModelInput.value = repoId;
+        agentModelInput.dataset.localPath = result.localPath || '';
+        agentModelInput.dataset.modelSource = 'local';
+        agentModelInput.dataset.modelBackend = result.localPath && result.localPath.toLowerCase().endsWith('.gguf') ? 'llamacpp' : '';
+        const localModels = await detectBrainModels('language');
+        if (localModels.length) {
+          agentModelSelect.innerHTML = localModels.map(m =>
+            `<option value="${m.id}" data-local-path="${m.localPath || ''}" data-source="${m.source || ''}" data-backend="${m.backend || ''}">${m.label || m.id}</option>`
+          ).join('');
+          agentModelSelect.style.display = 'block';
+        }
+        setBrainInstallProgress('complete', {
+          phase: 'complete',
+          message: result?.fileName ? `Installed ${result.fileName}` : 'Install complete',
+          bytesDownloaded: 1,
+          totalBytes: 1,
+        });
+      } catch (err) {
+        addAgentError.textContent = 'Install error: ' + err;
+        addAgentError.style.display = 'block';
+        setBrainInstallProgress(String(err).includes('cancelled') ? 'error' : 'error', null, String(err).includes('cancelled') ? 'Install cancelled' : 'Install failed');
+      } finally {
+        activeBrainInstallJobId = null;
+        installHfModelBtn.textContent = 'Install Selected';
+        installHfModelBtn.disabled = false;
+        cancelHfInstallBtn.style.display = 'none';
+        cancelHfInstallBtn.disabled = true;
+      }
+    });
+
+    cancelHfInstallBtn.addEventListener('click', async () => {
+      if (!activeBrainInstallJobId) return;
+      cancelHfInstallBtn.disabled = true;
+      try {
+        await cancelBrainInstall(activeBrainInstallJobId);
+        setBrainInstallProgress('error', null, 'Install cancelled');
+      } catch (err) {
+        addAgentError.textContent = 'Cancel error: ' + err;
+        addAgentError.style.display = 'block';
+        cancelHfInstallBtn.disabled = false;
+      }
+    });
+
+    detectRouterModelsBtn.addEventListener('click', async () => {
+      detectRouterModelsBtn.textContent = '...';
+      detectRouterModelsBtn.disabled = true;
+      addAgentError.style.display = 'none';
+      try {
+        const models = await detectBrainModels('router');
+        const mergedModels = models.map(m => ({ ...m, label: m.label || m.id }));
+        if (!mergedModels.length) {
+          agentRouterModelInput.placeholder = 'Install or detect a local router model';
+          agentRouterModelSelect.style.display = 'none';
+          addAgentError.textContent = 'No local router models were detected. Install a GGUF or place one under runtime/models or models, then click Detect Local again.';
+          addAgentError.style.display = 'block';
+        } else {
+          agentRouterModelSelect.innerHTML = mergedModels.map(m =>
+            `<option value="${m.id}" data-local-path="${m.localPath || ''}" data-source="${m.source || ''}" data-backend="${m.backend || ''}">${m.label || m.id}</option>`
+          ).join('');
+          agentRouterModelSelect.style.display = 'block';
+          agentRouterModelInput.value = mergedModels[0].id;
+          agentRouterModelInput.dataset.localPath = mergedModels[0].localPath || '';
+          agentRouterModelInput.dataset.modelSource = mergedModels[0].source || 'local';
+          agentRouterModelInput.dataset.modelBackend = mergedModels[0].backend || '';
+        }
+      } catch (err) {
+        agentRouterModelInput.placeholder = 'Error detecting router models';
+        addAgentError.textContent = 'Router detection error: ' + err;
+        addAgentError.style.display = 'block';
+      } finally {
+        detectRouterModelsBtn.textContent = 'Detect';
+        detectRouterModelsBtn.disabled = false;
+      }
+    });
+
+    agentRouterModelSelect.onchange = () => {
+      const selected = agentRouterModelSelect.options[agentRouterModelSelect.selectedIndex];
+      agentRouterModelInput.value = agentRouterModelSelect.value;
+      agentRouterModelInput.dataset.localPath = selected?.dataset?.localPath || '';
+      agentRouterModelInput.dataset.modelSource = selected?.dataset?.source || '';
+      agentRouterModelInput.dataset.modelBackend = selected?.dataset?.backend || '';
+    };
 
     const restoreSection = document.getElementById('restoreSection');
     const restoreList = document.getElementById('restoreList');
@@ -2858,9 +4536,35 @@
       agentNameInput.value = '';
       agentIdInput.value = '';
       agentModelInput.value = '';
+      agentModelInput.dataset.localPath = '';
+      agentModelInput.dataset.modelSource = '';
+      agentModelInput.dataset.modelBackend = '';
+      agentModelSelect.innerHTML = '';
+      agentModelSelect.style.display = 'none';
+      agentHfSearchInput.value = '';
+      agentHfSearchSelect.innerHTML = '';
+      agentHfSearchSelect.style.display = 'none';
+      agentHfSearchDetails.textContent = '';
+      agentHfSearchDetails.style.display = 'none';
+      installHfModelBtn.style.display = 'none';
+      cancelHfInstallBtn.style.display = 'none';
+      cancelHfInstallBtn.disabled = true;
+      setBrainInstallProgress(null);
+      agentRouterModelInput.value = '';
+      agentRouterModelInput.dataset.localPath = '';
+      agentRouterModelInput.dataset.modelSource = '';
+      agentRouterModelInput.dataset.modelBackend = '';
+      agentRouterModelSelect.innerHTML = '';
+      agentRouterModelSelect.style.display = 'none';
       agentApiKeyInput.value = '';
       agentBaseUrlInput.value = '';
       agentColorInput.value = '#7edab8';
+      brainLocalAdvancedFields.classList.remove('visible');
+      brainLocalAdvancedToggle.textContent = 'Advanced runtime settings';
+      updateProviderUI();
+      if (agentProviderInput.value === 'brain-local') {
+        queueMicrotask(() => { refreshBrainLocalModelSelectors(); });
+      }
       agentNameInput.focus();
 
       // Fetch inactive agents for restore section
@@ -2902,13 +4606,35 @@
       const apiKey = agentApiKeyInput.value.trim();
       const baseUrl = agentBaseUrlInput.value.trim();
       const color = agentColorInput.value;
+      const routerModel = agentRouterModelInput.value.trim();
+      const languageModelSource = agentModelInput.dataset.modelSource || undefined;
+      const languageModelPath = agentModelInput.dataset.localPath || undefined;
+      const languageModelBackend = agentModelInput.dataset.modelBackend || undefined;
+      const routerModelSource = agentRouterModelInput.dataset.modelSource || undefined;
+      const routerModelPath = agentRouterModelInput.dataset.localPath || undefined;
 
       // LM Studio maps to openai-compatible with defaults
       if (provider === 'lmstudio') {
         provider = 'openai-compatible';
       }
 
-      if (!name || !id || !model || !apiKey) {
+      if (provider === 'brain-local') {
+        if (!name || !id) {
+          addAgentError.textContent = 'Name and ID are required.';
+          addAgentError.style.display = 'block';
+          return;
+        }
+        if (!model) {
+          addAgentError.textContent = 'Language model is required for brain-local agents.';
+          addAgentError.style.display = 'block';
+          return;
+        }
+        if (!routerModel) {
+          addAgentError.textContent = 'Router model is required for brain-local agents.';
+          addAgentError.style.display = 'block';
+          return;
+        }
+      } else if (!name || !id || !model || !apiKey) {
         addAgentError.textContent = 'Name, ID, model, and API key are required.';
         addAgentError.style.display = 'block';
         return;
@@ -2920,6 +4646,12 @@
         return;
       }
 
+      if (provider === 'brain-local' && (!languageModelPath || !routerModelPath)) {
+        addAgentError.textContent = 'Brain Local requires local GGUF selections for both language and router. Use Detect Local or install a model first.';
+        addAgentError.style.display = 'block';
+        return;
+      }
+
       addAgentSubmitBtn.disabled = true;
       addAgentError.style.display = 'none';
 
@@ -2927,7 +4659,22 @@
         const resp = await fetch('/agents/add', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id, name, provider, model, apiKey, baseUrl: baseUrl || undefined, color }),
+          body: JSON.stringify({
+            id,
+            name,
+            provider,
+            model,
+            apiKey: provider === 'brain-local' ? undefined : apiKey,
+            baseUrl: provider === 'brain-local' ? undefined : (baseUrl || undefined),
+            color,
+            routerModel: provider === 'brain-local' ? routerModel : undefined,
+            languageModel: provider === 'brain-local' ? model : undefined,
+            languageModelSource: provider === 'brain-local' ? languageModelSource : undefined,
+            languageModelPath: provider === 'brain-local' ? languageModelPath : undefined,
+            languageModelBackend: provider === 'brain-local' ? languageModelBackend : undefined,
+            routerModelSource: provider === 'brain-local' ? routerModelSource : undefined,
+            routerModelPath: provider === 'brain-local' ? routerModelPath : undefined,
+          }),
         });
         const result = await resp.json();
         if (!resp.ok) {
@@ -2944,7 +4691,7 @@
       }
     });
 
-    function addRoomMessage(speaker, speakerName, text, timestamp, isBackchannel, visibleText) {
+    function addRoomMessage(messageId, speaker, speakerName, text, timestamp, isBackchannel, visibleText, anchoredAfterMessageId = null) {
       if (!roomHasMessages) {
         roomMessages.innerHTML = '';
         roomHasMessages = true;
@@ -2955,6 +4702,7 @@
       const div = document.createElement('div');
       div.className = 'room-message' + (isBackchannel ? ' backchannel' : '');
       div.dataset.agentId = speaker;
+      if (messageId) div.dataset.messageId = messageId;
 
       const speakerDiv = document.createElement('div');
       speakerDiv.className = 'speaker-name';
@@ -2974,11 +4722,333 @@
       div.appendChild(textDiv);
       div.appendChild(timeDiv);
 
-      roomMessages.appendChild(div);
+      // ── Golden Set promote buttons (assistant messages only) ──
+      if (speaker !== 'human' && messageId) {
+        const goldActions = document.createElement('div');
+        goldActions.className = 'gold-actions';
+
+        const goodBtn = document.createElement('button');
+        goodBtn.className = 'gold-btn good';
+        goodBtn.textContent = '+';
+        goodBtn.title = 'Promote Good';
+        goodBtn.addEventListener('click', (e) => { e.stopPropagation(); openGoldPopup(div, messageId, 'good', visibleText ?? text ?? ''); });
+
+        const badBtn = document.createElement('button');
+        badBtn.className = 'gold-btn bad';
+        badBtn.textContent = '-';
+        badBtn.title = 'Promote Bad';
+        badBtn.addEventListener('click', (e) => { e.stopPropagation(); openGoldPopup(div, messageId, 'bad', visibleText ?? text ?? ''); });
+
+        const pairBtn = document.createElement('button');
+        pairBtn.className = 'gold-btn pair';
+        pairBtn.textContent = 'P';
+        pairBtn.title = 'Promote Pair';
+        pairBtn.addEventListener('click', (e) => { e.stopPropagation(); openGoldPopup(div, messageId, 'pair', visibleText ?? text ?? ''); });
+
+        goldActions.appendChild(goodBtn);
+        goldActions.appendChild(badBtn);
+        goldActions.appendChild(pairBtn);
+        timeDiv.appendChild(goldActions);
+      }
+
+      if (anchoredAfterMessageId) {
+        const anchor = roomMessages.querySelector(`[data-message-id="${CSS.escape(anchoredAfterMessageId)}"]`);
+        if (anchor?.parentNode === roomMessages) {
+          roomMessages.insertBefore(div, anchor.nextSibling);
+        } else {
+          roomMessages.appendChild(div);
+        }
+      } else {
+        roomMessages.appendChild(div);
+      }
       roomMessages.scrollTop = roomMessages.scrollHeight;
       if (!isBackchannel) {
         messageCount++;
         roomStats.textContent = `${messageCount} messages`;
+      }
+    }
+
+    // ── Golden Set UI Logic ──────────────────────────────────────────────────
+
+    const GOLD_POSITIVE_TAGS = ['spark','funny','grounded','specific','direct','beautiful','alive','magnetic','companionable','sharp','useful','good_repair','good_debug','great_hook'];
+    const GOLD_NEGATIVE_TAGS = ['flat','fake','repetitive','missed_point','stale','brochure','overbuilt','underbuilt','weird','no_pull','too_safe','hijacked','overinterpreted','meta_leak'];
+    let activeGoldPopup = null;
+
+    function findLatestUserTurn(msgEl) {
+      // Walk backwards through siblings to find the last human message
+      let el = msgEl.previousElementSibling;
+      while (el) {
+        if (el.dataset && el.dataset.agentId === 'human') {
+          const txt = el.querySelector('.message-text');
+          return txt ? txt.textContent : '';
+        }
+        el = el.previousElementSibling;
+      }
+      return '';
+    }
+
+    function buildLocalWindow(msgEl) {
+      const window = [];
+      let el = msgEl;
+      // Go back up to 4 messages
+      for (let i = 0; i < 4 && el; i++) {
+        el = el.previousElementSibling;
+      }
+      // Now walk forward to the target
+      el = el || msgEl.parentElement.firstElementChild;
+      while (el && el !== msgEl.nextElementSibling) {
+        if (el.dataset && el.dataset.agentId) {
+          const txt = el.querySelector('.message-text');
+          window.push({
+            role: el.dataset.agentId === 'human' ? 'user' : 'assistant',
+            text: txt ? txt.textContent : '',
+          });
+        }
+        el = el.nextElementSibling;
+      }
+      return window;
+    }
+
+    function openGoldPopup(msgEl, messageId, captureMode, replyText) {
+      closeGoldPopup();
+      const tags = captureMode === 'bad' ? GOLD_NEGATIVE_TAGS : GOLD_POSITIVE_TAGS;
+      const selectedTags = new Set();
+
+      const popup = document.createElement('div');
+      popup.className = 'gold-popup open';
+      popup.addEventListener('click', e => e.stopPropagation());
+
+      const title = document.createElement('div');
+      title.className = 'gold-popup-title';
+      title.textContent = captureMode === 'good' ? 'Promote Good' : captureMode === 'bad' ? 'Promote Bad' : 'Promote Pair';
+      popup.appendChild(title);
+
+      const tagContainer = document.createElement('div');
+      tagContainer.className = 'gold-tags';
+      for (const tag of tags) {
+        const chip = document.createElement('span');
+        chip.className = 'gold-tag' + (captureMode === 'good' ? ' positive' : captureMode === 'bad' ? ' negative' : '');
+        chip.textContent = tag;
+        chip.addEventListener('click', () => {
+          if (selectedTags.has(tag)) { selectedTags.delete(tag); chip.classList.remove('selected'); }
+          else { selectedTags.add(tag); chip.classList.add('selected'); }
+        });
+        tagContainer.appendChild(chip);
+      }
+      popup.appendChild(tagContainer);
+
+      const btnRow = document.createElement('div');
+      btnRow.className = 'gold-save-row';
+
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'gold-save-btn';
+      saveBtn.textContent = 'Save';
+      saveBtn.addEventListener('click', () => {
+        saveGoldenPromotion(msgEl, messageId, captureMode, replyText, [...selectedTags]);
+        closeGoldPopup();
+      });
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'gold-save-btn cancel';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.addEventListener('click', () => closeGoldPopup());
+
+      btnRow.appendChild(saveBtn);
+      btnRow.appendChild(cancelBtn);
+      popup.appendChild(btnRow);
+
+      // Position relative to the message time div
+      const timeDiv = msgEl.querySelector('.message-time');
+      if (timeDiv) {
+        timeDiv.style.position = 'relative';
+        timeDiv.appendChild(popup);
+      } else {
+        msgEl.appendChild(popup);
+      }
+      activeGoldPopup = popup;
+
+      // Close on outside click
+      setTimeout(() => {
+        document.addEventListener('click', closeGoldPopupOnOutside, { once: true });
+      }, 50);
+    }
+
+    function closeGoldPopup() {
+      if (activeGoldPopup) {
+        activeGoldPopup.remove();
+        activeGoldPopup = null;
+      }
+    }
+
+    function closeGoldPopupOnOutside() {
+      closeGoldPopup();
+    }
+
+    async function saveGoldenPromotion(msgEl, messageId, captureMode, replyText, tags) {
+      const userTurnText = findLatestUserTurn(msgEl);
+      const localWindow = buildLocalWindow(msgEl);
+      const agentId = msgEl.dataset.agentId || '';
+
+      const body = {
+        captureMode,
+        messageId,
+        userTurnText,
+        assistantReplyText: replyText,
+        localWindow,
+        tags,
+        model: agentId,
+        laneProfile: '',
+        detectedPhase: 'neutral',
+      };
+
+      try {
+        const res = await fetch('/api/golden/promote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          const merged = data.result && data.result.merged;
+          showGoldToast(merged ? 'Tags merged' : (captureMode === 'good' ? 'Promoted Good' : captureMode === 'bad' ? 'Promoted Bad' : 'Promoted Pair'));
+        } else {
+          showGoldToast('Error: ' + (data.error || 'unknown'), true);
+        }
+      } catch (err) {
+        showGoldToast('Network error', true);
+      }
+    }
+
+    // Toast element (singleton)
+    const goldToastEl = document.createElement('div');
+    goldToastEl.className = 'gold-toast';
+    document.body.appendChild(goldToastEl);
+    let goldToastTimer = null;
+
+    function showGoldToast(message, isError) {
+      goldToastEl.textContent = message;
+      goldToastEl.classList.toggle('error', !!isError);
+      goldToastEl.classList.add('visible');
+      clearTimeout(goldToastTimer);
+      goldToastTimer = setTimeout(() => goldToastEl.classList.remove('visible'), 2000);
+    }
+
+    // ── Golden Set Viewer Panel ──────────────────────────────────────────────
+
+    let goldPanelEl = null;
+    let goldPanelFilter = 'all';
+
+    function ensureGoldPanel() {
+      if (goldPanelEl) return goldPanelEl;
+
+      goldPanelEl = document.createElement('div');
+      goldPanelEl.id = 'goldPanel';
+
+      goldPanelEl.innerHTML = `
+        <div class="gp-header">
+          <span class="gp-title">Golden Set</span>
+          <button class="gp-close" id="gpClose">&times;</button>
+        </div>
+        <div class="gp-filters" id="gpFilters">
+          <button class="gp-filter-btn active" data-filter="all">All</button>
+          <button class="gp-filter-btn" data-filter="good">Good</button>
+          <button class="gp-filter-btn" data-filter="bad">Bad</button>
+          <button class="gp-filter-btn" data-filter="pair">Pair</button>
+        </div>
+        <div class="gp-list" id="gpList"></div>
+        <div class="gp-stats" id="gpStats">Loading...</div>
+      `;
+      document.body.appendChild(goldPanelEl);
+
+      goldPanelEl.querySelector('#gpClose').addEventListener('click', () => {
+        goldPanelEl.classList.remove('open');
+      });
+
+      goldPanelEl.querySelectorAll('.gp-filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          goldPanelEl.querySelectorAll('.gp-filter-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          goldPanelFilter = btn.dataset.filter;
+          loadGoldPanelData();
+        });
+      });
+
+      return goldPanelEl;
+    }
+
+    async function toggleGoldPanel() {
+      const panel = ensureGoldPanel();
+      if (panel.classList.contains('open')) {
+        panel.classList.remove('open');
+      } else {
+        panel.classList.add('open');
+        await loadGoldPanelData();
+      }
+    }
+
+    async function loadGoldPanelData() {
+      const panel = ensureGoldPanel();
+      const list = panel.querySelector('#gpList');
+      const stats = panel.querySelector('#gpStats');
+
+      try {
+        const filterParam = goldPanelFilter !== 'all' ? `?captureMode=${goldPanelFilter}&limit=50` : '?limit=50';
+        const [exRes, countRes] = await Promise.all([
+          fetch('/api/golden/list' + filterParam),
+          fetch('/api/golden/counts'),
+        ]);
+        const examples = await exRes.json();
+        const counts = await countRes.json();
+
+        stats.textContent = `Total: ${counts.total} | Good: ${counts.good} | Bad: ${counts.bad} | Pair: ${counts.pair}`;
+
+        list.innerHTML = '';
+        if (examples.length === 0) {
+          list.innerHTML = '<div style="color:#405060;font-size:0.75em;padding:12px;">No examples yet. Use the +/- buttons on messages to promote.</div>';
+          return;
+        }
+
+        for (const ex of examples) {
+          const item = document.createElement('div');
+          item.className = 'gp-item';
+
+          const mode = document.createElement('span');
+          mode.className = 'gp-item-mode ' + ex.captureMode;
+          mode.textContent = ex.captureMode;
+
+          const user = document.createElement('div');
+          user.className = 'gp-item-user';
+          user.textContent = ex.userTurnText ? 'User: ' + ex.userTurnText.slice(0, 100) : '(no user turn)';
+
+          const reply = document.createElement('div');
+          reply.className = 'gp-item-reply';
+          reply.textContent = ex.assistantReplyText.slice(0, 200) + (ex.assistantReplyText.length > 200 ? '...' : '');
+
+          item.appendChild(mode);
+          item.appendChild(user);
+          item.appendChild(reply);
+
+          if (ex.tags && ex.tags.length > 0) {
+            const tagsDiv = document.createElement('div');
+            tagsDiv.className = 'gp-item-tags';
+            for (const t of ex.tags) {
+              const tag = document.createElement('span');
+              tag.className = 'gp-item-tag';
+              tag.textContent = t;
+              tagsDiv.appendChild(tag);
+            }
+            item.appendChild(tagsDiv);
+          }
+
+          const time = document.createElement('div');
+          time.className = 'gp-item-time';
+          time.textContent = new Date(ex.createdAt).toLocaleString();
+          item.appendChild(time);
+
+          list.appendChild(item);
+        }
+      } catch (err) {
+        stats.textContent = 'Error loading golden set';
       }
     }
 
@@ -3017,18 +5087,39 @@
         if (data.speaker === 'human' && consumePendingHumanMessage(data.text || '')) {
           return;
         }
-        addRoomMessage(data.speaker, data.speakerName, data.text, data.timestamp, false, data.visibleText ?? data.visible_text ?? data.text);
+        addRoomMessage(
+          data.id,
+          data.speaker,
+          data.speakerName,
+          data.text,
+          data.timestamp,
+          false,
+          data.visibleText ?? data.visible_text ?? data.text,
+          data.anchoredAfterMessageId || null,
+        );
+        if (data.speaker && data.speaker !== 'human') clearBrainLocalBusy(data.speaker);
       } else if (data.type === 'journal-entry') {
         if (data.id && renderedJournalIds.has(data.id)) return;
         if (data.id) renderedJournalIds.add(data.id);
-        addJournalEntry(data.speaker, data.text, data.timestamp);
+        if (!journalPanels[data.speaker]) {
+          if (!pendingJournalEntries[data.speaker]) pendingJournalEntries[data.speaker] = [];
+          pendingJournalEntries[data.speaker].push({
+            id: data.id || null,
+            text: data.text,
+            timestamp: data.timestamp,
+          });
+        } else {
+          addJournalEntry(data.speaker, data.text, data.timestamp);
+        }
       } else if (data.type === 'tick') {
         tickCounter.textContent = `tick ${data.tickCount}`;
       } else if (data.type === 'backchannel') {
         if (data.id && renderedChannelIds.has(data.id)) return;
         if (data.id) renderedChannelIds.add(data.id);
-        addRoomMessage(data.speaker, data.speakerName, data.text, data.timestamp, true);
+        addRoomMessage(data.id, data.speaker, data.speakerName, data.text, data.timestamp, true, data.text, data.anchoredAfterMessageId || null);
+        if (data.speaker && data.speaker !== 'human') clearBrainLocalBusy(data.speaker);
       } else if (data.type === 'speech-start') {
+        currentSpeechRequestId = data.requestId || null;
         // Speaking indicator is handled by audio queue when playback actually starts
         const name = config ? (config.agentNames[data.agentId] || data.agentId) : data.agentId;
         speakingIndicator.classList.add('active');
@@ -3049,24 +5140,33 @@
         if (data.audioBase64 && data.audioBase64.length > 0) {
           // Prefer inline base64 for chunks — avoids HTTP fetch latency between chunks (audible gap).
           const isFinal = !!data.isFinalChunk;
-          playAudio(data.audioBase64, data.agentId, false, null, !isFinal);
+          playAudio(data.audioBase64, data.agentId, data.requestId || null, false, null, !isFinal);
         } else if (data.audioUrl) {
           const isFinal = !!data.isFinalChunk;
-          playAudio(data.audioUrl, data.agentId, true, null, !isFinal);
+          playAudio(data.audioUrl, data.agentId, data.requestId || null, true, null, !isFinal);
         }
       } else if (data.type === 'speech-end') {
         chunkStreamActive = false;
         if (data.audioUrl || (data.audioBase64 && data.audioBase64.length > 0)) {
           // Legacy non-streaming path: full audio arrived in speech-end
-          playAudio(data.audioUrl || data.audioBase64, data.agentId, !!data.audioUrl, data.audioBase64 || null, false);
+          playAudio(data.audioUrl || data.audioBase64, data.agentId, data.requestId || null, !!data.audioUrl, data.audioBase64 || null, false);
         } else if (audioQueue.length === 0 && !audioPlaying) {
           // No chunks queued or playing — synthesis failed or zero audio; release lock now
           speakingIndicator.classList.remove('active');
           ttsHoldActive = false;
           resumeRecognitionAfterTts();
-          fetch('/speech-done', { method: 'POST' }).catch(() => {});
+          fetch('/speech-done', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId: data.requestId || currentSpeechRequestId || null }) }).catch(() => {});
+          currentSpeechRequestId = null;
         }
         // else: chunks are still queued/playing — cleanup fires when final chunk ends
+      } else if (data.type === 'speech-stop') {
+        chunkStreamActive = false;
+        ttsHoldActive = false;
+        bargeIn();
+        speakingIndicator.classList.remove('active');
+        fetch('/speech-done', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId: data.requestId || currentSpeechRequestId || null }) }).catch(() => {});
+        currentSpeechRequestId = null;
+        resumeRecognitionAfterTts();
       } else if (data.type === 'voice-config') {
         // Update local voice config state
         if (data.agentId && voiceConfigs[data.agentId]) {
@@ -3111,8 +5211,10 @@
       } else if (data.type === 'turn-latency' && data.latencyTrace) {
         attachLatencyPill(data.agentId, data.latencyTrace);
         hideProcessingStatus();
+        clearBrainLocalBusy(data.agentId);
       } else if (data.type === 'processing-status') {
         showProcessingStatus(data.statusLabel, data.elapsedMs);
+        setBrainLocalBusy(data.agentId, data.statusLabel, data.elapsedMs);
       } else if (data.type === 'error') {
         const div = document.createElement('div');
         div.className = 'error-message';
@@ -3147,6 +5249,34 @@
       clearTimeout(processingStatusTimeout);
     }
 
+    function setBrainLocalBusy(agentId, label, elapsedMs) {
+      const panel = brainLocalStatusPanels[agentId];
+      if (!panel) return;
+      const friendly = PROCESSING_STATUS_LABELS[label] || label || 'processing';
+      panel.statusLabel = friendly;
+      panel.processingStartedAt = Date.now() - Math.max(0, Number(elapsedMs || 0));
+      panel.dotEl.style.background = '#d6b46a';
+      if (panel.badgeEl) panel.badgeEl.textContent = 'BRAIN RUNNING';
+      const tick = () => {
+        const secs = Math.max(0, (Date.now() - panel.processingStartedAt) / 1000);
+        panel.stateEl.textContent = `${friendly} ${secs.toFixed(1)}s`;
+      };
+      clearInterval(panel.processingTimer);
+      tick();
+      panel.processingTimer = setInterval(tick, 200);
+    }
+
+    function clearBrainLocalBusy(agentId) {
+      const panel = brainLocalStatusPanels[agentId];
+      if (!panel) return;
+      clearInterval(panel.processingTimer);
+      panel.processingTimer = null;
+      panel.processingStartedAt = 0;
+      panel.dotEl.style.background = '#64c8b4';
+      panel.stateEl.textContent = panel.idleStateText || 'READY';
+      if (panel.badgeEl) panel.badgeEl.textContent = `BRAIN ${panel.idleStateText || 'READY'}`;
+    }
+
     // ── Latency pill attachment ──
     // Maps agentId → most recent TurnLatencyTrace for copy
     const latencyTraceByAgent = {};
@@ -3172,7 +5302,7 @@
 
       const d = trace.durationsMs || {};
       const total = d.totalTurnWallClock;
-      const llm = d.llmGeneration;
+      const llm = d.totalLlmGeneration != null ? d.totalLlmGeneration : d.llmGeneration;
       const dominant = trace.outcome?.dominantLatencyStage;
 
       const pill = document.createElement('span');
@@ -3190,11 +5320,13 @@
       const o = trace.outcome || {};
       const derived = trace.derived || {};
 
-      const orchMs = (d.promptAssembly || 0) + (d.rawRouting || 0) + (d.visibleCandidateBuild || 0)
-        + (d.journalToSpeakConversion || 0) + (d.freshSpeakRetry || 0) + (d.salvage || 0);
+      const orchMs = (d.promptAssembly || 0) + (d.rawRouting || 0) + (d.visibleCandidateBuildNet || d.visibleCandidateBuild || 0)
+        + (d.journalToSpeakConversion || 0) + (d.salvage || 0);
       const rows = [
         ['Total', fmtMs(total), total > 10000],
         ['LLM gen', fmtMs(llm), llm > 6000],
+        ['  router', fmtMs(d.routerLlmGeneration), false],
+        ['  retry', fmtMs(d.retryLlmGeneration), false],
         ['  TTFT', fmtMs(d.llmTtftMs), (d.llmTtftMs || 0) > 3000],
         ['  transport', fmtMs(d.llmTransportMs), false],
         ['  decode', fmtMs(d.llmDecodeMs), false],
@@ -3202,9 +5334,8 @@
         ['Orch', fmtMs(orchMs), orchMs > 4000],
         ['  prompt', fmtMs(d.promptAssembly), false],
         ['  routing', fmtMs(d.rawRouting), false],
-        ['  build', fmtMs(d.visibleCandidateBuild), false],
+        ['  build', fmtMs(d.visibleCandidateBuildNet != null ? d.visibleCandidateBuildNet : d.visibleCandidateBuild), false],
         ['  jrnl conv', fmtMs(d.journalToSpeakConversion), false],
-        ['  speak retry', fmtMs(d.freshSpeakRetry), false],
         ['TTS', fmtMs(d.ttsTotal), d.ttsTotal > 5000],
       ];
 
@@ -3260,20 +5391,24 @@
       const d = trace.durationsMs || {};
       const c = trace.counters || {};
       const o = trace.outcome || {};
-      const orch = (d.promptAssembly || 0) + (d.rawRouting || 0) + (d.visibleCandidateBuild || 0)
-        + (d.journalToSpeakConversion || 0) + (d.freshSpeakRetry || 0) + (d.salvage || 0);
+      const orch = (d.promptAssembly || 0) + (d.rawRouting || 0) + (d.visibleCandidateBuildNet || d.visibleCandidateBuild || 0)
+        + (d.journalToSpeakConversion || 0) + (d.salvage || 0);
       const ttftLine = d.llmTtftMs != null
         ? `  llm ttft: ${fmtMs(d.llmTtftMs)} | transport: ${fmtMs(d.llmTransportMs)} | decode: ${fmtMs(d.llmDecodeMs)} | stream-gap: ${fmtMs(d.llmStreamStartGapMs)}`
+        : null;
+      const routerRetryLine = (d.routerLlmGeneration || d.retryLlmGeneration)
+        ? `  llm router: ${fmtMs(d.routerLlmGeneration)} | retry: ${fmtMs(d.retryLlmGeneration)}`
         : null;
       const tokenLine = trace.llmOutputTokenCount != null
         ? `  tokens out: ${trace.llmOutputTokenCount} | prompt chars: ${trace.llmPromptCharEstimate ?? '—'}`
         : null;
       const lines = [
         `Turn ${trace.turnId?.slice(0, 8)} | ${o.finalAction} | total: ${fmtMs(d.totalTurnWallClock)}`,
-        `  llm: ${fmtMs(d.llmGeneration)} | orch: ${fmtMs(orch)} | tts: ${fmtMs(d.ttsTotal)}`,
+        `  llm: ${fmtMs(d.totalLlmGeneration != null ? d.totalLlmGeneration : d.llmGeneration)} | orch: ${fmtMs(orch)} | tts: ${fmtMs(d.ttsTotal)}`,
+        ...(routerRetryLine ? [routerRetryLine] : []),
         ...(ttftLine ? [ttftLine] : []),
         ...(tokenLine ? [tokenLine] : []),
-        `  orch breakdown: prompt ${fmtMs(d.promptAssembly)} | build ${fmtMs(d.visibleCandidateBuild)} | routing ${fmtMs(d.rawRouting)}`,
+        `  orch breakdown: prompt ${fmtMs(d.promptAssembly)} | build ${fmtMs(d.visibleCandidateBuildNet != null ? d.visibleCandidateBuildNet : d.visibleCandidateBuild)} | routing ${fmtMs(d.rawRouting)}`,
         `  calls: ${c.llmCalls ?? 0} llm, ${c.retryCalls ?? 0} retry, ${c.conversionCalls ?? 0} conv`,
         `  dominant: ${o.dominantLatencyStage ?? '—'}`,
       ];
@@ -3284,13 +5419,23 @@
       });
     }
 
-    async function sendMessage() {
+    async function sendMessage(source = 'manual') {
       const text = chatInput.value.trim();
       if (!text) return;
-      // STT buffered-replay dedup: Chrome sometimes re-fires a final result after recognition
-      // restarts (onend → start), which would send the same text a second time 3s later.
+      const normalized = normalizeForDedup(text);
+      const effectiveSource = source === 'stt' || chatInputSource === 'stt' || (lastRecognitionRenderedText && text === lastRecognitionRenderedText.trim())
+        ? 'stt'
+        : source;
       const now = Date.now();
-      if (text === lastSentText && (now - lastSentAt) < 60000) return;
+      if (effectiveSource === 'stt' && wasRecentlySent(normalized, STT_REPLAY_DUPLICATE_WINDOW_MS, 'stt')) {
+        if (chatInput.value.trim() === text) chatInput.value = '';
+        if (lastRecognitionRenderedText && normalizeForDedup(lastRecognitionRenderedText) === normalized) {
+          lastRecognitionRenderedText = '';
+        }
+        chatInputSource = 'manual';
+        return;
+      }
+      if (text === lastSentText && (now - lastSentAt) < MANUAL_DUPLICATE_WINDOW_MS) return;
       lastSentText = text;
       lastSentAt = now;
       if (typeof lastRecognitionRenderedText !== 'undefined' && text === lastRecognitionRenderedText.trim()) {
@@ -3299,11 +5444,13 @@
       try { scLangInParse(text); } catch (e) { console.warn('[LANG-IN] parse error:', e); }
       const nowIso = new Date().toISOString();
       const humanName = (config && config.humanName) ? config.humanName : 'You';
-      addRoomMessage('human', humanName, text, nowIso);
+      addRoomMessage(null, 'human', humanName, text, nowIso, false, text, null);
       pushPendingHumanMessage(text);
+      rememberHumanSend(text, effectiveSource);
       chatInput.value = '';
+      chatInputSource = 'manual';
       sendBtn.disabled = true;
-      fetch('/message', {
+      fetch(effectiveSource === 'stt' ? '/transcript' : '/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
@@ -3323,10 +5470,21 @@
     }
 
     sendBtn.addEventListener('click', sendMessage);
+    chatInput.addEventListener('input', () => {
+      const value = chatInput.value.trim();
+      if (!value) {
+        if (chatInputSource !== 'stt') lastRecognitionRenderedText = '';
+        chatInputSource = 'manual';
+        return;
+      }
+      if (!lastRecognitionRenderedText || normalizeForDedup(value) !== normalizeForDedup(lastRecognitionRenderedText)) {
+        chatInputSource = 'manual';
+      }
+    });
     chatInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        sendMessage();
+        sendMessage('manual');
       }
     });
 
@@ -3464,19 +5622,20 @@
     let ttsHoldActive = false;
     let chunkStreamActive = false; // true while speech-chunk events are being queued/played
     let currentAudio = null; // Reference to currently playing Audio element for barge-in
+    let currentSpeechRequestId = null;
     let pauseRecognitionForTts = () => {};
     let resumeRecognitionAfterTts = () => {};
-    function reportSpeechStatus(agentId, status, error = null) {
+    function reportSpeechStatus(agentId, requestId, status, error = null) {
       fetch('/speech-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentId, status, error }),
+        body: JSON.stringify({ agentId, requestId, status, error }),
       }).catch(() => {});
     }
 
-    function playAudio(audioSource, agentId, isUrl = false, fallbackBase64 = null, skipDoneSignal = false) {
-      audioQueue.push({ audioSource, agentId, isUrl, fallbackBase64, skipDoneSignal });
-      reportSpeechStatus(agentId, 'queued');
+    function playAudio(audioSource, agentId, requestId, isUrl = false, fallbackBase64 = null, skipDoneSignal = false) {
+      audioQueue.push({ audioSource, agentId, requestId, isUrl, fallbackBase64, skipDoneSignal });
+      reportSpeechStatus(agentId, requestId, 'queued');
       if (!audioPlaying) processAudioQueue();
     }
 
@@ -3506,12 +5665,14 @@
           ttsHoldActive = false;
           speakingIndicator.classList.remove('active');
           resumeRecognitionAfterTts();
-          fetch('/speech-done', { method: 'POST' }).catch(() => {});
+          fetch('/speech-done', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId: currentSpeechRequestId || null }) }).catch(() => {});
+          currentSpeechRequestId = null;
         }
         return;
       }
       audioPlaying = true;
-      const { audioSource, agentId, isUrl, fallbackBase64, skipDoneSignal } = audioQueue.shift();
+      const { audioSource, agentId, requestId, isUrl, fallbackBase64, skipDoneSignal } = audioQueue.shift();
+      currentSpeechRequestId = requestId || currentSpeechRequestId || null;
 
       // Pause mic recognition before playback starts. During longer synthesis
       // the server may otherwise see stale human-speaking state and drop audio.
@@ -3523,6 +5684,7 @@
       speakingName.textContent = name + ' speaking...';
 
       let bargedIn = false;
+      let playbackOutcome = 'unknown';
       try {
         await new Promise((resolve) => {
           (async () => {
@@ -3571,10 +5733,14 @@
             audio._bargedIn = false;
             currentAudio = audio;
             let audioResolved = false;
+            let lastProgressAt = Date.now();
+            let lastProgressTime = 0;
             const resolveOnce = (reason) => {
               if (audioResolved) return;
               audioResolved = true;
+              playbackOutcome = reason;
               clearTimeout(audioSafetyTimer);
+              clearInterval(audioStallTimer);
               resolve();
             };
             // Safety valve: if onended/onerror never fire (common in WebView2/Electron),
@@ -3583,41 +5749,76 @@
               if (!audioResolved) {
                 console.warn('[VOICE] Audio safety timeout — forcing release of speaking lock');
                 if (revokeOnDone) URL.revokeObjectURL(url);
-                reportSpeechStatus(agentId, 'finished');
                 resolveOnce('safety_timeout');
               }
             }, 90000);
+            const audioStallTimer = setInterval(() => {
+              if (audioResolved || audio.paused || audio.ended) return;
+              const currentTime = Number(audio.currentTime || 0);
+              if (currentTime > lastProgressTime + 0.05) {
+                lastProgressTime = currentTime;
+                lastProgressAt = Date.now();
+                return;
+              }
+              if ((Date.now() - lastProgressAt) < 4000) return;
+              console.warn('[VOICE] Audio stall detected — forcing release', {
+                agentId,
+                currentTime,
+                duration: Number(audio.duration || 0),
+              });
+              try { audio.pause(); } catch {}
+              reportSpeechStatus(agentId, requestId, 'failed', 'audio_stall');
+              resolveOnce('stall');
+            }, 1000);
+            audio.addEventListener('timeupdate', () => {
+              lastProgressTime = Number(audio.currentTime || 0);
+              lastProgressAt = Date.now();
+            });
             audio.addEventListener('ended', () => {
               if (revokeOnDone) URL.revokeObjectURL(url);
-              reportSpeechStatus(agentId, 'finished');
               resolveOnce('ended');
+            });
+            audio.addEventListener('stalled', () => {
+              if (audioResolved) return;
+              console.warn('[VOICE] Audio stalled event for', agentId);
+            });
+            audio.addEventListener('suspend', () => {
+              if (audioResolved || audio.ended) return;
+              if ((audio.duration || 0) > 0 && (audio.currentTime || 0) < ((audio.duration || 0) - 0.25)) {
+                console.warn('[VOICE] Audio suspended before completion for', agentId);
+              }
             });
             audio.onerror = () => {
               if (revokeOnDone) URL.revokeObjectURL(url);
               console.error('[VOICE] Audio playback failed for', agentId);
-              reportSpeechStatus(agentId, 'failed', 'audio_error');
+              reportSpeechStatus(agentId, requestId, 'failed', 'audio_error');
               resolveOnce('onerror');
             };
             audio.onpause = () => {
               if (audio._bargedIn) {
                 bargedIn = true;
                 resolveOnce('barge_in');
+              } else if (!audioResolved && !audio.ended) {
+                console.warn('[VOICE] Unexpected audio pause — forcing release for', agentId);
+                reportSpeechStatus(agentId, requestId, 'failed', 'unexpected_pause');
+                resolveOnce('unexpected_pause');
               }
             };
+            audio.load();
             const playPromise = audio.play();
             if (playPromise && typeof playPromise.then === 'function') {
               playPromise
                 .then(() => {
-                  reportSpeechStatus(agentId, 'started');
+                  reportSpeechStatus(agentId, requestId, 'started');
                 })
                 .catch((err) => {
                   if (revokeOnDone) URL.revokeObjectURL(url);
                   console.error('[VOICE] Audio play() failed:', err);
-                  reportSpeechStatus(agentId, 'failed', String(err && err.message ? err.message : err));
+                  reportSpeechStatus(agentId, requestId, 'failed', String(err && err.message ? err.message : err));
                   resolveOnce('play_rejected');
                 });
             } else {
-              reportSpeechStatus(agentId, 'started');
+              reportSpeechStatus(agentId, requestId, 'started');
             }
           })();
         });
@@ -3633,7 +5834,7 @@
         chunkStreamActive = false;
         audioQueue.length = 0;
         speakingIndicator.classList.remove('active');
-        fetch('/speech-done', { method: 'POST' }).catch(() => {});
+        fetch('/speech-done', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId: requestId || null }) }).catch(() => {});
         console.log('[VOICE] Barge-in complete — yielding to human');
         // Restart mic so human can speak
         if (recognition && micListening) {
@@ -3642,15 +5843,24 @@
         return;
       }
 
+      const playbackCompleted = playbackOutcome === 'ended' || playbackOutcome === 'safety_timeout';
+      const playbackTerminalFailure = !playbackCompleted && playbackOutcome !== 'unknown';
+
       if (!skipDoneSignal) {
+        if (playbackCompleted) {
+          reportSpeechStatus(agentId, requestId, 'finished');
+        } else if (playbackTerminalFailure) {
+          reportSpeechStatus(agentId, requestId, 'failed', playbackOutcome);
+        }
         // This is either the final chunk or a non-chunk (legacy) audio item — signal server done.
-        fetch('/speech-done', { method: 'POST' }).catch(() => {});
+        fetch('/speech-done', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId: requestId || null }) }).catch(() => {});
         if (audioQueue.length === 0) {
           // Nothing more to play — full cleanup now.
           speakingIndicator.classList.remove('active');
           audioPlaying = false;
           ttsHoldActive = false;
           chunkStreamActive = false;
+          currentSpeechRequestId = null;
           resumeRecognitionAfterTts();
           return;
         }
@@ -3673,6 +5883,38 @@
     let lastRecognitionRenderedText = '';
     let lastSentText = '';
     let lastSentAt = 0;
+    let chatInputSource = 'manual';
+    const recentHumanSendHistory = [];
+    const MANUAL_DUPLICATE_WINDOW_MS = 60000;
+    const STT_REPLAY_DUPLICATE_WINDOW_MS = 15 * 60 * 1000;
+
+    function pruneRecentHumanSendHistory() {
+      const cutoff = Date.now() - STT_REPLAY_DUPLICATE_WINDOW_MS;
+      while (recentHumanSendHistory.length && recentHumanSendHistory[0].at < cutoff) {
+        recentHumanSendHistory.shift();
+      }
+    }
+
+    function rememberHumanSend(text, source) {
+      const normalized = normalizeForDedup(text);
+      if (!normalized) return;
+      pruneRecentHumanSendHistory();
+      recentHumanSendHistory.push({ normalized, source, at: Date.now() });
+      if (recentHumanSendHistory.length > 50) recentHumanSendHistory.shift();
+    }
+
+    function wasRecentlySent(text, windowMs, source = null) {
+      const normalized = normalizeForDedup(text);
+      if (!normalized) return false;
+      pruneRecentHumanSendHistory();
+      const now = Date.now();
+      return recentHumanSendHistory.some(item =>
+        item
+        && item.normalized === normalized
+        && (!source || item.source === source)
+        && (now - item.at) < windowMs
+      );
+    }
 
     if (SpeechRecognition) {
       recognition = new SpeechRecognition();
@@ -3698,6 +5940,21 @@
 
         // Show live transcription — accumulated finals + current interim
         lastRecognitionRenderedText = (accumulatedText + interimText).trim();
+        if (
+          lastRecognitionRenderedText
+          && wasRecentlySent(lastRecognitionRenderedText, STT_REPLAY_DUPLICATE_WINDOW_MS, 'stt')
+        ) {
+          clearTimeout(silenceTimer);
+          silenceTimer = null;
+          speechActive = false;
+          accumulatedText = '';
+          lastRecognitionRenderedText = '';
+          chatInput.value = '';
+          chatInputSource = 'manual';
+          signalMicState(false);
+          return;
+        }
+        chatInputSource = 'stt';
         chatInput.value = lastRecognitionRenderedText;
 
         // Signal server: human is actively speaking — hold ticks
@@ -3722,11 +5979,12 @@
             signalMicState(false, 300),
             new Promise(resolve => setTimeout(resolve, 300)),
           ]);
-          lastRecognitionRenderedText = '';
           const text = chatInput.value.trim();
           if (text && micListening) {
-            sendMessage();
+            sendMessage('stt');
           }
+          lastRecognitionRenderedText = '';
+          chatInputSource = 'manual';
         }, SILENCE_DELAY);
       };
 
@@ -3770,6 +6028,7 @@
           chatInput.value = '';
         }
         lastRecognitionRenderedText = '';
+        chatInputSource = 'manual';
         try { recognition.stop(); } catch(e) {}
         signalMicState(false);
       };
@@ -3789,17 +6048,19 @@
           speechActive = false;
           accumulatedText = '';
           lastRecognitionRenderedText = '';
+          chatInputSource = 'manual';
           micBtn.classList.remove('listening');
           clearTimeout(silenceTimer);
           recognition.stop();
           signalMicState(false); // clear speaking flag on server
           // Send any remaining text
           const text = chatInput.value.trim();
-          if (text) sendMessage();
+          if (text) sendMessage('manual');
         } else {
           // Turn on mic — stays on until clicked again
           chatInput.value = '';
           accumulatedText = '';
+          chatInputSource = 'manual';
           micListening = true;
           micBtn.classList.add('listening');
           recognition.start();
@@ -3828,17 +6089,17 @@
     const STAGES = ['Seedling','Sprouting','Growing','Maturing','Awakening','Autonomous'];
     const STAGE_THRESHOLDS = [0, 0.1, 0.3, 0.5, 0.7, 0.85];
 
-    // Show/hide brain button based on whether Alois agent exists
+    // Show/hide brain button based on whether any Alois agent exists
     function updateBrainBtn() {
       const btn = document.getElementById('brainVizBtn');
       if (!btn) return;
-      const hasAlois = Object.values(agentProviders).includes('alois');
+      const hasAlois = Object.keys(agentProviders).some(id => isAloisAgent(id));
       btn.style.display = hasAlois ? 'inline-block' : 'none';
     }
 
     function getFirstAloisId() {
-      for (const [id, prov] of Object.entries(agentProviders)) {
-        if (prov === 'alois') return id;
+      for (const id of Object.keys(agentProviders)) {
+        if (isAloisAgent(id)) return id;
       }
       return null;
     }
@@ -4000,10 +6261,8 @@
       if (!d) return;
 
       // Stage badge
-      const inc = d.incubation;
-      if (inc) {
-        document.getElementById('brainStage').textContent = inc.stage || 'Unknown';
-      }
+      const inc = d.incubation || {};
+      document.getElementById('brainStage').textContent = inc.stage || 'Pending';
 
       // Tissue weight
       const tw = d.tissueWeight || 0;
@@ -4016,13 +6275,11 @@
       document.getElementById('brainUtteranceFill').style.width = ((uc / 2000) * 100) + '%';
 
       // Brain stats
-      const bm = d.brainMetrics;
-      if (bm) {
-        document.getElementById('brainNeurons').textContent = bm.neuronCount || 0;
-        document.getElementById('brainAxons').textContent = bm.axonCount || 0;
-        document.getElementById('brainSpines').textContent = (bm.spineDensity || 0).toFixed(1);
-        document.getElementById('brainResonance').textContent = (bm.resonanceDepth || 0).toFixed(1);
-      }
+      const bm = d.brainMetrics || {};
+      document.getElementById('brainNeurons').textContent = bm.neuronCount || d.state?.neuronCount || (d.neurons || []).length || 0;
+      document.getElementById('brainAxons').textContent = bm.axonCount || d.state?.axonCount || (d.edges || []).length || 0;
+      document.getElementById('brainSpines').textContent = Number(bm.spineDensity || 0).toFixed(1);
+      document.getElementById('brainResonance').textContent = Number(bm.resonanceDepth || 0).toFixed(1);
 
       // Affect bars
       const affect = d.state?.lastAffect;
@@ -4048,10 +6305,10 @@
       }
 
       // Maturity sigmoid curve
-      if (inc) updateMaturityCurve(inc);
+      updateMaturityCurve(inc);
 
       // Contribution radar
-      if (inc && inc.contributions) updateRadar(inc.contributions);
+      if (inc.contributions) updateRadar(inc.contributions);
     }
 
     function updateMaturityCurve(inc) {
@@ -11469,3 +13726,7 @@
   </script>
 </body>
 </html>
+
+
+
+

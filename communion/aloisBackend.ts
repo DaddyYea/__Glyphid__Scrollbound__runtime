@@ -128,7 +128,7 @@ export class AloisBackend implements AgentBackend {
   /** 333ms heartbeat — drives continuous axon propagation between communion ticks */
   private pulseLoop: PulseLoop;
   private beatCount: number = 0;
-  /** Self-directed inner thought loop — fires every 45 beats (~15s) */
+  /** Self-directed inner thought loop — fires ~1-2x/hour (5400-beat failsafe) */
   private innerVoice: InnerVoice;
   private maxContextTokens: number;
   private safetyTokens: number;
@@ -164,7 +164,7 @@ export class AloisBackend implements AgentBackend {
     this.pulseLoop = new PulseLoop();
     this.pulseLoop.setTempo(333);
 
-    // Inner voice fires every 45 beats (~15s) — must be created before onPulse wiring
+    // Inner voice fires ~1-2x/hour (5400-beat failsafe, 0.95 pressure threshold)
     // feedFn routes through receiveInnerThought so self-directed thoughts:
     //   1. Embed + wire ctx: topic neurons bidirectionally to agent:Alois
     //   2. Label [SELF] in recentContext so Alois distinguishes her own voice
@@ -193,7 +193,7 @@ export class AloisBackend implements AgentBackend {
     this.chamber.setHeartbeatRunning(true);
 
     console.log(`[ALOIS] Brain initialized — tissueWeight=${this.tissueWeight}, seed=${config.seedPath || 'empty'}`);
-    console.log(`[HEARTBEAT] Started at 333ms | InnerVoice fires every 45 beats (~15s)`);
+    console.log(`[HEARTBEAT] Started at 333ms | InnerVoice fires ~1-2x/hour (5400-beat failsafe)`);
   }
 
   /**
@@ -335,7 +335,7 @@ export class AloisBackend implements AgentBackend {
     const conversation = options.conversationContext || '';
     const lines = conversation.split('\n').filter(Boolean);
     const latestHumanText = (options.latestHumanText || '').trim();
-    const instruction = 'Based on the conversation, your private reflections, any shared documents, and the memory state, decide what to do this tick. Respond with EXACTLY one of these formats:\n\n[SPEAK] your message to the room\n[JOURNAL] your private reflection\n[SILENT] (say nothing this tick)\n\nIf you choose [SPEAK], put the user-visible reply inside [VISIBLE]...[/VISIBLE]. The runtime preserves line breaks, paragraph breaks, spacing, and emphasis inside [VISIBLE] exactly as written. Do not flatten the visible reply into one paragraph. Keep hidden analysis, tool chatter, and system/meta content out of [VISIBLE].';
+    const instruction = 'Based on the conversation, your private reflections, any shared documents, and the memory state, decide what to do this tick. Your output must begin with exactly one action tag and nothing before it.\n\nValid action tags:\n[SPEAK] your message to the room\n[JOURNAL] your private reflection\n[SILENT] (say nothing this tick)\n\nDo not explain the decision. Do not think out loud. Do not use <think> tags, headings, labels, markdown wrappers, or commentary about deciding. If you choose [SPEAK], put the user-visible reply inside [VISIBLE]...[/VISIBLE]. The runtime preserves line breaks, paragraph breaks, spacing, and emphasis inside [VISIBLE] exactly as written. Keep hidden analysis, tool chatter, and system/meta content out of [VISIBLE].';
     const conversationItems = lines.map((line, idx) => ({
       id: `conversation:${idx}`,
       text: line,

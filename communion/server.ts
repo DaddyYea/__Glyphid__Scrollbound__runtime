@@ -12,14 +12,19 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
 import type { Socket } from 'net';
+import crypto from 'crypto';
 import { CommunionLoop, CommunionEvent } from './communionLoop';
 import { CommunionConfig, AgentConfig } from './types';
 import { VOICES } from './voice';
+import { FileSystemModelCatalog } from '../src/brain/ModelCatalog';
+import { HuggingFaceApiRegistry } from '../src/brain/HuggingFaceRegistry';
+import { InstallProgress, ModelInstaller } from '../src/brain/ModelInstaller';
 import { getGraphRef } from './graph/scrollGraphStore';
 import { WORK_NODE_TYPES, WORK_RESOLUTION_TYPES } from './work/workModels';
 import { proposeWork, acceptWork, rejectWork, deferWork, executeWork, getWorkSnippet, WorkExecutionError, normalizeWorkAction, findOpenWorkByDeterministicKey, initializeWorkDedupeIndex, resolveWork, WorkResolveError, getWorkDedupeIndexStats } from './work/workLifecycle';
 import { runWorkPass } from './work/workPass';
 // Import parsing happens in a child worker process (communion/import/worker.ts)
+import { promoteExample, listExamples, getExampleCount, enrichExample, loadProfile, listPreferencePairs, listEvalRuns, loadActiveBundle, loadCandidateBundle, promoteCandidate, checkAndEnrichRecentPromotions } from './goldenStore';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -37,6 +42,48 @@ const WORK_QUEUE_TYPES = WORK_NODE_TYPES.filter(t => t !== 'ActionLog' && t !== 
 const WORK_QUEUE_TYPES_SET = new Set<string>(WORK_QUEUE_TYPES as readonly string[]);
 const WORK_STATUS_VALUES = ['proposed', 'accepted', 'rejected', 'deferred', 'done'] as const;
 const WORK_RESOLUTION_TYPES_SET = new Set<string>(WORK_RESOLUTION_TYPES as readonly string[]);
+const brainModelCatalog = new FileSystemModelCatalog();
+const huggingFaceRegistry = new HuggingFaceApiRegistry();
+const brainModelInstaller = new ModelInstaller();
+type BrainInstallJob = {
+  id: string;
+  status: 'queued' | 'running' | 'complete' | 'error' | 'cancelled';
+  progress: InstallProgress;
+  result?: any;
+  error?: string;
+  createdAt: number;
+  updatedAt: number;
+  controller?: AbortController;
+};
+const brainInstallJobs = new Map<string, BrainInstallJob>();
+
+function pruneBrainInstallJobs(): void {
+  const cutoff = Date.now() - 1000 * 60 * 30;
+  for (const [jobId, job] of brainInstallJobs.entries()) {
+    if (job.updatedAt < cutoff && (job.status === 'complete' || job.status === 'error')) {
+      brainInstallJobs.delete(jobId);
+    }
+  }
+}
+
+function createBrainInstallJob(): BrainInstallJob {
+  pruneBrainInstallJobs();
+  const id = crypto.randomUUID();
+  const job: BrainInstallJob = {
+    id,
+    status: 'queued',
+    progress: {
+      phase: 'metadata',
+      bytesDownloaded: 0,
+      totalBytes: null,
+      message: 'Queued',
+    },
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  brainInstallJobs.set(id, job);
+  return job;
+}
 
 function readJsonBody(req: IncomingMessage, res: ServerResponse, onValid: (payload: any) => void): void {
   let body = '';
@@ -168,11 +215,21 @@ function loadConfig(): CommunionConfig {
     if (existsSync(dynamicPath)) {
       try {
         const dynamic = JSON.parse(readFileSync(dynamicPath, 'utf8'));
+        let loadedBrainLocalAgentId: string | null = null;
         for (const [, entry] of Object.entries(dynamic) as [string, any][]) {
-          if (entry.active && entry.config) {
-            agents.push(entry.config);
-            console.log(`[CONFIG] Loaded agent from dynamic-agents.json: ${entry.config.id}`);
+          if (!entry.active || !entry.config) continue;
+
+          const isAloisProvider = entry.config.provider === 'brain-local' || (entry.config.provider === 'openai-compatible' && entry.config.id.startsWith('alois'));
+          if (isAloisProvider) {
+            if (loadedBrainLocalAgentId) {
+              console.warn(`[CONFIG] Skipping extra active brain/alois agent from dynamic-agents.json: ${entry.config.id} (already loaded ${loadedBrainLocalAgentId})`);
+              continue;
+            }
+            loadedBrainLocalAgentId = entry.config.id;
           }
+
+          agents.push(entry.config);
+          console.log(`[CONFIG] Loaded agent from dynamic-agents.json: ${entry.config.id}`);
         }
       } catch (e) {
         console.warn('[CONFIG] Failed to read dynamic-agents.json:', e);
@@ -315,6 +372,7 @@ async function main() {
         speakerName: event.message.speakerName,
         text: event.message.text,
         visibleText: event.message.visibleText || event.message.text,
+        anchoredAfterMessageId: event.message.anchoredAfterMessageId || event.anchoredEmitTargetMessageId,
         timestamp: event.message.timestamp,
       });
     } else if (event.type === 'journal-entry' && event.message) {
@@ -338,7 +396,7 @@ async function main() {
     } else if (event.type === 'tick') {
       broadcast({ type: 'tick', tickCount: event.tickCount });
     } else if (event.type === 'speech-start') {
-      broadcast({ type: 'speech-start', agentId: event.agentId });
+      broadcast({ type: 'speech-start', agentId: event.agentId, requestId: event.requestId });
     } else if (event.type === 'speech-chunk') {
       // Cache each chunk under its own ID for URL-based delivery; also include inline base64 fallback.
       let chunkAudioUrl: string | undefined;
@@ -351,6 +409,7 @@ async function main() {
       broadcast({
         type: 'speech-chunk',
         agentId: event.agentId,
+        requestId: event.requestId,
         audioUrl: chunkAudioUrl,
         audioBase64: event.audioBase64,
         chunkIndex: event.chunkIndex,
@@ -373,9 +432,17 @@ async function main() {
       broadcast({
         type: 'speech-end',
         agentId: event.agentId,
+        requestId: event.requestId,
         audioUrl,
         audioBase64,
         durationMs: event.durationMs,
+      });
+    } else if (event.type === 'speech-stop') {
+      broadcast({
+        type: 'speech-stop',
+        agentId: event.agentId,
+        reason: event.reason,
+        requestId: event.requestId,
       });
     } else if (event.type === 'turn-latency' && event.latencyTrace) {
       broadcast({ type: 'turn-latency', agentId: event.agentId, latencyTrace: event.latencyTrace });
@@ -520,6 +587,131 @@ async function main() {
       return;
     }
 
+    // Rejection tally — live validation rejection counts per agent
+    if (url === '/api/debug/rejection-tally' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+      res.end(JSON.stringify(communion.getRejectionTally(), null, 2));
+      return;
+    }
+
+    // ── Golden Set API ──────────────────────────────────────────────────────
+
+    if (url === '/api/golden/promote' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          if (!data.captureMode || !data.messageId || !data.assistantReplyText) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'captureMode, messageId, and assistantReplyText required' }));
+            return;
+          }
+          const result = promoteExample(data);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'ok', result }));
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: String(err) }));
+        }
+      });
+      return;
+    }
+
+    if (url?.startsWith('/api/golden/list') && req.method === 'GET') {
+      const params = new URL(req.url || '', `http://localhost:${PORT}`).searchParams;
+      const filters: Record<string, any> = {};
+      if (params.get('captureMode')) filters.captureMode = params.get('captureMode');
+      if (params.get('lane')) filters.lane = params.get('lane');
+      if (params.get('tags')) filters.tags = params.get('tags')!.split(',');
+      if (params.get('limit')) filters.limit = parseInt(params.get('limit')!);
+      if (params.get('offset')) filters.offset = parseInt(params.get('offset')!);
+      const examples = listExamples(filters);
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+      res.end(JSON.stringify(examples));
+      return;
+    }
+
+    if (url === '/api/golden/counts' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+      res.end(JSON.stringify(getExampleCount()));
+      return;
+    }
+
+    if (url === '/api/golden/enrich' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          if (!data.exampleId || !data.outcome) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'exampleId and outcome required' }));
+            return;
+          }
+          enrichExample(data.exampleId, data.outcome);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'ok' }));
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: String(err) }));
+        }
+      });
+      return;
+    }
+
+    if (url === '/api/golden/profile' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+      res.end(JSON.stringify(loadProfile()));
+      return;
+    }
+
+    if (url === '/api/golden/preferences' && req.method === 'GET') {
+      const params = new URL(req.url || '', `http://localhost:${PORT}`).searchParams;
+      const limit = parseInt(params.get('limit') || '50');
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+      res.end(JSON.stringify(listPreferencePairs(limit)));
+      return;
+    }
+
+    if (url === '/api/golden/eval-runs' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+      res.end(JSON.stringify(listEvalRuns()));
+      return;
+    }
+
+    if (url === '/api/golden/bundle' && req.method === 'GET') {
+      const active = loadActiveBundle();
+      const candidate = loadCandidateBundle();
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+      res.end(JSON.stringify({ active, candidate }));
+      return;
+    }
+
+    if (url === '/api/golden/bundle/promote' && req.method === 'POST') {
+      const ok = promoteCandidate();
+      res.writeHead(ok ? 200 : 404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: ok ? 'promoted' : 'no_candidate' }));
+      return;
+    }
+
+    if (url === '/api/golden/export' && req.method === 'GET') {
+      const params = new URL(req.url || '', `http://localhost:${PORT}`).searchParams;
+      const filters: Record<string, any> = {};
+      if (params.get('captureMode')) filters.captureMode = params.get('captureMode');
+      if (params.get('lane')) filters.lane = params.get('lane');
+      if (params.get('tags')) filters.tags = params.get('tags')!.split(',');
+      filters.limit = 10000;
+      const examples = listExamples(filters);
+      const jsonl = examples.map(e => JSON.stringify(e)).join('\n');
+      res.writeHead(200, {
+        'Content-Type': 'application/x-ndjson',
+        'Content-Disposition': 'attachment; filename="golden_export.jsonl"',
+      });
+      res.end(jsonl);
+      return;
+    }
+
     // Preset bank — GET reads presets.json, POST writes it
     if (url === '/api/presets') {
       const presetsPath = join(process.cwd(), 'data', 'communion', 'presets.json');
@@ -578,13 +770,23 @@ async function main() {
       // Send config (agent list, colors, names, providers)
       const state = communion.getState();
       const agentProviders: Record<string, string> = {};
+      const brainLocalConfigs: Record<string, { routerModel?: string; languageModel?: string }> = {};
       for (const c of communion.getAgentConfigs()) agentProviders[c.id] = c.provider;
+      for (const c of communion.getAgentConfigs()) {
+        if (c.provider === 'brain-local' || (c.provider === 'openai-compatible' && c.id.startsWith('alois'))) {
+          brainLocalConfigs[c.id] = {
+            routerModel: c.routerModel || c.routerModelPath || '',
+            languageModel: c.languageModel || c.languageModelPath || c.model || '',
+          };
+        }
+      }
       res.write(`data: ${JSON.stringify({
         type: 'config',
         agentIds: state.agentIds,
         agentNames: state.agentNames,
         agentColors: state.agentColors,
         agentProviders,
+        brainLocalConfigs,
         humanName: state.humanName,
         voiceConfigs: communion.getAllVoiceConfigs(),
         voices: VOICES,
@@ -601,6 +803,7 @@ async function main() {
           speakerName: msg.speakerName,
           text: msg.text,
           visibleText: msg.visibleText || msg.text,
+          anchoredAfterMessageId: msg.anchoredAfterMessageId,
           timestamp: msg.timestamp,
         })}\n\n`);
       }
@@ -662,6 +865,8 @@ async function main() {
               requestImmediateTick.call(communion, 'human');
             }
             console.log(`[${config.humanName}] ${normalized}`);
+            // Background-enrich any recently promoted golden examples
+            try { checkAndEnrichRecentPromotions(normalized, new Date().toISOString()); } catch { /* non-critical */ }
           }
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1534,9 +1739,20 @@ async function main() {
       req.on('end', () => {
         try {
           const agentConfig = JSON.parse(body) as AgentConfig;
-          if (!agentConfig.id || !agentConfig.name || !agentConfig.provider || !agentConfig.apiKey || !agentConfig.model) {
+          const isBrainLocal = agentConfig.provider === 'brain-local';
+          const missingCore = !agentConfig.id || !agentConfig.name || !agentConfig.provider;
+          const missingBrainLocal =
+            isBrainLocal && (!agentConfig.languageModel || !agentConfig.routerModel);
+          const missingStandard =
+            !isBrainLocal && (!agentConfig.apiKey || !agentConfig.model);
+
+          if (missingCore || missingBrainLocal || missingStandard) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Missing required fields: id, name, provider, apiKey, model' }));
+            res.end(JSON.stringify({
+              error: isBrainLocal
+                ? 'Missing required fields: id, name, provider, languageModel, routerModel'
+                : 'Missing required fields: id, name, provider, apiKey, model',
+            }));
             return;
           }
           // Sanitize id: lowercase, no spaces
@@ -1700,6 +1916,240 @@ async function main() {
     }
 
     // LM Studio model detection proxy — browser can't fetch localhost:1234 directly
+    if (url === '/brain-local/models' && req.method === 'POST') {
+      readJsonBody(req, res, async payload => {
+        try {
+          const role = payload?.role === 'router' || payload?.role === 'language'
+            ? payload.role
+            : undefined;
+          const models = await brainModelCatalog.list(role);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            models: models.map(model => ({
+              id: model.id,
+              label: model.label,
+              role: model.role,
+              source: model.source,
+              backend: model.backend,
+              installed: model.installed,
+              localPath: model.localPath,
+            })),
+          }));
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: String(error) }));
+        }
+      });
+      return;
+    }
+
+    if (url?.startsWith('/brain-local/status') && req.method === 'GET') {
+      try {
+        const parsed = new URL(req.url || '/brain-local/status', 'http://localhost');
+        const agentId = parsed.searchParams.get('agentId') || '';
+        if (!agentId) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing agentId' }));
+          return;
+        }
+        const config = communion.getAgentConfigs().find(agentConfig => agentConfig.id === agentId);
+        const isAloisProvider = config && (config.provider === 'brain-local' || (config.provider === 'openai-compatible' && config.id.startsWith('alois')));
+        if (!config || !isAloisProvider) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Agent not found or not a brain-local agent' }));
+          return;
+        }
+        const backend = communion.getAgentBackend(agentId) as any;
+        const fallbackStatus = {
+          provider: 'brain-local',
+          agentId,
+          router: {
+            modelId: config.routerModel || 'unconfigured',
+            source: config.routerModelSource || 'local',
+            backend: config.routerModelBackend || 'unknown',
+            localPath: config.routerModelPath || null,
+            runtimeActive: false,
+            runtimeBaseUrl: null,
+          },
+          language: {
+            modelId: config.languageModel || config.model || 'unconfigured',
+            source: config.languageModelSource || 'local',
+            backend: config.languageModelBackend || 'unknown',
+            localPath: config.languageModelPath || null,
+            runtimeActive: false,
+            runtimeBaseUrl: null,
+          },
+        };
+        const writeStatus = (status: unknown) => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(status));
+        };
+        if (typeof backend?.getStatus === 'function') {
+          Promise.resolve(backend.getStatus())
+            .then(writeStatus)
+            .catch(error => {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: String(error) }));
+            });
+          return;
+        }
+        writeStatus(fallbackStatus);
+      } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: String(error) }));
+      }
+      return;
+    }
+
+    if (url === '/brain-local/huggingface/search' && req.method === 'POST') {
+      readJsonBody(req, res, async payload => {
+        try {
+          const query = typeof payload?.query === 'string' ? payload.query.trim() : '';
+          if (!query) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing query' }));
+            return;
+          }
+          const models = await huggingFaceRegistry.search(query);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ models }));
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: String(error) }));
+        }
+      });
+      return;
+    }
+
+    if (url === '/brain-local/install' && req.method === 'POST') {
+      readJsonBody(req, res, async payload => {
+        try {
+          const source = payload?.source;
+          const id = typeof payload?.id === 'string' ? payload.id.trim() : '';
+          if (!id || (source !== 'local' && source !== 'huggingface')) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing or invalid install payload' }));
+            return;
+          }
+
+          const job = createBrainInstallJob();
+          job.status = 'running';
+          job.controller = new AbortController();
+          job.progress.message = 'Starting install';
+          job.updatedAt = Date.now();
+
+          void brainModelInstaller.installWithProgress({
+            id,
+            source,
+            remoteId: typeof payload?.remoteId === 'string' ? payload.remoteId.trim() : undefined,
+            localPath: typeof payload?.localPath === 'string' ? payload.localPath.trim() : undefined,
+            fileName: typeof payload?.fileName === 'string' ? payload.fileName.trim() : undefined,
+            signal: job.controller.signal,
+          }, progress => {
+            job.progress = {
+              ...progress,
+              message: progress.phase === 'downloading'
+                ? 'Downloading model'
+                : progress.phase === 'copying'
+                  ? 'Copying model'
+                  : progress.phase === 'complete'
+                    ? 'Install complete'
+                    : 'Preparing model',
+            };
+            job.updatedAt = Date.now();
+          }).then(result => {
+            job.status = 'complete';
+            job.controller = undefined;
+            job.result = result;
+            job.progress = {
+              ...job.progress,
+              phase: 'complete',
+              message: 'Install complete',
+            };
+            job.updatedAt = Date.now();
+          }).catch(error => {
+            const message = String(error);
+            if (message.includes('install_cancelled') || job.controller?.signal.aborted) {
+              job.status = 'cancelled';
+              job.error = 'cancelled';
+              job.progress = {
+                ...job.progress,
+                phase: 'error',
+                message: 'Install cancelled',
+              };
+            } else {
+              job.status = 'error';
+              job.error = message;
+              job.progress = {
+                ...job.progress,
+                phase: 'error',
+                message,
+              };
+            }
+            job.controller = undefined;
+            job.updatedAt = Date.now();
+          });
+
+          res.writeHead(202, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, jobId: job.id }));
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: String(error) }));
+        }
+      });
+      return;
+    }
+
+    if (url === '/brain-local/install/status' && req.method === 'POST') {
+      readJsonBody(req, res, payload => {
+        const jobId = typeof payload?.jobId === 'string' ? payload.jobId.trim() : '';
+        const job = brainInstallJobs.get(jobId);
+        if (!job) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Install job not found' }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          jobId: job.id,
+          status: job.status,
+          progress: job.progress,
+          result: job.result,
+          error: job.error,
+        }));
+      });
+      return;
+    }
+
+    if (url === '/brain-local/install/cancel' && req.method === 'POST') {
+      readJsonBody(req, res, payload => {
+        const jobId = typeof payload?.jobId === 'string' ? payload.jobId.trim() : '';
+        const job = brainInstallJobs.get(jobId);
+        if (!job) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Install job not found' }));
+          return;
+        }
+        if (job.status !== 'running' || !job.controller) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Install job is not running' }));
+          return;
+        }
+        job.controller.abort();
+        job.status = 'cancelled';
+        job.error = 'cancelled';
+        job.progress = {
+          ...job.progress,
+          phase: 'error',
+          message: 'Install cancelled',
+        };
+        job.updatedAt = Date.now();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, jobId: job.id, status: job.status }));
+      });
+      return;
+    }
+
     if (url === '/lmstudio/models' && req.method === 'POST') {
       let body = '';
       req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
@@ -1856,8 +2306,16 @@ async function main() {
         const edges       = full ? ((agent as any).getChamber?.()?.getGraph?.()?.getAxonTopology?.() || []) : [];
         const lastDream   = full ? ((agent as any).getLastDream?.()  || null)  : null;
         const tissueWeight = (agent as any).getTissueWeight?.() || 0;
-        const incubation  = full ? ((agent as any).getIncubation?.() || null)  : null;
-        const brainMetrics= full ? ((agent as any).getBrainMetrics?.() || null): null;
+        const incubation  = full ? (((agent as any).getIncubation?.() || (agent as any).evaluateIncubation?.()) || null)  : null;
+        const brainMetrics= full ? (((agent as any).getBrainMetrics?.() || {
+          neuronCount: state?.neuronCount || neurons.length || 0,
+          axonCount: state?.axonCount || edges.length || 0,
+          utteranceCount: state?.utteranceCount || 0,
+          spineDensity: 0,
+          resonanceDepth: 0,
+          dreamCount: Array.isArray(lastDream) ? lastDream.length : (lastDream ? 1 : 0),
+          tick: state?.tick || 0,
+        })) : null;
         const autoGradient = (agent as any).isAutoGradient?.() ?? true;
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ state, neurons, edges, lastDream, tissueWeight, incubation, brainMetrics, autoGradient, ingestStatus }));
@@ -1940,9 +2398,17 @@ async function main() {
 
     // Speech done — client reports audio playback finished
     if (url === '/speech-done' && req.method === 'POST') {
-      communion.reportSpeechComplete();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ speaking: false }));
+      readJsonBody(req, res, payload => {
+        const requestId = typeof payload?.requestId === 'string' ? payload.requestId : undefined;
+        const reportSpeechComplete = (communion as any).reportSpeechComplete;
+        if (typeof reportSpeechComplete === 'function') {
+          reportSpeechComplete.call(communion, requestId);
+        } else {
+          communion.reportSpeechComplete();
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ speaking: false }));
+      });
       return;
     }
 
@@ -1957,10 +2423,13 @@ async function main() {
         }
         const reportSpeechStatus = (communion as any).reportSpeechStatus;
         if (typeof reportSpeechStatus === 'function') {
-          reportSpeechStatus.call(communion, agentId, status, typeof payload?.error === 'string' ? payload.error : undefined);
-        }
-        if (status === 'finished') {
-          communion.reportSpeechComplete();
+          reportSpeechStatus.call(
+            communion,
+            agentId,
+            status,
+            typeof payload?.error === 'string' ? payload.error : undefined,
+            typeof payload?.requestId === 'string' ? payload.requestId : undefined,
+          );
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
@@ -2072,18 +2541,34 @@ async function main() {
 
     // Mycelium cabinet saturation endpoint — Pi polls this to drive the lobe.
     // Cached for 2s to avoid recomputing getNeuronScores() on every concurrent poll.
-    if (url === '/pond-saturation' && req.method === 'GET') {
-      const now = Date.now();
-      if (!pondCache.payload || (now - pondCache.ts) > 2000) {
-        pondCache.payload = communion.getAloisSaturation();
-        pondCache.ts = now;
-      }
-      if (!pondCache.payload) {
-        res.writeHead(503, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-        res.end(JSON.stringify({ error: 'No Alois agent active' }));
+    if (url?.startsWith('/pond-saturation') && req.method === 'GET') {
+      const parsed = new URL(req.url || '/pond-saturation', 'http://localhost');
+      const agentId = parsed.searchParams.get('agentId') || '';
+      if (agentId) {
+        const agent = communion.getAgentBackend(agentId) as any;
+        const payload = agent && typeof agent.getSaturationPayload === 'function'
+          ? agent.getSaturationPayload()
+          : null;
+        if (!payload) {
+          res.writeHead(404, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+          res.end(JSON.stringify({ error: 'Agent has no mycelium payload' }));
+        } else {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+          res.end(JSON.stringify(payload));
+        }
       } else {
-        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-        res.end(JSON.stringify(pondCache.payload));
+        const now = Date.now();
+        if (!pondCache.payload || (now - pondCache.ts) > 2000) {
+          pondCache.payload = communion.getAloisSaturation();
+          pondCache.ts = now;
+        }
+        if (!pondCache.payload) {
+          res.writeHead(503, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+          res.end(JSON.stringify({ error: 'No brain agent active' }));
+        } else {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+          res.end(JSON.stringify(pondCache.payload));
+        }
       }
       return;
     }
@@ -2398,3 +2883,4 @@ main().catch(err => {
   console.error('Fatal error:', err);
   process.exit(1);
 });
+

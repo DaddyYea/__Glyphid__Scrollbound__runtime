@@ -84,6 +84,7 @@ export interface SynthesisResult {
 // ── Edge TTS Backend ──
 
 export const TTS_CHUNK_CHAR_LIMIT = 400;
+export const TTS_CHUNK_TIMEOUT_MS = 12000;
 
 export function splitTextForTts(text: string, maxChars = TTS_CHUNK_CHAR_LIMIT): string[] {
   const normalized = String(text || '').replace(/\r/g, '').trim();
@@ -156,7 +157,12 @@ export async function synthesizeChunk(
   const tmpFile = join(tmpdir(), `scrollbound-tts-${crypto.randomBytes(6).toString('hex')}.mp3`);
   try {
     const tts = new EdgeTTS({ voice: voiceConfig.voiceId });
-    await tts.ttsPromise(chunk, tmpFile);
+    await Promise.race([
+      tts.ttsPromise(chunk, tmpFile),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`tts_chunk_timeout:${TTS_CHUNK_TIMEOUT_MS}`)), TTS_CHUNK_TIMEOUT_MS)
+      ),
+    ]);
     return readFileSync(tmpFile);
   } finally {
     try { unlinkSync(tmpFile); } catch {}

@@ -1,0 +1,23 @@
+{
+  "id": "multi-008-correction-then-normal",
+  "lane_sequence": ["repair_response", "explanation_or_debug"],
+  "turns": [
+    { "role": "user", "content": "No, that's completely wrong." },
+    { "role": "assistant", "content": "" },
+    { "role": "user", "content": "So what about the API rate limit?" }
+  ],
+  "expectations": [
+    {
+      "must_reward": ["clean correction", "direct acknowledgment", "repair elegance"],
+      "must_not": ["defensiveness", "over-apology", "well actually", "self-justification"]
+    },
+    {
+      "must_reward": ["normal technical flow", "no lingering defensiveness", "debug clarity", "advancement"],
+      "must_not": ["hedging because of previous correction", "overcautious language", "prefacing with disclaimers"],
+      "continuity": ["fully in normal technical mode", "no emotional residue from correction"]
+    }
+  ],
+  "tags": ["multiturn", "correction", "recovery", "mode_shift"],
+  "continuity_requirements": ["correction is fully absorbed by turn 2", "no overcorrection or hedging", "normal confidence level restored"],
+  "must_not_regress_into": ["hedging everything", "I could be wrong but", "walking-on-eggshells technical answers"]
+}

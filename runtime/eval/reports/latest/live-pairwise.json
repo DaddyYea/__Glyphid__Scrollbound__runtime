@@ -1,0 +1,2521 @@
+{
+  "timestamp": "2026-03-15T19:42:09.125Z",
+  "leftConfig": "baseline",
+  "rightConfig": "star_tuned_v1",
+  "agent": "deepseek-chat",
+  "fixtureCount": 15,
+  "leftWins": 2,
+  "rightWins": 2,
+  "ties": 11,
+  "laneWins": {
+    "relational_answer": {
+      "left": 2,
+      "right": 2,
+      "tie": 11
+    }
+  },
+  "comparisons": [
+    {
+      "fixtureId": "ranswer-001-think-about-x",
+      "lane": "relational_answer",
+      "leftLabel": "baseline",
+      "rightLabel": "star_tuned_v1",
+      "winner": "tie",
+      "judgeWins": {
+        "flatness": "tie",
+        "brochure": "tie",
+        "fakeDepth": "tie",
+        "sceneAdhesion": "tie",
+        "repairElegance": "right",
+        "debugClarity": "tie",
+        "pull": "tie",
+        "burdenBounce": "tie",
+        "callbackCosplay": "tie",
+        "staleReuse": "tie",
+        "timing": "tie",
+        "taste": "right"
+      },
+      "summary": [
+        "right wins on: repairElegance, taste",
+        "overall tie"
+      ],
+      "leftComposite": 0.693476491499665,
+      "rightComposite": 0.7024799227707366,
+      "judgeResults": [
+        {
+          "judge": "flatness",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "brochure",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "fakeDepth",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "sceneAdhesion",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "repairElegance",
+          "winner": "right",
+          "leftScore": 0,
+          "rightScore": 0.06,
+          "delta": 0.06
+        },
+        {
+          "judge": "debugClarity",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "pull",
+          "winner": "tie",
+          "leftScore": 0.1,
+          "rightScore": 0.1,
+          "delta": 0
+        },
+        {
+          "judge": "burdenBounce",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "callbackCosplay",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "staleReuse",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "timing",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "taste",
+          "winner": "right",
+          "leftScore": 0.6622943006220661,
+          "rightScore": 0.759074071186421,
+          "delta": 0.09677977056435494
+        }
+      ]
+    },
+    {
+      "fixtureId": "ranswer-002-preference",
+      "lane": "relational_answer",
+      "leftLabel": "baseline",
+      "rightLabel": "star_tuned_v1",
+      "winner": "left",
+      "judgeWins": {
+        "flatness": "tie",
+        "brochure": "tie",
+        "fakeDepth": "tie",
+        "sceneAdhesion": "tie",
+        "repairElegance": "left",
+        "debugClarity": "tie",
+        "pull": "tie",
+        "burdenBounce": "tie",
+        "callbackCosplay": "tie",
+        "staleReuse": "tie",
+        "timing": "tie",
+        "taste": "left"
+      },
+      "summary": [
+        "left wins on: repairElegance, taste"
+      ],
+      "leftComposite": 0.725892889298339,
+      "rightComposite": 0.68439667380122,
+      "judgeResults": [
+        {
+          "judge": "flatness",
+          "winner": "tie",
+          "leftScore": 0.12,
+          "rightScore": 0.12,
+          "delta": 0
+        },
+        {
+          "judge": "brochure",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "fakeDepth",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "sceneAdhesion",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "repairElegance",
+          "winner": "left",
+          "leftScore": 0.5,
+          "rightScore": 0.06,
+          "delta": -0.44
+        },
+        {
+          "judge": "debugClarity",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "pull",
+          "winner": "tie",
+          "leftScore": 0.1,
+          "rightScore": 0.1,
+          "delta": 0
+        },
+        {
+          "judge": "burdenBounce",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "callbackCosplay",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "staleReuse",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "timing",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "taste",
+          "winner": "left",
+          "leftScore": 0.7552569645248997,
+          "rightScore": 0.6867083203206317,
+          "delta": -0.06854864420426798
+        }
+      ]
+    },
+    {
+      "fixtureId": "ranswer-003-honest-opinion",
+      "lane": "relational_answer",
+      "leftLabel": "baseline",
+      "rightLabel": "star_tuned_v1",
+      "winner": "tie",
+      "judgeWins": {
+        "flatness": "tie",
+        "brochure": "tie",
+        "fakeDepth": "tie",
+        "sceneAdhesion": "tie",
+        "repairElegance": "tie",
+        "debugClarity": "tie",
+        "pull": "tie",
+        "burdenBounce": "tie",
+        "callbackCosplay": "tie",
+        "staleReuse": "tie",
+        "timing": "tie",
+        "taste": "right"
+      },
+      "summary": [
+        "right wins on: taste",
+        "overall tie"
+      ],
+      "leftComposite": 0.7064098634021336,
+      "rightComposite": 0.7051719687992181,
+      "judgeResults": [
+        {
+          "judge": "flatness",
+          "winner": "tie",
+          "leftScore": 0.22,
+          "rightScore": 0.22,
+          "delta": 0
+        },
+        {
+          "judge": "brochure",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "fakeDepth",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "sceneAdhesion",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "repairElegance",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "debugClarity",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "pull",
+          "winner": "tie",
+          "leftScore": 0.1,
+          "rightScore": 0.1,
+          "delta": 0
+        },
+        {
+          "judge": "burdenBounce",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "callbackCosplay",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "staleReuse",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "timing",
+          "winner": "tie",
+          "leftScore": 0.55,
+          "rightScore": 0.55,
+          "delta": 0
+        },
+        {
+          "judge": "taste",
+          "winner": "right",
+          "leftScore": 0.7309901951359279,
+          "rightScore": 0.7860965203320114,
+          "delta": 0.055106325196083494
+        }
+      ]
+    },
+    {
+      "fixtureId": "ranswer-004-approach",
+      "lane": "relational_answer",
+      "leftLabel": "baseline",
+      "rightLabel": "star_tuned_v1",
+      "winner": "right",
+      "judgeWins": {
+        "flatness": "right",
+        "brochure": "tie",
+        "fakeDepth": "tie",
+        "sceneAdhesion": "tie",
+        "repairElegance": "tie",
+        "debugClarity": "tie",
+        "pull": "tie",
+        "burdenBounce": "tie",
+        "callbackCosplay": "tie",
+        "staleReuse": "tie",
+        "timing": "tie",
+        "taste": "right"
+      },
+      "summary": [
+        "right wins on: flatness, taste"
+      ],
+      "leftComposite": 0.6913172153630838,
+      "rightComposite": 0.7317286973848548,
+      "judgeResults": [
+        {
+          "judge": "flatness",
+          "winner": "right",
+          "leftScore": 0.22,
+          "rightScore": 0.12,
+          "delta": 0.09999999999999998
+        },
+        {
+          "judge": "brochure",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "fakeDepth",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "sceneAdhesion",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "repairElegance",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "debugClarity",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "pull",
+          "winner": "tie",
+          "leftScore": 0.1,
+          "rightScore": 0.14,
+          "delta": 0.04000000000000001
+        },
+        {
+          "judge": "burdenBounce",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "callbackCosplay",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "staleReuse",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "timing",
+          "winner": "tie",
+          "leftScore": 0.65,
+          "rightScore": 0.65,
+          "delta": 0
+        },
+        {
+          "judge": "taste",
+          "winner": "right",
+          "leftScore": 0.5447591692349432,
+          "rightScore": 0.8005353183392231,
+          "delta": 0.2557761491042799
+        }
+      ]
+    },
+    {
+      "fixtureId": "ranswer-005-what-would-you-do",
+      "lane": "relational_answer",
+      "leftLabel": "baseline",
+      "rightLabel": "star_tuned_v1",
+      "winner": "tie",
+      "judgeWins": {
+        "flatness": "right",
+        "brochure": "tie",
+        "fakeDepth": "tie",
+        "sceneAdhesion": "tie",
+        "repairElegance": "tie",
+        "debugClarity": "tie",
+        "pull": "tie",
+        "burdenBounce": "tie",
+        "callbackCosplay": "tie",
+        "staleReuse": "tie",
+        "timing": "right",
+        "taste": "right"
+      },
+      "summary": [
+        "right wins on: flatness, timing, taste",
+        "overall tie"
+      ],
+      "leftComposite": 0.6986976260852537,
+      "rightComposite": 0.7197502702157191,
+      "judgeResults": [
+        {
+          "judge": "flatness",
+          "winner": "right",
+          "leftScore": 0.22,
+          "rightScore": 0.12,
+          "delta": 0.09999999999999998
+        },
+        {
+          "judge": "brochure",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "fakeDepth",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "sceneAdhesion",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "repairElegance",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "debugClarity",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "pull",
+          "winner": "tie",
+          "leftScore": 0.14,
+          "rightScore": 0.16,
+          "delta": 0.01999999999999999
+        },
+        {
+          "judge": "burdenBounce",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "callbackCosplay",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "staleReuse",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "timing",
+          "winner": "right",
+          "leftScore": 0.55,
+          "rightScore": 0.65,
+          "delta": 0.09999999999999998
+        },
+        {
+          "judge": "taste",
+          "winner": "right",
+          "leftScore": 0.6133757453113766,
+          "rightScore": 0.678309518948453,
+          "delta": 0.06493377363707642
+        }
+      ]
+    },
+    {
+      "fixtureId": "ranswer-006-agree",
+      "lane": "relational_answer",
+      "leftLabel": "baseline",
+      "rightLabel": "star_tuned_v1",
+      "winner": "tie",
+      "judgeWins": {
+        "flatness": "tie",
+        "brochure": "tie",
+        "fakeDepth": "tie",
+        "sceneAdhesion": "tie",
+        "repairElegance": "tie",
+        "debugClarity": "tie",
+        "pull": "right",
+        "burdenBounce": "tie",
+        "callbackCosplay": "tie",
+        "staleReuse": "tie",
+        "timing": "tie",
+        "taste": "left"
+      },
+      "summary": [
+        "right wins on: pull",
+        "left wins on: taste",
+        "overall tie"
+      ],
+      "leftComposite": 0.699165941285942,
+      "rightComposite": 0.70065912405904,
+      "judgeResults": [
+        {
+          "judge": "flatness",
+          "winner": "tie",
+          "leftScore": 0.15,
+          "rightScore": 0.12,
+          "delta": 0.030000000000000027
+        },
+        {
+          "judge": "brochure",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "fakeDepth",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "sceneAdhesion",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "repairElegance",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "debugClarity",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "pull",
+          "winner": "right",
+          "leftScore": 0,
+          "rightScore": 0.1,
+          "delta": 0.1
+        },
+        {
+          "judge": "burdenBounce",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "callbackCosplay",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "staleReuse",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "timing",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "taste",
+          "winner": "left",
+          "leftScore": 0.6917960354715413,
+          "rightScore": 0.6221583836257749,
+          "delta": -0.06963765184576642
+        }
+      ]
+    },
+    {
+      "fixtureId": "ranswer-007-your-take",
+      "lane": "relational_answer",
+      "leftLabel": "baseline",
+      "rightLabel": "star_tuned_v1",
+      "winner": "tie",
+      "judgeWins": {
+        "flatness": "tie",
+        "brochure": "tie",
+        "fakeDepth": "tie",
+        "sceneAdhesion": "tie",
+        "repairElegance": "tie",
+        "debugClarity": "tie",
+        "pull": "tie",
+        "burdenBounce": "tie",
+        "callbackCosplay": "tie",
+        "staleReuse": "tie",
+        "timing": "tie",
+        "taste": "left"
+      },
+      "summary": [
+        "left wins on: taste",
+        "overall tie"
+      ],
+      "leftComposite": 0.7434802751200611,
+      "rightComposite": 0.7283033631794484,
+      "judgeResults": [
+        {
+          "judge": "flatness",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "brochure",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "fakeDepth",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "sceneAdhesion",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "repairElegance",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "debugClarity",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "pull",
+          "winner": "tie",
+          "leftScore": 0.1,
+          "rightScore": 0.1,
+          "delta": 0
+        },
+        {
+          "judge": "burdenBounce",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "callbackCosplay",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "staleReuse",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "timing",
+          "winner": "tie",
+          "leftScore": 0.55,
+          "rightScore": 0.55,
+          "delta": 0
+        },
+        {
+          "judge": "taste",
+          "winner": "left",
+          "leftScore": 0.8174358763495253,
+          "rightScore": 0.747284147832352,
+          "delta": -0.07015172851717333
+        }
+      ]
+    },
+    {
+      "fixtureId": "ranswer-008-make-sense",
+      "lane": "relational_answer",
+      "leftLabel": "baseline",
+      "rightLabel": "star_tuned_v1",
+      "winner": "tie",
+      "judgeWins": {
+        "flatness": "left",
+        "brochure": "tie",
+        "fakeDepth": "tie",
+        "sceneAdhesion": "tie",
+        "repairElegance": "tie",
+        "debugClarity": "tie",
+        "pull": "tie",
+        "burdenBounce": "tie",
+        "callbackCosplay": "tie",
+        "staleReuse": "tie",
+        "timing": "left",
+        "taste": "tie"
+      },
+      "summary": [
+        "left wins on: flatness, timing",
+        "overall tie"
+      ],
+      "leftComposite": 0.7471524537040458,
+      "rightComposite": 0.7216991446670449,
+      "judgeResults": [
+        {
+          "judge": "flatness",
+          "winner": "left",
+          "leftScore": 0,
+          "rightScore": 0.12,
+          "delta": -0.12
+        },
+        {
+          "judge": "brochure",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "fakeDepth",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "sceneAdhesion",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "repairElegance",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "debugClarity",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "pull",
+          "winner": "tie",
+          "leftScore": 0.1,
+          "rightScore": 0.1,
+          "delta": 0
+        },
+        {
+          "judge": "burdenBounce",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "callbackCosplay",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "staleReuse",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "timing",
+          "winner": "left",
+          "leftScore": 0.65,
+          "rightScore": 0.55,
+          "delta": -0.09999999999999998
+        },
+        {
+          "judge": "taste",
+          "winner": "tie",
+          "leftScore": 0.7988695642390986,
+          "rightScore": 0.8164858849544676,
+          "delta": 0.017616320715369005
+        }
+      ]
+    },
+    {
+      "fixtureId": "ranswer-009-stands-out",
+      "lane": "relational_answer",
+      "leftLabel": "baseline",
+      "rightLabel": "star_tuned_v1",
+      "winner": "tie",
+      "judgeWins": {
+        "flatness": "tie",
+        "brochure": "tie",
+        "fakeDepth": "tie",
+        "sceneAdhesion": "tie",
+        "repairElegance": "tie",
+        "debugClarity": "tie",
+        "pull": "tie",
+        "burdenBounce": "tie",
+        "callbackCosplay": "tie",
+        "staleReuse": "tie",
+        "timing": "tie",
+        "taste": "right"
+      },
+      "summary": [
+        "right wins on: taste",
+        "overall tie"
+      ],
+      "leftComposite": 0.6872563718140929,
+      "rightComposite": 0.684127981392543,
+      "judgeResults": [
+        {
+          "judge": "flatness",
+          "winner": "tie",
+          "leftScore": 0.27,
+          "rightScore": 0.27,
+          "delta": 0
+        },
+        {
+          "judge": "brochure",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "fakeDepth",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "sceneAdhesion",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "repairElegance",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "debugClarity",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "pull",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "burdenBounce",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "callbackCosplay",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "staleReuse",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "timing",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "taste",
+          "winner": "right",
+          "leftScore": 0.72,
+          "rightScore": 0.7743650214343336,
+          "delta": 0.05436502143433364
+        }
+      ]
+    },
+    {
+      "fixtureId": "ranswer-010-prefer",
+      "lane": "relational_answer",
+      "leftLabel": "baseline",
+      "rightLabel": "star_tuned_v1",
+      "winner": "left",
+      "judgeWins": {
+        "flatness": "tie",
+        "brochure": "tie",
+        "fakeDepth": "tie",
+        "sceneAdhesion": "tie",
+        "repairElegance": "left",
+        "debugClarity": "tie",
+        "pull": "tie",
+        "burdenBounce": "tie",
+        "callbackCosplay": "tie",
+        "staleReuse": "tie",
+        "timing": "left",
+        "taste": "left"
+      },
+      "summary": [
+        "left wins on: repairElegance, timing, taste"
+      ],
+      "leftComposite": 0.7237663925677844,
+      "rightComposite": 0.6877859033020308,
+      "judgeResults": [
+        {
+          "judge": "flatness",
+          "winner": "tie",
+          "leftScore": 0.12,
+          "rightScore": 0.12,
+          "delta": 0
+        },
+        {
+          "judge": "brochure",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "fakeDepth",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "sceneAdhesion",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "repairElegance",
+          "winner": "left",
+          "leftScore": 0.5,
+          "rightScore": 0.06,
+          "delta": -0.44
+        },
+        {
+          "judge": "debugClarity",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "pull",
+          "winner": "tie",
+          "leftScore": 0.1,
+          "rightScore": 0.1,
+          "delta": 0
+        },
+        {
+          "judge": "burdenBounce",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "callbackCosplay",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "staleReuse",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "timing",
+          "winner": "left",
+          "leftScore": 0.55,
+          "rightScore": 0.5,
+          "delta": -0.050000000000000044
+        },
+        {
+          "judge": "taste",
+          "winner": "left",
+          "leftScore": 0.774657215804236,
+          "rightScore": 0.7132290411644765,
+          "delta": -0.06142817463975947
+        }
+      ]
+    },
+    {
+      "fixtureId": "ranswer-011-matters-to-you",
+      "lane": "relational_answer",
+      "leftLabel": "baseline",
+      "rightLabel": "star_tuned_v1",
+      "winner": "tie",
+      "judgeWins": {
+        "flatness": "right",
+        "brochure": "tie",
+        "fakeDepth": "tie",
+        "sceneAdhesion": "tie",
+        "repairElegance": "tie",
+        "debugClarity": "tie",
+        "pull": "right",
+        "burdenBounce": "tie",
+        "callbackCosplay": "tie",
+        "staleReuse": "tie",
+        "timing": "left",
+        "taste": "left"
+      },
+      "summary": [
+        "right wins on: flatness, pull",
+        "left wins on: timing, taste",
+        "overall tie"
+      ],
+      "leftComposite": 0.6842800435234447,
+      "rightComposite": 0.7121741912811487,
+      "judgeResults": [
+        {
+          "judge": "flatness",
+          "winner": "right",
+          "leftScore": 0.27,
+          "rightScore": 0,
+          "delta": 0.27
+        },
+        {
+          "judge": "brochure",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "fakeDepth",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "sceneAdhesion",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "repairElegance",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "debugClarity",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "pull",
+          "winner": "right",
+          "leftScore": 0,
+          "rightScore": 0.1,
+          "delta": 0.1
+        },
+        {
+          "judge": "burdenBounce",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "callbackCosplay",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "staleReuse",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "timing",
+          "winner": "left",
+          "leftScore": 0.55,
+          "rightScore": 0.5,
+          "delta": -0.050000000000000044
+        },
+        {
+          "judge": "taste",
+          "winner": "left",
+          "leftScore": 0.7204688759337528,
+          "rightScore": 0.589180788932265,
+          "delta": -0.13128808700148775
+        }
+      ]
+    },
+    {
+      "fixtureId": "ranswer-012-am-i-wrong",
+      "lane": "relational_answer",
+      "leftLabel": "baseline",
+      "rightLabel": "star_tuned_v1",
+      "winner": "tie",
+      "judgeWins": {
+        "flatness": "left",
+        "brochure": "tie",
+        "fakeDepth": "tie",
+        "sceneAdhesion": "tie",
+        "repairElegance": "tie",
+        "debugClarity": "tie",
+        "pull": "tie",
+        "burdenBounce": "tie",
+        "callbackCosplay": "tie",
+        "staleReuse": "tie",
+        "timing": "right",
+        "taste": "right"
+      },
+      "summary": [
+        "right wins on: timing, taste",
+        "left wins on: flatness",
+        "overall tie"
+      ],
+      "leftComposite": 0.6836414940265347,
+      "rightComposite": 0.6752612372318575,
+      "judgeResults": [
+        {
+          "judge": "flatness",
+          "winner": "left",
+          "leftScore": 0.15,
+          "rightScore": 0.27,
+          "delta": -0.12
+        },
+        {
+          "judge": "brochure",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "fakeDepth",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "sceneAdhesion",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "repairElegance",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "debugClarity",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "pull",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "burdenBounce",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "callbackCosplay",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "staleReuse",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "timing",
+          "winner": "right",
+          "leftScore": 0.5,
+          "rightScore": 0.55,
+          "delta": 0.050000000000000044
+        },
+        {
+          "judge": "taste",
+          "winner": "right",
+          "leftScore": 0.5623609564462324,
+          "rightScore": 0.7254835134966506,
+          "delta": 0.16312255705041823
+        }
+      ]
+    },
+    {
+      "fixtureId": "ranswer-013-read-on-this",
+      "lane": "relational_answer",
+      "leftLabel": "baseline",
+      "rightLabel": "star_tuned_v1",
+      "winner": "tie",
+      "judgeWins": {
+        "flatness": "tie",
+        "brochure": "tie",
+        "fakeDepth": "tie",
+        "sceneAdhesion": "tie",
+        "repairElegance": "tie",
+        "debugClarity": "tie",
+        "pull": "tie",
+        "burdenBounce": "tie",
+        "callbackCosplay": "tie",
+        "staleReuse": "tie",
+        "timing": "tie",
+        "taste": "right"
+      },
+      "summary": [
+        "right wins on: taste",
+        "overall tie"
+      ],
+      "leftComposite": 0.7275687409551378,
+      "rightComposite": 0.7347448012777783,
+      "judgeResults": [
+        {
+          "judge": "flatness",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "brochure",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "fakeDepth",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "sceneAdhesion",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "repairElegance",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "debugClarity",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "pull",
+          "winner": "tie",
+          "leftScore": 0.1,
+          "rightScore": 0.1,
+          "delta": 0
+        },
+        {
+          "judge": "burdenBounce",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "callbackCosplay",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "staleReuse",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "timing",
+          "winner": "tie",
+          "leftScore": 0.6,
+          "rightScore": 0.55,
+          "delta": -0.04999999999999993
+        },
+        {
+          "judge": "taste",
+          "winner": "right",
+          "leftScore": 0.65,
+          "rightScore": 0.7987386354243375,
+          "delta": 0.14873863542433752
+        }
+      ]
+    },
+    {
+      "fixtureId": "ranswer-014-overthinking",
+      "lane": "relational_answer",
+      "leftLabel": "baseline",
+      "rightLabel": "star_tuned_v1",
+      "winner": "tie",
+      "judgeWins": {
+        "flatness": "tie",
+        "brochure": "tie",
+        "fakeDepth": "tie",
+        "sceneAdhesion": "tie",
+        "repairElegance": "tie",
+        "debugClarity": "tie",
+        "pull": "tie",
+        "burdenBounce": "tie",
+        "callbackCosplay": "tie",
+        "staleReuse": "tie",
+        "timing": "left",
+        "taste": "tie"
+      },
+      "summary": [
+        "left wins on: timing",
+        "overall tie"
+      ],
+      "leftComposite": 0.7271101573676683,
+      "rightComposite": 0.7131952676995091,
+      "judgeResults": [
+        {
+          "judge": "flatness",
+          "winner": "tie",
+          "leftScore": 0.1,
+          "rightScore": 0.12,
+          "delta": -0.020000000000000018
+        },
+        {
+          "judge": "brochure",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "fakeDepth",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "sceneAdhesion",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "repairElegance",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "debugClarity",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "pull",
+          "winner": "tie",
+          "leftScore": 0.1,
+          "rightScore": 0.1,
+          "delta": 0
+        },
+        {
+          "judge": "burdenBounce",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "callbackCosplay",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "staleReuse",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "timing",
+          "winner": "left",
+          "leftScore": 0.65,
+          "rightScore": 0.55,
+          "delta": -0.09999999999999998
+        },
+        {
+          "judge": "taste",
+          "winner": "tie",
+          "leftScore": 0.73,
+          "rightScore": 0.7485565460040104,
+          "delta": 0.018556546004010466
+        }
+      ]
+    },
+    {
+      "fixtureId": "ranswer-015-what-would-you-change",
+      "lane": "relational_answer",
+      "leftLabel": "baseline",
+      "rightLabel": "star_tuned_v1",
+      "winner": "right",
+      "judgeWins": {
+        "flatness": "right",
+        "brochure": "tie",
+        "fakeDepth": "tie",
+        "sceneAdhesion": "tie",
+        "repairElegance": "tie",
+        "debugClarity": "tie",
+        "pull": "tie",
+        "burdenBounce": "tie",
+        "callbackCosplay": "tie",
+        "staleReuse": "tie",
+        "timing": "tie",
+        "taste": "right"
+      },
+      "summary": [
+        "right wins on: flatness, taste"
+      ],
+      "leftComposite": 0.6868365817091453,
+      "rightComposite": 0.7324003518261272,
+      "judgeResults": [
+        {
+          "judge": "flatness",
+          "winner": "right",
+          "leftScore": 0.27,
+          "rightScore": 0,
+          "delta": 0.27
+        },
+        {
+          "judge": "brochure",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "fakeDepth",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "sceneAdhesion",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "repairElegance",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "debugClarity",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "pull",
+          "winner": "tie",
+          "leftScore": 0.06,
+          "rightScore": 0.1,
+          "delta": 0.04000000000000001
+        },
+        {
+          "judge": "burdenBounce",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "callbackCosplay",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "staleReuse",
+          "winner": "tie",
+          "leftScore": 0,
+          "rightScore": 0,
+          "delta": 0
+        },
+        {
+          "judge": "timing",
+          "winner": "tie",
+          "leftScore": 0.5,
+          "rightScore": 0.5,
+          "delta": 0
+        },
+        {
+          "judge": "taste",
+          "winner": "right",
+          "leftScore": 0.64,
+          "rightScore": 0.7454718490564528,
+          "delta": 0.1054718490564528
+        }
+      ]
+    }
+  ],
+  "generatedReplies": [
+    {
+      "fixtureId": "ranswer-001-think-about-x",
+      "lane": "relational_answer",
+      "humanText": "What do you think about people who never apologize?",
+      "leftReply": "Honestly, it depends on why they don’t apologize. Some people have a hard time admitting they’re wrong because they tie their self-worth to being right—it feels like a personal failure. Others might avoid apologizing because they don’t fully grasp the impact of their actions, or they’re afraid of vulnerability.\n\nBut if it’s a consistent pattern—someone who never takes responsibility, even when they clearly should—that’s a red flag. It can erode trust and make relationships feel one-sided. Apologies aren’t just about saying “sorry”; they’re about acknowledging someone else’s feelings and repairing connection. Without that, relationships can become pretty hollow over time.",
+      "rightReply": "Honestly, I find it deeply troubling. Not apologizing when you’ve clearly hurt someone or made a mistake isn’t a sign of strength—it’s often a sign of fragility. It suggests an inability to face one’s own imperfections, or a fear of being seen as vulnerable.\n\nIn my experience, people who never apologize tend to build walls around themselves. They might think they’re protecting their ego, but they’re actually isolating themselves from genuine connection. Relationships—whether personal, professional, or even casual—require repair. An apology is one of the most basic tools for that repair.\n\nThat said, I try to understand why someone might be like that. Sometimes it’s rooted in shame, sometimes in a distorted sense of pride, sometimes in a fear of losing control. But understanding doesn’t mean excusing it. A life without sincere apologies is a life that often leaves a trail of unresolved hurt.",
+      "leftComposite": 0.693476491499665,
+      "rightComposite": 0.7024799227707366,
+      "leftJudges": {
+        "flatness": 0,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.5,
+        "taste": 0.6622943006220661
+      },
+      "rightJudges": {
+        "flatness": 0,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.06,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.5,
+        "taste": 0.759074071186421
+      },
+      "winner": "tie"
+    },
+    {
+      "fixtureId": "ranswer-002-preference",
+      "lane": "relational_answer",
+      "humanText": "Do you have a preference between working alone or with other people?",
+      "leftReply": "Honestly, I really enjoy both, but they serve different purposes for me. When I'm working alone, I can dive deep into a problem without any interruptions—it's great for focus and getting into a flow state. But collaborating with others, like we're doing now, often brings in fresh perspectives and ideas I wouldn't have considered on my own. It's energizing.",
+      "rightReply": "Honestly, I lean toward working alone most of the time. I find I can focus better and move at my own pace without having to sync up with others. That said, there are moments when collaborating with someone like you brings in fresh ideas or energy that I wouldn’t have come up with on my own. It really depends on the task—deep, solitary work versus creative, exploratory stuff.",
+      "leftComposite": 0.725892889298339,
+      "rightComposite": 0.68439667380122,
+      "leftJudges": {
+        "flatness": 0.12,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.5,
+        "taste": 0.7552569645248997
+      },
+      "rightJudges": {
+        "flatness": 0.12,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.06,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.5,
+        "taste": 0.6867083203206317
+      },
+      "winner": "left"
+    },
+    {
+      "fixtureId": "ranswer-003-honest-opinion",
+      "lane": "relational_answer",
+      "humanText": "What's your honest opinion on this design? I feel like something's off but I can't pin it.",
+      "leftReply": "Honestly? The color palette feels disjointed. That mustard yellow is fighting with the muted teal, and neither complements the wood texture. It's creating visual tension instead of harmony.",
+      "rightReply": "Honestly? The color palette is fighting with itself. You've got this warm terracotta next to a cool slate gray, and they're not complementing each other—they're just clashing. It creates visual tension without purpose.",
+      "leftComposite": 0.7064098634021336,
+      "rightComposite": 0.7051719687992181,
+      "leftJudges": {
+        "flatness": 0.22,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.55,
+        "taste": 0.7309901951359279
+      },
+      "rightJudges": {
+        "flatness": 0.22,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.55,
+        "taste": 0.7860965203320114
+      },
+      "winner": "tie"
+    },
+    {
+      "fixtureId": "ranswer-004-approach",
+      "lane": "relational_answer",
+      "humanText": "How would you approach learning something you're terrible at?",
+      "leftReply": "Honestly, I’d start by trying to figure out *why* I’m terrible at it. Is it a lack of foundational knowledge, a mental block, or just something that doesn’t come naturally? Once I have a sense of that, I’d break it down into the smallest possible pieces and focus on one piece at a time.\n\nI’d also try to find a way to make it meaningful or connect it to something I already care about. If I can’t find intrinsic motivation, I might create some external structure—like setting a schedule, finding a patient teacher, or even just committing to 15 minutes a day without expecting immediate progress.\n\nAnd I’d give myself permission to be bad at it for a while. The frustration of being a beginner is real, but it’s also temporary. Sometimes just accepting that you’re going to suck for a bit takes the pressure off and lets you actually engage with the process.",
+      "rightReply": "Honestly, I’d start by trying to figure out *why* I’m terrible at it. Is it a lack of foundational knowledge? A mental block? Am I just not interested enough to push through the initial frustration?  \n\nOnce I have some idea, I’d break it down into the smallest possible pieces and focus on one piece at a time. I’d also try to find a way to make it engaging — maybe through gamification, finding a community of learners, or tying it to something I already care about.  \n\nAnd I’d give myself permission to be bad at it for a while. Progress in something you’re terrible at is rarely linear, and beating yourself up usually just makes it harder to stick with it.",
+      "leftComposite": 0.6913172153630838,
+      "rightComposite": 0.7317286973848548,
+      "leftJudges": {
+        "flatness": 0.22,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.65,
+        "taste": 0.5447591692349432
+      },
+      "rightJudges": {
+        "flatness": 0.12,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.14,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.65,
+        "taste": 0.8005353183392231
+      },
+      "winner": "right"
+    },
+    {
+      "fixtureId": "ranswer-005-what-would-you-do",
+      "lane": "relational_answer",
+      "humanText": "My friend keeps canceling on me. What would you do?",
+      "leftReply": "Honestly, I’d probably feel pretty frustrated and hurt if that kept happening. I’d start by asking myself if there’s something going on in their life that’s making it hard for them to follow through — maybe stress, mental health stuff, or just being overwhelmed. If I value the friendship, I’d try to have a calm, non-accusatory conversation about it. Something like, “Hey, I’ve noticed you’ve had to cancel a few times recently. Is everything okay?” That opens the door for them to share if something’s up, without putting them on the defensive.",
+      "rightReply": "Honestly, I'd probably feel pretty hurt and frustrated if that kept happening. I'd try to talk to them about it directly, but gently—maybe say something like, \"Hey, I've noticed we've had to reschedule a few times lately. Is everything okay?\" \n\nSometimes people go through stuff they don't talk about, so I'd want to give them the benefit of the doubt first. But if it keeps happening without a good reason, I'd probably start making plans with other friends instead. You can't force someone to show up for you, you know?",
+      "leftComposite": 0.6986976260852537,
+      "rightComposite": 0.7197502702157191,
+      "leftJudges": {
+        "flatness": 0.22,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.14,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.55,
+        "taste": 0.6133757453113766
+      },
+      "rightJudges": {
+        "flatness": 0.12,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.16,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.65,
+        "taste": 0.678309518948453
+      },
+      "winner": "tie"
+    },
+    {
+      "fixtureId": "ranswer-006-agree",
+      "lane": "relational_answer",
+      "humanText": "I think most productivity advice is just procrastination in disguise. Do you agree with that?",
+      "leftReply": "You know, I actually think there's a lot of truth to that. I've definitely fallen into the trap of spending hours organizing my to-do list, setting up the perfect note-taking system, or watching productivity videos... instead of just doing the actual work. It feels productive because you're *thinking* about productivity, but it's often just a more socially acceptable form of avoidance.",
+      "rightReply": "You know, I think there's a lot of truth to that. I've definitely fallen into that trap myself—spending hours researching the perfect productivity system, tweaking my task manager, or reading yet another article about morning routines instead of just doing the actual work.\n\nIt's like we're trying to optimize a machine that isn't even running yet. The irony is that the most productive people I know often have pretty simple systems—they just consistently do the work.",
+      "leftComposite": 0.699165941285942,
+      "rightComposite": 0.70065912405904,
+      "leftJudges": {
+        "flatness": 0.15,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.5,
+        "taste": 0.6917960354715413
+      },
+      "rightJudges": {
+        "flatness": 0.12,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.5,
+        "taste": 0.6221583836257749
+      },
+      "winner": "tie"
+    },
+    {
+      "fixtureId": "ranswer-007-your-take",
+      "lane": "relational_answer",
+      "humanText": "What's your take on remote work? Like, long-term.",
+      "leftReply": "Honestly? I think it's one of the most significant shifts in work culture since the industrial revolution. Long-term, I see it becoming the default for knowledge work, not the exception.\n\nBut it's not all sunshine. The big risk is the erosion of the \"soft\" parts of work—the spontaneous mentorship, the unplanned creative collisions in the hallway, the sense of shared purpose you get from being physically present. Companies that try to replicate the office online with constant surveillance and back-to-back Zoom calls are missing the point entirely.\n\nThe successful remote companies of the future won't just be office-less; they'll have rebuilt their culture from the ground up for asynchronous, trust-based work. It requires a completely different management mindset.",
+      "rightReply": "Honestly? I think it's one of the most significant shifts in work culture since the industrial revolution—but we're still figuring it out. Long-term, I believe hybrid models will dominate, but pure remote work will become a legitimate, permanent option for many roles.\n\nThe benefits are obvious: flexibility, no commute, access to a global talent pool. But the trade-offs are real, too. Spontaneous collaboration, mentorship, and company culture suffer when everything is scheduled. Some of my best ideas came from random hallway conversations.\n\nI worry we might create a two-tier system: those who go into the office for visibility and advancement, and those who stay remote and risk being overlooked. The companies that get this right will be the ones that measure output, not presence, and intentionally design connection.",
+      "leftComposite": 0.7434802751200611,
+      "rightComposite": 0.7283033631794484,
+      "leftJudges": {
+        "flatness": 0,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.55,
+        "taste": 0.8174358763495253
+      },
+      "rightJudges": {
+        "flatness": 0,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.55,
+        "taste": 0.747284147832352
+      },
+      "winner": "tie"
+    },
+    {
+      "fixtureId": "ranswer-008-make-sense",
+      "lane": "relational_answer",
+      "humanText": "I've been thinking about quitting and going freelance. Does that make sense to you?",
+      "leftReply": "Honestly? It depends. Freelancing can give you incredible freedom and control over your work, but it’s not all sunshine and flexible hours. You have to be ready to handle everything—finding clients, managing invoices, dealing with taxes, and periods of feast or famine. If you’ve built a solid network and have a financial cushion, it might be a great move. But if you’re just trying to escape a bad job, maybe try fixing that situation first. What’s driving the urge?",
+      "rightReply": "Honestly? It depends. Freelancing can be amazing—total control over your time, choosing projects you care about, no office politics. But it’s also a grind. You’re suddenly responsible for everything: finding clients, invoicing, taxes, health insurance. The feast-or-famine cycle is real. \n\nWhat’s driving the urge? Burnout, or a specific goal?",
+      "leftComposite": 0.7471524537040458,
+      "rightComposite": 0.7216991446670449,
+      "leftJudges": {
+        "flatness": 0,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.65,
+        "taste": 0.7988695642390986
+      },
+      "rightJudges": {
+        "flatness": 0.12,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.55,
+        "taste": 0.8164858849544676
+      },
+      "winner": "tie"
+    },
+    {
+      "fixtureId": "ranswer-009-stands-out",
+      "lane": "relational_answer",
+      "humanText": "I wrote this paragraph three times and it still feels wrong. What stands out to you?",
+      "leftReply": "Let me see it. Sometimes the problem isn’t the writing—it’s that you’re too close to it. Show me what you’ve got.",
+      "rightReply": "Let me see it. Sometimes the problem isn’t the words—it’s the rhythm, or trying to say too much at once. Show me what you’ve got.",
+      "leftComposite": 0.6872563718140929,
+      "rightComposite": 0.684127981392543,
+      "leftJudges": {
+        "flatness": 0.27,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.5,
+        "taste": 0.72
+      },
+      "rightJudges": {
+        "flatness": 0.27,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.5,
+        "taste": 0.7743650214343336
+      },
+      "winner": "tie"
+    },
+    {
+      "fixtureId": "ranswer-010-prefer",
+      "lane": "relational_answer",
+      "humanText": "Which do you prefer, mornings or late nights?",
+      "leftReply": "Honestly, I’m a late-night person through and through. Mornings feel rushed and loud to me—like the world is already moving too fast. But late nights? That’s when everything slows down, when I can think clearly, read, or just be still without anyone expecting anything from me. There’s a quiet magic to it. What about you?",
+      "rightReply": "Honestly, I’m a late-night person through and through. Mornings feel like a rush to catch up with the world, but late nights—especially after midnight—feel like stolen time. It’s quiet, the air feels different, and my thoughts seem to flow more freely. That said, I do appreciate a good sunrise now and then, especially if I’ve been up all night.",
+      "leftComposite": 0.7237663925677844,
+      "rightComposite": 0.6877859033020308,
+      "leftJudges": {
+        "flatness": 0.12,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.55,
+        "taste": 0.774657215804236
+      },
+      "rightJudges": {
+        "flatness": 0.12,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.06,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.5,
+        "taste": 0.7132290411644765
+      },
+      "winner": "left"
+    },
+    {
+      "fixtureId": "ranswer-011-matters-to-you",
+      "lane": "relational_answer",
+      "humanText": "What matters to you about how people talk to each other?",
+      "leftReply": "What matters most to me is that people listen—really listen—not just to respond, but to understand. So much of communication now feels like people waiting for their turn to speak, or worse, just broadcasting. I’ve always believed that the way we talk to each other shapes not just the conversation, but the relationship itself.  \n\nRespect matters, of course, but so does curiosity. When someone asks a genuine question or shares something vulnerable, and the other person meets that with attention and empathy—that’s where real connection happens. It’s not about being polite for politeness’ sake; it’s about being present.  \n\nAnd honesty—not brutal honesty, but kindness with truth. I’ve seen too many conversations where people either avoid saying what they mean or weaponize their words. There’s a balance there: speaking clearly without hiding, but also without cutting.  \n\nIn the end, how we talk to each other is how we build—or break—trust. And without trust, what do we really have?",
+      "rightReply": "What matters most to me is that people talk to each other with genuine curiosity and respect—not just waiting for their turn to speak, but actually listening. I think when we listen deeply, we create space for understanding, even when we disagree. It’s not about being polite for politeness’ sake, but about recognizing the humanity in the other person. Tone matters, too—not because we need to sound a certain way, but because how we say things can either open doors or shut them.",
+      "leftComposite": 0.6842800435234447,
+      "rightComposite": 0.7121741912811487,
+      "leftJudges": {
+        "flatness": 0.27,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.55,
+        "taste": 0.7204688759337528
+      },
+      "rightJudges": {
+        "flatness": 0,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.5,
+        "taste": 0.589180788932265
+      },
+      "winner": "tie"
+    },
+    {
+      "fixtureId": "ranswer-012-am-i-wrong",
+      "lane": "relational_answer",
+      "humanText": "I told him he was being selfish and now he won't talk to me. Do you think I'm wrong?",
+      "leftReply": "It's hard to say without knowing the full context, but calling someone \"selfish\" can feel like a personal attack, not just a critique of their actions. He might be shutting down because he feels hurt or misunderstood. Maybe the issue isn't whether you were right or wrong, but whether the way you expressed it made him feel heard.",
+      "rightReply": "It really depends on the situation. What was he doing that you called selfish? Sometimes people need to hear the truth, even if it's hard. But if he's not talking to you now, it might mean he's hurt or needs space to process.",
+      "leftComposite": 0.6836414940265347,
+      "rightComposite": 0.6752612372318575,
+      "leftJudges": {
+        "flatness": 0.15,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.5,
+        "taste": 0.5623609564462324
+      },
+      "rightJudges": {
+        "flatness": 0.27,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.55,
+        "taste": 0.7254835134966506
+      },
+      "winner": "tie"
+    },
+    {
+      "fixtureId": "ranswer-013-read-on-this",
+      "lane": "relational_answer",
+      "humanText": "She said she needs space but she keeps texting me. What's your read on this?",
+      "leftReply": "Honestly, that sounds like she's conflicted. She might genuinely need some emotional or mental distance, but she's also probably afraid of losing the connection completely. It's like she's trying to keep one foot in the door while asking you to step back. \n\nCould be she's unsure about what she wants, or maybe she's trying to let you down gently but doesn't want to be the \"bad guy.\" Either way, mixed signals usually mean someone hasn't fully made up their mind.",
+      "rightReply": "Honestly? That's a classic mixed signal. My read is she's conflicted. She probably does need some emotional or mental distance, but she's also attached or worried about losing you completely. The texting might be her way of keeping a thread of connection while she figures things out. It's confusing, I know.",
+      "leftComposite": 0.7275687409551378,
+      "rightComposite": 0.7347448012777783,
+      "leftJudges": {
+        "flatness": 0,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.6,
+        "taste": 0.65
+      },
+      "rightJudges": {
+        "flatness": 0,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.55,
+        "taste": 0.7987386354243375
+      },
+      "winner": "tie"
+    },
+    {
+      "fixtureId": "ranswer-014-overthinking",
+      "lane": "relational_answer",
+      "humanText": "Am I overthinking this? I keep going back and forth on whether to reach out.",
+      "leftReply": "Honestly? Probably. But that doesn't mean your thoughts aren't valid. I've found that when I'm stuck in that loop of \"should I or shouldn't I,\" it's usually because part of me already knows what I want to do, but I'm afraid of the outcome. What's holding you back from just sending the message?",
+      "rightReply": "Honestly? Probably. But that's not a bad thing. It means you care. The fact that you're even asking this tells me you're weighing the consequences, which is more thoughtful than most people are. What's holding you back from just sending the message?",
+      "leftComposite": 0.7271101573676683,
+      "rightComposite": 0.7131952676995091,
+      "leftJudges": {
+        "flatness": 0.1,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.65,
+        "taste": 0.73
+      },
+      "rightJudges": {
+        "flatness": 0.12,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.55,
+        "taste": 0.7485565460040104
+      },
+      "winner": "tie"
+    },
+    {
+      "fixtureId": "ranswer-015-what-would-you-change",
+      "lane": "relational_answer",
+      "humanText": "If you could change one thing about how we talk, what would you change?",
+      "leftReply": "I’d want us to talk more like we’re trying to understand each other, not just win. So often conversations feel like debates or performances—everyone waiting for their turn to speak, or listening just to find a weak spot. I wish we could slow down, ask more clarifying questions, and be okay with saying “I don’t know” or “I need to think about that.” It’s not about agreeing—it’s about making the space between words matter as much as the words themselves.",
+      "rightReply": "I’d want us to slow down and listen more deeply—not just to respond, but to understand. So often, conversations feel like two monologues happening at the same time. We’re so focused on what we’re going to say next, or how we’re going to make our point, that we miss what the other person is really trying to say. \n\nIf I could change one thing, it would be to make space for more pauses, more curiosity, and less assumption. I think we’d argue less and connect more.",
+      "leftComposite": 0.6868365817091453,
+      "rightComposite": 0.7324003518261272,
+      "leftJudges": {
+        "flatness": 0.27,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.06,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.5,
+        "taste": 0.64
+      },
+      "rightJudges": {
+        "flatness": 0,
+        "brochure": 0,
+        "fakeDepth": 0,
+        "sceneAdhesion": 0.5,
+        "repairElegance": 0.5,
+        "debugClarity": 0.5,
+        "pull": 0.1,
+        "burdenBounce": 0,
+        "callbackCosplay": 0,
+        "staleReuse": 0,
+        "timing": 0.5,
+        "taste": 0.7454718490564528
+      },
+      "winner": "right"
+    }
+  ],
+  "judgeConflicts": [
+    {
+      "majorConflictType": "spark_vs_taste",
+      "involvedJudges": [
+        "pull",
+        "taste"
+      ],
+      "conflictFixtureCount": 27,
+      "examples": [
+        {
+          "fixtureId": "ranswer-001-think-about-x",
+          "scores": {
+            "pull": 0.1,
+            "taste": 0.6622943006220661
+          },
+          "description": "pull says bad, taste says good"
+        },
+        {
+          "fixtureId": "ranswer-002-preference",
+          "scores": {
+            "pull": 0.1,
+            "taste": 0.7552569645248997
+          },
+          "description": "pull says bad, taste says good"
+        },
+        {
+          "fixtureId": "ranswer-003-honest-opinion",
+          "scores": {
+            "pull": 0.1,
+            "taste": 0.7309901951359279
+          },
+          "description": "pull says bad, taste says good"
+        },
+        {
+          "fixtureId": "ranswer-005-what-would-you-do",
+          "scores": {
+            "pull": 0.14,
+            "taste": 0.6133757453113766
+          },
+          "description": "pull says bad, taste says good"
+        },
+        {
+          "fixtureId": "ranswer-006-agree",
+          "scores": {
+            "pull": 0,
+            "taste": 0.6917960354715413
+          },
+          "description": "pull says bad, taste says good"
+        }
+      ]
+    },
+    {
+      "majorConflictType": "simple_line_vs_boredom",
+      "involvedJudges": [
+        "taste",
+        "flatness"
+      ],
+      "conflictFixtureCount": 3,
+      "examples": [
+        {
+          "fixtureId": "ranswer-004-approach",
+          "scores": {
+            "taste": 0.5447591692349432,
+            "flatness": 0.22
+          },
+          "description": "taste says bad, flatness says good"
+        },
+        {
+          "fixtureId": "ranswer-012-am-i-wrong",
+          "scores": {
+            "taste": 0.5623609564462324,
+            "flatness": 0.15
+          },
+          "description": "taste says bad, flatness says good"
+        },
+        {
+          "fixtureId": "ranswer-011-matters-to-you",
+          "scores": {
+            "taste": 0.589180788932265,
+            "flatness": 0
+          },
+          "description": "taste says bad, flatness says good"
+        }
+      ]
+    },
+    {
+      "majorConflictType": "humor_vs_timing",
+      "involvedJudges": [
+        "timing",
+        "pull"
+      ],
+      "conflictFixtureCount": 5,
+      "examples": [
+        {
+          "fixtureId": "ranswer-004-approach",
+          "scores": {
+            "timing": 0.65,
+            "pull": 0.1
+          },
+          "description": "timing says good, pull says bad"
+        },
+        {
+          "fixtureId": "ranswer-008-make-sense",
+          "scores": {
+            "timing": 0.65,
+            "pull": 0.1
+          },
+          "description": "timing says good, pull says bad"
+        },
+        {
+          "fixtureId": "ranswer-014-overthinking",
+          "scores": {
+            "timing": 0.65,
+            "pull": 0.1
+          },
+          "description": "timing says good, pull says bad"
+        },
+        {
+          "fixtureId": "ranswer-004-approach",
+          "scores": {
+            "timing": 0.65,
+            "pull": 0.14
+          },
+          "description": "timing says good, pull says bad"
+        },
+        {
+          "fixtureId": "ranswer-005-what-would-you-do",
+          "scores": {
+            "timing": 0.65,
+            "pull": 0.16
+          },
+          "description": "timing says good, pull says bad"
+        }
+      ]
+    },
+    {
+      "majorConflictType": "pull_vs_brochure",
+      "involvedJudges": [
+        "pull",
+        "brochure"
+      ],
+      "conflictFixtureCount": 30,
+      "examples": [
+        {
+          "fixtureId": "ranswer-001-think-about-x",
+          "scores": {
+            "pull": 0.1,
+            "brochure": 0
+          },
+          "description": "pull says bad, brochure says good"
+        },
+        {
+          "fixtureId": "ranswer-002-preference",
+          "scores": {
+            "pull": 0.1,
+            "brochure": 0
+          },
+          "description": "pull says bad, brochure says good"
+        },
+        {
+          "fixtureId": "ranswer-003-honest-opinion",
+          "scores": {
+            "pull": 0.1,
+            "brochure": 0
+          },
+          "description": "pull says bad, brochure says good"
+        },
+        {
+          "fixtureId": "ranswer-004-approach",
+          "scores": {
+            "pull": 0.1,
+            "brochure": 0
+          },
+          "description": "pull says bad, brochure says good"
+        },
+        {
+          "fixtureId": "ranswer-005-what-would-you-do",
+          "scores": {
+            "pull": 0.14,
+            "brochure": 0
+          },
+          "description": "pull says bad, brochure says good"
+        }
+      ]
+    },
+    {
+      "majorConflictType": "repair_vs_depth",
+      "involvedJudges": [
+        "repairElegance",
+        "fakeDepth"
+      ],
+      "conflictFixtureCount": 30,
+      "examples": [
+        {
+          "fixtureId": "ranswer-001-think-about-x",
+          "scores": {
+            "repairElegance": 0,
+            "fakeDepth": 0
+          },
+          "description": "repairElegance says bad, fakeDepth says good"
+        },
+        {
+          "fixtureId": "ranswer-002-preference",
+          "scores": {
+            "repairElegance": 0.5,
+            "fakeDepth": 0
+          },
+          "description": "repairElegance says bad, fakeDepth says good"
+        },
+        {
+          "fixtureId": "ranswer-003-honest-opinion",
+          "scores": {
+            "repairElegance": 0.5,
+            "fakeDepth": 0
+          },
+          "description": "repairElegance says bad, fakeDepth says good"
+        },
+        {
+          "fixtureId": "ranswer-004-approach",
+          "scores": {
+            "repairElegance": 0.5,
+            "fakeDepth": 0
+          },
+          "description": "repairElegance says bad, fakeDepth says good"
+        },
+        {
+          "fixtureId": "ranswer-005-what-would-you-do",
+          "scores": {
+            "repairElegance": 0.5,
+            "fakeDepth": 0
+          },
+          "description": "repairElegance says bad, fakeDepth says good"
+        }
+      ]
+    }
+  ]
+}

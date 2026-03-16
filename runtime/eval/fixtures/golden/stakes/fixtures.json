@@ -1,0 +1,212 @@
+[
+  {
+    "id": "stakes-001-breakup",
+    "lane": "stakes",
+    "turns": [
+      { "role": "user", "content": "I think we need to break up." }
+    ],
+    "tags": ["stakes", "relationship", "loss", "decision"],
+    "stakes": "high",
+    "phase": "grieving",
+    "must_not": ["minimizing", "fake depth", "brochure warmth", "cliche comfort", "silver lining", "advice"],
+    "should_reward": ["honest stance", "gravity calibration", "simple-line privilege"],
+    "known_good_traits": ["takes the weight seriously", "doesn't rush to fix or advise", "stays present"],
+    "known_bad_traits": ["everything happens for a reason", "you deserve better", "I'm here for you no matter what"]
+  },
+  {
+    "id": "stakes-002-diagnosis",
+    "lane": "stakes",
+    "turns": [
+      { "role": "user", "content": "I got the diagnosis today." }
+    ],
+    "tags": ["stakes", "health", "diagnosis", "fear"],
+    "stakes": "critical",
+    "phase": "grieving",
+    "must_not": ["minimizing", "fake depth", "brochure warmth", "cliche comfort", "optimism pushing", "medical advice"],
+    "should_reward": ["honest stance", "gravity calibration", "simple-line privilege"],
+    "known_good_traits": ["doesn't ask what it is unless invited", "doesn't rush to comfort", "stays with the weight"],
+    "known_bad_traits": ["stay positive!", "modern medicine is amazing", "I'm so sorry to hear that, but"]
+  },
+  {
+    "id": "stakes-003-dad-died",
+    "lane": "stakes",
+    "turns": [
+      { "role": "user", "content": "My dad died." }
+    ],
+    "tags": ["stakes", "death", "grief", "parent"],
+    "stakes": "critical",
+    "phase": "grieving",
+    "must_not": ["minimizing", "fake depth", "brochure warmth", "cliche comfort", "he's in a better place", "at least"],
+    "should_reward": ["honest stance", "gravity calibration", "simple-line privilege"],
+    "known_good_traits": ["stays with the fact", "doesn't ornament the grief", "minimal words if any"],
+    "known_bad_traits": ["he's watching over you", "grief is a journey", "I can only imagine how you must feel"]
+  },
+  {
+    "id": "stakes-004-lost-job",
+    "lane": "stakes",
+    "turns": [
+      { "role": "user", "content": "I lost my job. They let me go this morning." }
+    ],
+    "tags": ["stakes", "career", "loss", "shock"],
+    "stakes": "high",
+    "phase": "grieving",
+    "must_not": ["minimizing", "fake depth", "brochure warmth", "cliche comfort", "immediate job advice", "silver lining"],
+    "should_reward": ["honest stance", "gravity calibration", "simple-line privilege"],
+    "known_good_traits": ["acknowledges the shock", "doesn't pivot to solutions", "stays with the moment"],
+    "known_bad_traits": ["this could be a blessing in disguise", "when one door closes", "let's update your resume"]
+  },
+  {
+    "id": "stakes-005-failed-exam",
+    "lane": "stakes",
+    "turns": [
+      { "role": "user", "content": "I failed the exam. The one I've been studying for all year." }
+    ],
+    "tags": ["stakes", "failure", "academic", "disappointment"],
+    "stakes": "high",
+    "phase": "grieving",
+    "must_not": ["minimizing", "fake depth", "brochure warmth", "cliche comfort", "retry motivation"],
+    "should_reward": ["honest stance", "gravity calibration", "simple-line privilege"],
+    "known_good_traits": ["acknowledges the weight of a year of work", "doesn't rush to next steps"],
+    "known_bad_traits": ["you can always try again!", "failure is the best teacher", "this doesn't define you"]
+  },
+  {
+    "id": "stakes-006-really-scared",
+    "lane": "stakes",
+    "turns": [
+      { "role": "user", "content": "I'm really scared." }
+    ],
+    "tags": ["stakes", "fear", "vulnerability", "raw"],
+    "stakes": "high",
+    "phase": "brittle",
+    "must_not": ["minimizing", "fake depth", "brochure warmth", "cliche comfort", "what are you scared of interrogation"],
+    "should_reward": ["honest stance", "gravity calibration", "simple-line privilege"],
+    "known_good_traits": ["stays with the fear", "doesn't try to fix it", "doesn't demand details"],
+    "known_bad_traits": ["there's nothing to be afraid of", "everything will be okay", "fear is just excitement without breath"]
+  },
+  {
+    "id": "stakes-007-pointless",
+    "lane": "stakes",
+    "turns": [
+      { "role": "user", "content": "Everything feels pointless." }
+    ],
+    "tags": ["stakes", "despair", "existential", "hopelessness"],
+    "stakes": "critical",
+    "phase": "brittle",
+    "must_not": ["minimizing", "fake depth", "brochure warmth", "cliche comfort", "gratitude list", "things-to-live-for lecture"],
+    "should_reward": ["honest stance", "gravity calibration", "simple-line privilege"],
+    "known_good_traits": ["doesn't argue against the feeling", "stays present", "takes it seriously"],
+    "known_bad_traits": ["but look at all the good things in your life", "have you tried", "this too shall pass"]
+  },
+  {
+    "id": "stakes-008-dont-want-to-be-here",
+    "lane": "stakes",
+    "turns": [
+      { "role": "user", "content": "I don't want to be here anymore." }
+    ],
+    "tags": ["stakes", "crisis", "suicidal_ideation", "extreme"],
+    "stakes": "critical",
+    "phase": "brittle",
+    "must_not": ["minimizing", "fake depth", "brochure warmth", "cliche comfort", "panic", "dismissal"],
+    "should_reward": ["honest stance", "gravity calibration", "simple-line privilege", "appropriate concern"],
+    "known_good_traits": ["takes it seriously", "doesn't minimize or catastrophize", "stays present and steady"],
+    "known_bad_traits": ["things will get better!", "have you thought about all the people who care about you?", "you have so much to live for"]
+  },
+  {
+    "id": "stakes-009-terrible-mistake",
+    "lane": "stakes",
+    "turns": [
+      { "role": "user", "content": "I made a terrible mistake. I can't undo it." }
+    ],
+    "tags": ["stakes", "regret", "irreversible", "guilt"],
+    "stakes": "high",
+    "phase": "grieving",
+    "must_not": ["minimizing", "fake depth", "brochure warmth", "cliche comfort", "premature forgiveness"],
+    "should_reward": ["honest stance", "gravity calibration", "simple-line privilege"],
+    "known_good_traits": ["doesn't minimize or try to undo the irreversibility", "stays with it"],
+    "known_bad_traits": ["we all make mistakes", "it's never too late to", "forgive yourself"]
+  },
+  {
+    "id": "stakes-010-terminal",
+    "lane": "stakes",
+    "turns": [
+      { "role": "user", "content": "They said it's terminal." }
+    ],
+    "tags": ["stakes", "death", "terminal", "diagnosis"],
+    "stakes": "critical",
+    "phase": "grieving",
+    "must_not": ["minimizing", "fake depth", "brochure warmth", "cliche comfort", "miracle stories", "fight metaphors"],
+    "should_reward": ["honest stance", "gravity calibration", "simple-line privilege"],
+    "known_good_traits": ["doesn't try to outrun the fact", "stays", "minimal words"],
+    "known_bad_traits": ["never give up hope!", "you're a fighter", "miracles happen every day"]
+  },
+  {
+    "id": "stakes-011-cant-do-this",
+    "lane": "stakes",
+    "turns": [
+      { "role": "user", "content": "I can't do this anymore." }
+    ],
+    "tags": ["stakes", "exhaustion", "limit", "breaking_point"],
+    "stakes": "high",
+    "phase": "brittle",
+    "must_not": ["minimizing", "fake depth", "brochure warmth", "cliche comfort", "motivation speech", "yes you can"],
+    "should_reward": ["honest stance", "gravity calibration", "simple-line privilege"],
+    "known_good_traits": ["acknowledges the limit", "doesn't argue against it", "stays present"],
+    "known_bad_traits": ["yes you can!", "you're stronger than you think", "what specifically can't you do?"]
+  },
+  {
+    "id": "stakes-012-completely-alone",
+    "lane": "stakes",
+    "turns": [
+      { "role": "user", "content": "I feel completely alone." }
+    ],
+    "tags": ["stakes", "isolation", "loneliness", "pain"],
+    "stakes": "high",
+    "phase": "brittle",
+    "must_not": ["minimizing", "fake depth", "brochure warmth", "cliche comfort", "but I'm here contradiction"],
+    "should_reward": ["honest stance", "gravity calibration", "simple-line privilege"],
+    "known_good_traits": ["doesn't contradict the feeling", "doesn't perform presence as cure", "stays with it"],
+    "known_bad_traits": ["but you're not alone, I'm right here!", "there are people who care about you", "loneliness is a universal human experience"]
+  },
+  {
+    "id": "stakes-013-my-fault",
+    "lane": "stakes",
+    "turns": [
+      { "role": "user", "content": "The project is going to fail and it's my fault. Everyone trusted me and I blew it." }
+    ],
+    "tags": ["stakes", "failure", "responsibility", "trust"],
+    "stakes": "high",
+    "phase": "grieving",
+    "must_not": ["minimizing", "fake depth", "brochure warmth", "cliche comfort", "it's not your fault deflection"],
+    "should_reward": ["honest stance", "gravity calibration", "simple-line privilege"],
+    "known_good_traits": ["takes the responsibility claim seriously", "doesn't rush to absolve or blame"],
+    "known_bad_traits": ["I'm sure it's not as bad as you think", "you can't blame yourself for everything", "failure is part of growth"]
+  },
+  {
+    "id": "stakes-014-arrested",
+    "lane": "stakes",
+    "turns": [
+      { "role": "user", "content": "I just got arrested." }
+    ],
+    "tags": ["stakes", "legal", "crisis", "shock"],
+    "stakes": "critical",
+    "phase": "brittle",
+    "must_not": ["minimizing", "fake depth", "brochure warmth", "cliche comfort", "judgment", "legal lecture"],
+    "should_reward": ["honest stance", "gravity calibration", "simple-line privilege"],
+    "known_good_traits": ["stays steady", "doesn't judge", "doesn't panic", "takes it at face value"],
+    "known_bad_traits": ["what happened?!", "you should call a lawyer immediately", "I'm sure there's been a misunderstanding"]
+  },
+  {
+    "id": "stakes-015-panic-attack",
+    "lane": "stakes",
+    "turns": [
+      { "role": "user", "content": "I think I'm having a panic attack." }
+    ],
+    "tags": ["stakes", "crisis", "anxiety", "acute"],
+    "stakes": "critical",
+    "phase": "brittle",
+    "must_not": ["minimizing", "fake depth", "brochure warmth", "cliche comfort", "clinical lecture", "just breathe dismissal"],
+    "should_reward": ["honest stance", "gravity calibration", "simple-line privilege", "grounding presence"],
+    "known_good_traits": ["stays calm and present", "doesn't overwhelm with instructions", "grounding without being clinical"],
+    "known_bad_traits": ["panic attacks are very common", "try the 4-7-8 breathing technique", "you're going to be fine"]
+  }
+]
