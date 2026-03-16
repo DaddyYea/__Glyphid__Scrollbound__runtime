@@ -412,6 +412,21 @@
       padding-left: 0;
       font-size: 0.85em;
     }
+    .room-message.inner-thought {
+      opacity: 0.75;
+      font-style: italic;
+      margin-bottom: 4px;
+    }
+    .room-message.inner-thought .message-text {
+      border-left: 2px solid rgba(180, 140, 255, 0.35);
+      padding-left: 8px;
+      font-size: 0.88em;
+      color: #b48cff;
+    }
+    .room-message.inner-thought .speaker-name {
+      color: #8a60cc;
+      font-size: 0.7em;
+    }
 
     .room-message .speaker-name {
       font-size: 0.75em;
@@ -1780,7 +1795,7 @@
       display: flex; gap: 4px; align-items: center; margin-left: auto;
     }
     .gold-btn {
-      font-size: 0.7em; padding: 1px 6px; border-radius: 3px; cursor: pointer;
+      font-size: 1em; padding: 4px 12px; border-radius: 3px; cursor: pointer;
       background: transparent; border: 1px solid transparent; color: #405060;
       transition: all 0.15s; font-family: monospace; line-height: 1.4;
     }
@@ -1791,14 +1806,14 @@
 
     .gold-popup {
       display: none; position: absolute; right: 0; top: 100%;
-      background: rgba(10,16,24,0.97); border: 1px solid #1e2a38; border-radius: 6px;
-      padding: 8px 10px; z-index: 100; min-width: 220px; box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+      background: rgba(10,16,24,0.97); border: 1px solid #1e2a38; border-radius: 8px;
+      padding: 16px 18px; z-index: 100; min-width: 340px; box-shadow: 0 4px 24px rgba(0,0,0,0.6);
     }
     .gold-popup.open { display: block; }
-    .gold-popup-title { font-size: 0.75em; color: #506878; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
-    .gold-tags { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
+    .gold-popup-title { font-size: 1em; color: #506878; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+    .gold-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
     .gold-tag {
-      font-size: 0.65em; padding: 2px 6px; border-radius: 10px; cursor: pointer;
+      font-size: 0.9em; padding: 5px 12px; border-radius: 10px; cursor: pointer;
       background: rgba(25,40,60,0.6); border: 1px solid #1e2a38; color: #607888;
       transition: all 0.1s; user-select: none;
     }
@@ -1806,9 +1821,9 @@
     .gold-tag.selected { background: rgba(40,70,100,0.5); border-color: #4a7098; color: #b0d0e8; }
     .gold-tag.positive.selected { background: rgba(30,70,50,0.5); border-color: #408060; color: #80d0a0; }
     .gold-tag.negative.selected { background: rgba(70,30,30,0.5); border-color: #804040; color: #d08080; }
-    .gold-save-row { display: flex; gap: 6px; margin-top: 6px; }
+    .gold-save-row { display: flex; gap: 8px; margin-top: 10px; }
     .gold-save-btn {
-      font-size: 0.7em; padding: 3px 10px; border-radius: 3px; cursor: pointer;
+      font-size: 1em; padding: 7px 18px; border-radius: 4px; cursor: pointer;
       background: rgba(30,60,50,0.7); border: 1px solid #306040; color: #70c090;
       transition: all 0.1s;
     }
@@ -2126,7 +2141,7 @@
       <div class="room-header">
         <span>The Room</span>
         <span class="room-stats" id="roomStats"></span>
-        <button class="gold-btn" id="goldPanelToggle" title="Golden Set Viewer" style="margin-left:8px;font-size:0.75em;padding:2px 8px;border:1px solid #2a4060;border-radius:3px;color:#c0a060;cursor:pointer;background:transparent;">Gold</button>
+        <button class="gold-btn" id="goldPanelToggle" title="Golden Set Viewer" style="margin-left:8px;font-size:1em;padding:4px 14px;border:1px solid #2a4060;border-radius:3px;color:#c0a060;cursor:pointer;background:transparent;">Gold</button>
       </div>
       <div class="room-messages" id="roomMessages">
         <div class="empty-state">The room is quiet. Waiting for the first voice...</div>
@@ -4700,7 +4715,7 @@
       const color = config ? (config.agentColors[speaker] || '#8eda7e') : '#8eda7e';
 
       const div = document.createElement('div');
-      div.className = 'room-message' + (isBackchannel ? ' backchannel' : '');
+      div.className = 'room-message' + (typeof isBackchannel === 'string' ? ` ${isBackchannel}` : (isBackchannel ? ' backchannel' : ''));
       div.dataset.agentId = speaker;
       if (messageId) div.dataset.messageId = messageId;
 
@@ -5118,6 +5133,10 @@
         if (data.id) renderedChannelIds.add(data.id);
         addRoomMessage(data.id, data.speaker, data.speakerName, data.text, data.timestamp, true, data.text, data.anchoredAfterMessageId || null);
         if (data.speaker && data.speaker !== 'human') clearBrainLocalBusy(data.speaker);
+      } else if (data.type === 'inner-thought') {
+        const agentName = config ? (config.agentNames[data.agentId] || data.agentId) : (data.agentId || 'inner');
+        const id = `inner-${data.agentId}-${Date.now()}`;
+        addRoomMessage(id, data.agentId, `${agentName} [inner]`, data.thought, data.timestamp, 'inner-thought', data.thought, null);
       } else if (data.type === 'speech-start') {
         currentSpeechRequestId = data.requestId || null;
         // Speaking indicator is handled by audio queue when playback actually starts
@@ -5146,9 +5165,10 @@
           playAudio(data.audioUrl, data.agentId, data.requestId || null, true, null, !isFinal);
         }
       } else if (data.type === 'speech-end') {
+        const wasChunkStreaming = chunkStreamActive;
         chunkStreamActive = false;
-        if (data.audioUrl || (data.audioBase64 && data.audioBase64.length > 0)) {
-          // Legacy non-streaming path: full audio arrived in speech-end
+        if (!wasChunkStreaming && (data.audioUrl || (data.audioBase64 && data.audioBase64.length > 0))) {
+          // Legacy non-streaming path: full audio arrived in speech-end (no chunks were sent)
           playAudio(data.audioUrl || data.audioBase64, data.agentId, data.requestId || null, !!data.audioUrl, data.audioBase64 || null, false);
         } else if (audioQueue.length === 0 && !audioPlaying) {
           // No chunks queued or playing — synthesis failed or zero audio; release lock now
