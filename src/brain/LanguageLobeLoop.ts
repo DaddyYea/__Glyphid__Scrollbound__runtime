@@ -687,6 +687,8 @@ export class LanguageLobeLoop {
     latestHumanText: string;
     modelName: string;
     controlBlock?: string;
+    /** Volitional seed block for self-initiated speech */
+    volitionalSeed?: string;
     params?: Partial<GenerationParams>;
   }): Promise<{
     response: GenerationResponse;
@@ -748,6 +750,7 @@ export class LanguageLobeLoop {
       routerPacket: input.routerPacket,
       doctrine,
       controlBlock: input.controlBlock,
+      volitionalSeed: input.volitionalSeed,
     });
     const nextTurnDecision = input.routerPacket.schema.nextTurnDecision || 'SPEAK';
     const nextTurnDecisionReason = input.routerPacket.schema.nextTurnDecisionReason || 'default to visible response when a live human turn exists';

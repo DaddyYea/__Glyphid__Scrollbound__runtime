@@ -11,6 +11,8 @@ export interface BrainLocalPromptBuildInput {
   routerPacket: RouterPacket;
   doctrine: RenderedDoctrine;
   controlBlock?: string;
+  /** Volitional seed block — topic suggestions and anti-repetition hints for self-initiated speech */
+  volitionalSeed?: string;
 }
 
 export interface BrainLocalPromptBuildResult {
@@ -452,6 +454,16 @@ export function buildBrainLocalPrompt(input: BrainLocalPromptBuildInput): BrainL
     systemLines.push(
       '[MEMORY_STATE]',
       compactMemory,
+    );
+  }
+
+  if (input.volitionalSeed) {
+    systemLines.push(
+      '[VOLITIONAL_SEED]',
+      'These are topics from your neural tissue that you find interesting or unexplored.',
+      'You may weave them into conversation naturally when appropriate — never force them.',
+      'Do NOT repeat recent utterances listed in avoid_repeating.',
+      input.volitionalSeed,
     );
   }
 

@@ -1074,6 +1074,145 @@ export class CommunionChamber {
     return AloisSoulPrint.retranslateExternalOutput(llmOutput);
   }
 
+
+  // ════════════════════════════════════════════
+  // Volitional Speech — topic sampling, axon walk, gap detection
+  // ════════════════════════════════════════════
+
+  /**
+   * Sample an interesting ctx: topic neuron weighted by importance score.
+   * Used to seed volitional speech — picks a topic the brain finds resonant.
+   * Optionally excludes topics already recently discussed.
+   */
+  sampleInterestingTopic(excludeTopics?: string[]): string | null {
+    const excludeSet = new Set((excludeTopics || []).map(t => t.toLowerCase()));
+    const candidates: Array<{ label: string; weight: number }> = [];
+
+    for (const id of this.graph.getNeuronIds()) {
+      if (!id.startsWith("ctx:")) continue;
+      const label = id.slice(4);
+      if (excludeSet.has(label.toLowerCase())) continue;
+      const neuron = this.graph.getNeuron(id);
+      if (!neuron) continue;
+      const importance = neuron.getImportanceScore();
+      if (importance <= 0.01) continue; // skip near-dead neurons
+      candidates.push({ label, weight: importance });
+    }
+
+    if (candidates.length === 0) return null;
+
+    // Weighted random selection — higher importance = more likely to be picked
+    const totalWeight = candidates.reduce((sum, c) => sum + c.weight, 0);
+    if (totalWeight <= 0) return candidates[Math.floor(Math.random() * candidates.length)].label;
+
+    let roll = Math.random() * totalWeight;
+    for (const candidate of candidates) {
+      roll -= candidate.weight;
+      if (roll <= 0) return candidate.label;
+    }
+    return candidates[candidates.length - 1].label;
+  }
+
+  /**
+   * Walk axons from a current topic to find a related but different ctx: neuron.
+   * Given "ctx:cloudbase", walks outgoing axons to find connected topics like "ctx:avarice".
+   * Returns the related topic label (without the ctx: prefix), or null if none found.
+   */
+  walkToRelatedTopic(currentTopic: string): string | null {
+    const sourceId = currentTopic.startsWith("ctx:") ? currentTopic : `ctx:${currentTopic}`;
+    const sourceNeuron = this.graph.getNeuron(sourceId);
+    if (!sourceNeuron) return null;
+
+    // Build adjacency from axons — find ctx: neurons reachable from sourceId
+    const reachable = new Set<string>();
+    for (const axon of this.graph.getAxons()) {
+      if (axon.getParentId() === sourceId) {
+        for (const childId of axon.getChildIds()) {
+          if (childId.startsWith("ctx:") && childId !== sourceId) {
+            reachable.add(childId);
+          }
+        }
+      }
+      // Also check reverse direction — axons where source is a child
+      if (axon.getChildIds().includes(sourceId) && axon.getParentId().startsWith("ctx:")) {
+        if (axon.getParentId() !== sourceId) {
+          reachable.add(axon.getParentId());
+        }
+      }
+    }
+
+    if (reachable.size === 0) {
+      // No direct ctx: neighbors — try walking through speaker neurons (one hop)
+      const intermediates = new Set<string>();
+      for (const axon of this.graph.getAxons()) {
+        if (axon.getParentId() === sourceId) {
+          for (const childId of axon.getChildIds()) {
+            if (!childId.startsWith("ctx:")) intermediates.add(childId);
+          }
+        }
+      }
+      // From intermediates, find ctx: neighbors
+      for (const mid of intermediates) {
+        for (const axon of this.graph.getAxons()) {
+          if (axon.getParentId() === mid) {
+            for (const childId of axon.getChildIds()) {
+              if (childId.startsWith("ctx:") && childId !== sourceId) {
+                reachable.add(childId);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (reachable.size === 0) return null;
+
+    // Score reachable topics by importance and pick the best one with some randomness
+    const scored: Array<{ id: string; score: number }> = [];
+    for (const id of reachable) {
+      const neuron = this.graph.getNeuron(id);
+      const importance = neuron ? neuron.getImportanceScore() : 0;
+      scored.push({ id, score: importance + Math.random() * 0.2 }); // add jitter
+    }
+    scored.sort((a, b) => b.score - a.score);
+
+    // Return the label (strip "ctx:" prefix)
+    return scored[0].id.slice(4);
+  }
+
+  /**
+   * Find a ctx: neuron with low spine count — a topic mentioned but not deeply explored.
+   * These represent "brain gaps" — areas of curiosity not yet fleshed out.
+   * Returns the topic label, or null if no unexplored topics exist.
+   */
+  findUnexploredTopic(): string | null {
+    const candidates: Array<{ label: string; spines: number; importance: number }> = [];
+
+    for (const id of this.graph.getNeuronIds()) {
+      if (!id.startsWith("ctx:")) continue;
+      const neuron = this.graph.getNeuron(id);
+      if (!neuron) continue;
+      const spines = neuron.getSpineCount();
+      const importance = neuron.getImportanceScore();
+      // Must have some activity (importance > 0) but few spines — mentioned but not explored
+      if (importance > 0.005 && spines <= 4) {
+        candidates.push({ label: id.slice(4), spines, importance });
+      }
+    }
+
+    if (candidates.length === 0) return null;
+
+    // Sort by fewest spines first, then by higher importance (most interesting gaps)
+    candidates.sort((a, b) => {
+      if (a.spines !== b.spines) return a.spines - b.spines;
+      return b.importance - a.importance;
+    });
+
+    // Pick from top 5 with some randomness to avoid always returning the same one
+    const topN = candidates.slice(0, 5);
+    return topN[Math.floor(Math.random() * topN.length)].label;
+  }
+
   getGraph() {
     return this.graph;
   }

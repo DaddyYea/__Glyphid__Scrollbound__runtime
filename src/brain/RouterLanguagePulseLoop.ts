@@ -140,6 +140,8 @@ export class RouterLanguagePulseLoop {
     // Never route doctrine text, control state, memory state, or debug payloads here.
     latestHumanText: string;
     modelName: string;
+    /** Volitional seed block for self-initiated speech */
+    volitionalSeed?: string;
     params?: {
       temperature?: number;
       maxTokens?: number;
@@ -192,6 +194,7 @@ export class RouterLanguagePulseLoop {
       latestHumanText: input.latestHumanText,
       modelName: input.modelName,
       controlBlock: this.renderSyncControlBlock(sync, input.routerPacket),
+      volitionalSeed: input.volitionalSeed,
       params: input.params,
     });
 

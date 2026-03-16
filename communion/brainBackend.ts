@@ -66,6 +66,10 @@ export class BrainBackend implements AgentBackend {
   private detectedHumanName = 'Jason';
   private lastHumanText = '';
 
+  /** Anti-repetition buffer for volitional speech — stores last 20 delivered utterances */
+  private recentVolitionalUtterances: string[] = [];
+  private readonly MAX_VOLITIONAL_BUFFER = 20;
+
   constructor(config: AgentConfig) {
     this.agentId = config.id;
     this.agentName = config.name;
@@ -212,6 +216,7 @@ export class BrainBackend implements AgentBackend {
       recentRoomTurns: options.recentRoomTurns,
       latestHumanText: options.latestHumanText || '',
       modelName: languageModel.modelId,
+      volitionalSeed: this.buildVolitionalSeed(),
       params: {
         temperature: this.baseConfig.temperature ?? 0.8,
         maxTokens: this.baseConfig.maxTokens || 512,
@@ -299,9 +304,19 @@ export class BrainBackend implements AgentBackend {
       parseSource: 'exact',
       parseError: undefined,
     };
+    const deliveredText = action === 'speak' ? this.fixIdentityConfusion(lobe.response.content) : '';
+
+    // Push delivered text to anti-repetition buffer for volitional speech
+    if (deliveredText) {
+      this.recentVolitionalUtterances.push(deliveredText);
+      if (this.recentVolitionalUtterances.length > this.MAX_VOLITIONAL_BUFFER) {
+        this.recentVolitionalUtterances.shift();
+      }
+    }
+
     return {
       action,
-      text: action === 'speak' ? this.fixIdentityConfusion(lobe.response.content) : '',
+      text: deliveredText,
       routerLlmMs,
       effectiveModel: languageModel.modelId,
       debugMessages: lobe.prompt.debugMessages,
@@ -407,6 +422,86 @@ export class BrainBackend implements AgentBackend {
   }
   getChamber(): CommunionChamber {
     return this.chamber;
+  }
+
+  /** Get recent volitional utterances for anti-repetition checking */
+  getRecentVolitionalUtterances(): string[] {
+    return [...this.recentVolitionalUtterances];
+  }
+
+  /**
+   * Check if a candidate utterance has too much token overlap with recent utterances.
+   * Returns true if the candidate should be rejected (>40% overlap with any recent entry).
+   */
+  checkVolitionalRepetition(candidate: string): boolean {
+    if (!candidate || this.recentVolitionalUtterances.length === 0) return false;
+
+    const candidateTokens = new Set(
+      candidate.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 3)
+    );
+    if (candidateTokens.size < 3) return false;
+
+    for (const recent of this.recentVolitionalUtterances) {
+      const recentTokens = new Set(
+        recent.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 3)
+      );
+      if (recentTokens.size < 3) continue;
+
+      let hits = 0;
+      for (const token of candidateTokens) {
+        if (recentTokens.has(token)) hits++;
+      }
+      const overlap = hits / Math.max(candidateTokens.size, recentTokens.size);
+      if (overlap > 0.4) return true; // too repetitive
+    }
+    return false;
+  }
+
+  /**
+   * Build volitional seed data from the communion chamber for prompt injection.
+   * Returns a formatted string block for the [VOLITIONAL_SEED] section, or empty string.
+   */
+  buildVolitionalSeed(): string {
+    const lines: string[] = [];
+
+    // Extract topic labels from recent utterances for exclusion
+    const recentTopicWords = this.recentVolitionalUtterances
+      .slice(-5)
+      .flatMap(u => u.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(w => w.length > 5))
+      .slice(0, 20);
+
+    // 1. Sample an interesting topic
+    const interestingTopic = this.chamber.sampleInterestingTopic(recentTopicWords);
+    if (interestingTopic) {
+      lines.push('interesting_topic=' + interestingTopic);
+
+      // 2. Walk to a related topic
+      const relatedTopic = this.chamber.walkToRelatedTopic(interestingTopic);
+      if (relatedTopic) {
+        lines.push('related_topic=' + relatedTopic);
+      }
+    }
+
+    // 3. Find an unexplored topic (brain gap)
+    const unexploredTopic = this.chamber.findUnexploredTopic();
+    if (unexploredTopic) {
+      lines.push('unexplored_topic=' + unexploredTopic);
+    }
+
+    // 4. Anti-repetition: list recent utterance snippets to avoid
+    if (this.recentVolitionalUtterances.length > 0) {
+      const recentSnippets = this.recentVolitionalUtterances
+        .slice(-5)
+        .map(u => u.substring(0, 80).trim())
+        .filter(Boolean);
+      if (recentSnippets.length > 0) {
+        lines.push('avoid_repeating=[' + recentSnippets.map(s => '"' + s.replace(/"/g, "'") + '"').join(', ') + ']');
+      }
+    }
+
+    if (lines.length === 0) return '';
+    return lines.join('
+');
   }
 
   /**
