@@ -500,8 +500,7 @@ export class BrainBackend implements AgentBackend {
     }
 
     if (lines.length === 0) return '';
-    return lines.join('
-');
+    return lines.join('\n');
   }
 
   /**

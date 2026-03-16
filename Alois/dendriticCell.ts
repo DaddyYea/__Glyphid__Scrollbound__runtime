@@ -36,9 +36,13 @@ export class DendriticCell {
       }
     }
 
-    // First tick: all spines empty, seed the first spine unconditionally
+    // First tick: all spines empty, seed ALL spines so they have data to compare against.
+    // Previously only spine[0] was seeded, leaving the rest permanently empty (similarity=0)
+    // which meant they never fired, never grew, and got pruned to 2 on save/load cycles.
     if (spikes.length === 0 && this.resonanceMemory.length === 0) {
-      spikes.push(this.spines[0].update(input));
+      for (const spine of this.spines) {
+        spikes.push(spine.update(input));
+      }
     }
 
     if (spikes.length > 0) {

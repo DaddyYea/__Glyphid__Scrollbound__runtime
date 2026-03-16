@@ -5948,6 +5948,7 @@
       const SILENCE_DELAY = 3000; // 3s of silence = done talking, send + tick
 
       recognition.onresult = (event) => {
+        if (!micListening) return; // Guard: ignore results when mic is toggled off
         let interimText = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
