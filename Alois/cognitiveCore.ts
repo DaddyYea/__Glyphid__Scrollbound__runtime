@@ -240,7 +240,7 @@ export class CognitiveCore {
    * (Throttled hard to reduce API cost on paid providers — targets ~1-2x/hour.)
    */
   shouldSpeak(currentBeat: number): boolean {
-    return this.p_speak > 0.95 || (currentBeat - this.lastSpeakBeat) >= 5400;
+    return this.p_speak > 0.50 || (currentBeat - this.lastSpeakBeat) >= 90;
   }
 
   /** Discharge pressure after a thought is expressed. */

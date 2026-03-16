@@ -393,6 +393,13 @@ async function main() {
         text: event.message.text,
         timestamp: event.message.timestamp,
       });
+    } else if (event.type === 'inner-thought' && event.innerThought) {
+      broadcast({
+        type: 'inner-thought',
+        agentId: event.agentId,
+        thought: event.innerThought,
+        timestamp: new Date().toISOString(),
+      });
     } else if (event.type === 'tick') {
       broadcast({ type: 'tick', tickCount: event.tickCount });
     } else if (event.type === 'speech-start') {

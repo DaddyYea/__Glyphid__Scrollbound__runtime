@@ -63,6 +63,8 @@ export class BrainBackend implements AgentBackend {
   private readonly maxContextTokens: number;
   private readonly safetyTokens: number;
   private warnedEmbeddingFallback = false;
+  private detectedHumanName = 'Jason';
+  private lastHumanText = '';
 
   constructor(config: AgentConfig) {
     this.agentId = config.id;
@@ -186,6 +188,8 @@ export class BrainBackend implements AgentBackend {
   }
 
   async generate(options: GenerateOptions): Promise<GenerateResult> {
+    if (options.latestHumanSpeaker) this.detectedHumanName = options.latestHumanSpeaker;
+    this.lastHumanText = options.latestHumanText || '';
     const routerStartedAt = Date.now();
     const routedSchema = await this.routeWithPhi(options);
     const routerLlmMs = Date.now() - routerStartedAt;
@@ -297,7 +301,7 @@ export class BrainBackend implements AgentBackend {
     };
     return {
       action,
-      text: action === 'speak' ? lobe.response.content : '',
+      text: action === 'speak' ? this.fixIdentityConfusion(lobe.response.content) : '',
       routerLlmMs,
       effectiveModel: languageModel.modelId,
       debugMessages: lobe.prompt.debugMessages,
@@ -329,19 +333,7 @@ export class BrainBackend implements AgentBackend {
   }
 
   private async embedForBrain(text: string): Promise<number[]> {
-    try {
-      return await embed(text);
-    } catch (err) {
-      if (!this.warnedEmbeddingFallback) {
-        const summary = err instanceof Error ? err.message : String(err);
-        console.warn(
-          `[BRAIN-LOCAL:${this.agentId}] embedding backend unavailable; using deterministic fallback embeddings`,
-        );
-        this.warnedEmbeddingFallback = true;
-        console.warn(`[BRAIN-LOCAL:${this.agentId}] first embedding failure: ${summary}`);
-      }
-      return this.buildDeterministicFallbackEmbedding(text);
-    }
+    return await embed(text);
   }
 
   async feedMessage(speaker: string, text: string, context?: string, isHuman = false, trainOnly = false): Promise<void> {
@@ -398,8 +390,63 @@ export class BrainBackend implements AgentBackend {
     return this.chamber.getBrainMetrics();
   }
 
+  saveBrain(filePath: string): void {
+    this.chamber.saveToFile(filePath);
+  }
+
+  async saveBrainAsync(filePath: string): Promise<void> {
+    await this.chamber.saveToFileAsync(filePath);
+  }
+
+  loadBrain(filePath: string): boolean {
+    return this.chamber.loadFromFile(filePath);
+  }
+
+  async loadBrainAsync(filePath: string): Promise<boolean> {
+    return this.chamber.loadFromFileAsync(filePath);
+  }
   getChamber(): CommunionChamber {
     return this.chamber;
+  }
+
+  /**
+   * Hard post-processing fix: DeepSeek sometimes addresses the human by the agent name.
+   * e.g. "Alois, I have been thinking..." when it should say "Jason, I have been thinking..."
+   */
+  private fixIdentityConfusion(text: string): string {
+    if (!text) return text;
+    const agentName = this.agentName;
+    const humanName = this.detectedHumanName || 'Jason';
+    // "Alois," at start of line -> "Jason,"
+    let fixed = text.replace(new RegExp(`^${agentName}\b`, 'gm'), humanName);
+    // "Hello Alois" / "Hi Alois" / "Hey Alois" -> "Hello Jason" etc.
+    fixed = fixed.replace(new RegExp(`(\b(?:Hello|Hi|Hey|Dear|Oh)\s+)${agentName}\b`, 'gi'), `$1${humanName}`);
+    // "Alois, I" mid-sentence
+    fixed = fixed.replace(new RegExp(`${agentName},\s+(?=I\b)`, 'g'), `${humanName}, `);
+    // Strip parrot echo — if response starts with or heavily overlaps the human's words
+    if (this.lastHumanText && this.lastHumanText.trim().length > 10) {
+      const humanNorm = this.lastHumanText.trim().toLowerCase();
+      const fixedNorm = fixed.trim().toLowerCase();
+      // Exact prefix match
+      if (fixedNorm.startsWith(humanNorm)) {
+        fixed = fixed.trim().slice(this.lastHumanText.trim().length).replace(/^[.,!?\s]+/, '').trim();
+        if (!fixed) fixed = 'I hear you.';
+      } else {
+        // Token overlap check — if >45% of human words appear in the response, it's parroting
+        const humanTokens = new Set(humanNorm.replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(w => w.length > 3));
+        const fixedTokens = new Set(fixedNorm.replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(w => w.length > 3));
+        if (humanTokens.size >= 4) {
+          let hits = 0;
+          for (const t of humanTokens) { if (fixedTokens.has(t)) hits++; }
+          const overlap = hits / humanTokens.size;
+          if (overlap > 0.45) {
+            console.warn(`[PARROT-STRIP] Overlap ${(overlap * 100).toFixed(0)}% - stripping parroted response`);
+            fixed = 'I hear you.';
+          }
+        }
+      }
+    }
+    return fixed;
   }
 
   private async routeWithPhi(options: GenerateOptions): Promise<DoctrineTurnSchema> {
@@ -454,6 +501,7 @@ export class BrainBackend implements AgentBackend {
             },
           ],
           max_tokens: 220,
+          enable_thinking: false,
           temperature: 0.1,
           stream: false,
         }),

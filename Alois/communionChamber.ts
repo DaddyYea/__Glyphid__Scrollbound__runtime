@@ -240,6 +240,15 @@ export class CommunionChamber {
       this.graph.connectNeurons(`ctx:${context}`, node);
     }
 
+    // Extract topics and create ctx: neurons wired to this speaker
+    const agentTopics = this.extractTopicsFromThought(text);
+    for (const topic of agentTopics) {
+      const ctxNode = `ctx:${topic}`;
+      this.feeder.recordInteraction(ctxNode, text, embedding, this.tick);
+      this.graph.connectNeurons(node, ctxNode);
+      this.graph.connectNeurons(ctxNode, node);
+    }
+
     // Store in recent context window for live messages only
     if (!trainOnly) {
       this.pushRecentContext(agentName, text, embedding, result?.affect ?? this.lastAffect);
@@ -255,6 +264,15 @@ export class CommunionChamber {
       this.feeder.recordInteraction(`ctx:${context}`, text, embedding, this.tick);
       this.graph.connectNeurons(userName, `ctx:${context}`);
       this.graph.connectNeurons(`ctx:${context}`, userName);
+    }
+
+    // Extract topics and create ctx: neurons wired to this speaker
+    const userTopics = this.extractTopicsFromThought(text);
+    for (const topic of userTopics) {
+      const ctxNode = `ctx:${topic}`;
+      this.feeder.recordInteraction(ctxNode, text, embedding, this.tick);
+      this.graph.connectNeurons(userName, ctxNode);
+      this.graph.connectNeurons(ctxNode, userName);
     }
 
     if (!trainOnly) {

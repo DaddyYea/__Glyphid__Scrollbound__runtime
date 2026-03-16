@@ -119,6 +119,7 @@ export class AloisBackend implements AgentBackend {
 
   private llm: AgentBackend;
   private chamber: CommunionChamber;
+  private onInnerThoughtCallback?: (thought: string) => void;
   private tissueWeight: number;
   private lastDreamResult: DreamResult | null = null;
   private lastIncubation: IncubationState | null = null;
@@ -176,6 +177,7 @@ export class AloisBackend implements AgentBackend {
         try {
           const embedding = await embed(thought);
           this.chamber.receiveInnerThought(this.agentName, thought, embedding);
+          this.onInnerThoughtCallback?.(thought);
         } catch (err) {
           console.error('[INNER] Neural feed error:', err);
         }
@@ -424,6 +426,11 @@ export class AloisBackend implements AgentBackend {
   /** Saturation payload for mycelium cabinet — pond state as pollable JSON */
   getSaturationPayload(): object {
     return this.chamber.getSaturationPayload();
+  }
+
+  /** Register a callback to be called whenever an inner thought is generated */
+  setInnerThoughtCallback(fn: (thought: string) => void): void {
+    this.onInnerThoughtCallback = fn;
   }
 
   /** Adjust tissue weight (0.0 → 1.0) */

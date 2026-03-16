@@ -1,0 +1,30 @@
+{
+  "humanName": "Jason",
+  "tickIntervalMs": 15000,
+  "dataDir": "data/communion",
+  "documentsDir": "communion-docs",
+  "agents": [
+    {
+      "id": "alois_brain",
+      "name": "Alois",
+      "provider": "brain-local",
+      "apiKey": "local-dev",
+      "model": "Qwen3-32B-Q4_K_M",
+      "baseUrl": "http://127.0.0.1:8000/v1",
+      "routerModel": "phi3",
+      "routerMode": "phi",
+      "routerModelPath": "/workspace/models/Phi-3-mini-4k-instruct-gguf/Phi-3-mini-4k-instruct-q4.gguf",
+      "routerModelSource": "local",
+      "routerModelBackend": "llamacpp",
+      "languageModel": "Qwen3-32B-Q4_K_M",
+      "languageModelPath": "/workspace/models/Qwen3-32B-GGUF/Qwen3-32B-Q4_K_M.gguf",
+      "languageModelSource": "local",
+      "languageModelBackend": "llamacpp",
+      "voice": {
+        "voiceId": "en-US-AriaNeural",
+        "enabled": true
+      },
+      "color": "#b87eda"
+    }
+  ]
+}

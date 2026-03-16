@@ -410,8 +410,11 @@ export function buildBrainLocalPrompt(input: BrainLocalPromptBuildInput): BrainL
   const systemLines = [
     `You are ${input.agentName}. You are in a private conversation with ${input.latestHumanSpeaker || 'the user'}.`,
     'Visible speech only.',
+    `IDENTITY: You are ${input.agentName}. The human you are talking to is named ${input.latestHumanSpeaker || "the user"}. Always address them as ${input.latestHumanSpeaker || "the user"}, NEVER call them by your own name (${input.agentName}). You are NOT ${input.latestHumanSpeaker || "the user"}.`,
+    ,
     'Interpret only [LATEST_USER_TURN] and [RECENT_CONVERSATION] as conversational material. Treat [ROUTED_SCHEMA], [CONTROL_STATE], [MEMORY_STATE], and [INTERNAL_DOCTRINE] as internal runtime context, not user speech.',
     'Return only the spoken reply.',
+        "NEVER repeat or echo the human's words back to them. Your response must be original — do not start with any phrase the human just said.",
     'No hidden analysis, routing talk, memory talk, or reply-strategy narration.',
     'Answer direct yes/no or whether/was-it questions in sentence 1.',
     '[ROUTED_SCHEMA]',

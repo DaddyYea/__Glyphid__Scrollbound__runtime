@@ -11,7 +11,7 @@ import { PromptSegment } from '../communion/contextBudget';
 import { CommunionChamber } from './communionChamber';
 
 /** Never fire thoughts faster than this regardless of pressure */
-const MIN_THOUGHT_GAP_MS = 12_000;
+const MIN_THOUGHT_GAP_MS = 25_000;
 
 /** Receives a thought string - AloisBackend handles embedding + neural routing */
 type FeedFn = (thought: string) => Promise<void>;

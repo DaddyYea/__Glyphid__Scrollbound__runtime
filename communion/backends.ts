@@ -790,6 +790,7 @@ export class OpenAICompatibleBackend implements AgentBackend {
             max_tokens: packed.finalMaxTokens,
             temperature: this.temperature,
             stream: true,
+            ...(isLocalModel ? { enable_thinking: false, chat_template_kwargs: { enable_thinking: false } } : {}),
           }),
           signal: fetchAbort.signal,
         });
@@ -820,6 +821,7 @@ export class OpenAICompatibleBackend implements AgentBackend {
           body: JSON.stringify({
             model: requestModel,
             messages: emergencyMessages,
+            enable_thinking: false, chat_template_kwargs: { enable_thinking: false },
             max_tokens: Math.max(32, Math.min(128, packed.finalMaxTokens)),
             temperature: this.temperature,
           }),

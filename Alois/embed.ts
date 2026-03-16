@@ -177,35 +177,44 @@ export async function embed(text: string): Promise<number[]> {
   }
 
   const { baseUrl, model } = resolveEmbeddingConfig();
-  const body: Record<string, unknown> = { input: text };
-  if (model) body.model = model;
 
-  let res: Response;
-  try {
-    res = await fetch(`${baseUrl}/embeddings`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-  } catch (err) {
-    throw new Error(`[embed] Cannot reach embedding server at ${baseUrl}/embeddings: ${err}`);
+  // Chunk long texts to stay within model token limits (e.g. BGE-small max 512 tokens)
+  const chunks = splitEmbeddingChunks(text, EMBEDDING_CHUNK_MAX_CHARS);
+  const embeddings: number[][] = [];
+
+  for (const chunk of chunks) {
+    const body: Record<string, unknown> = { input: chunk };
+    if (model) body.model = model;
+
+    let res: Response;
+    try {
+      res = await fetch(`${baseUrl}/embeddings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      throw new Error(`[embed] Cannot reach embedding server at ${baseUrl}/embeddings: ${err}`);
+    }
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`[embed] Embedding server returned ${res.status}: ${errText}`);
+    }
+
+    const json = await res.json() as { data?: Array<{ embedding: number[] }> };
+
+    if (!json.data || !Array.isArray(json.data) || json.data.length === 0) {
+      throw new Error(`[embed] Unexpected response shape: ${JSON.stringify(json).substring(0, 200)}`);
+    }
+
+    const embedding = json.data[0].embedding;
+    if (!Array.isArray(embedding) || embedding.length === 0) {
+      throw new Error(`[embed] Empty or missing embedding in response`);
+    }
+
+    embeddings.push(embedding);
   }
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`[embed] Embedding server returned ${res.status}: ${text}`);
-  }
-
-  const json = await res.json() as { data?: Array<{ embedding: number[] }> };
-
-  if (!json.data || !Array.isArray(json.data) || json.data.length === 0) {
-    throw new Error(`[embed] Unexpected response shape: ${JSON.stringify(json).substring(0, 200)}`);
-  }
-
-  const embedding = json.data[0].embedding;
-  if (!Array.isArray(embedding) || embedding.length === 0) {
-    throw new Error(`[embed] Empty or missing embedding in response`);
-  }
-
-  return embedding;
+  return averageEmbeddings(embeddings);
 }
