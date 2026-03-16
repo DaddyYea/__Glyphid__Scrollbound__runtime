@@ -833,7 +833,16 @@ async function main() {
 
     // Human message (also accepts /transcript from Whisper STT bridge)
     if ((url === '/message' || url === '/transcript') && req.method === 'POST') {
+      // Reject STT transcripts while TTS is playing — prevents speaker feedback loop
+      if (url === '/transcript' && (communion as any).speaking) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'rejected', reason: 'tts_active' }));
+        return;
+      }
       const messageSource: 'voice' | 'keyboard' = url === '/transcript' ? 'voice' : 'keyboard';
+      if (url === '/transcript') {
+        console.log('[DEBUG-STT] /transcript hit from', req.headers['user-agent']?.substring(0, 50), 'referer:', req.headers['referer']?.substring(0, 80));
+      }
       let body = '';
       req.on('data', chunk => { body += chunk.toString(); });
       req.on('end', () => {
@@ -866,6 +875,7 @@ async function main() {
 
           const normalized = (text || '').trim();
           if (normalized) {
+            console.log('[DEBUG-STT] text=' + JSON.stringify(normalized.substring(0, 100)) + ' source=' + messageSource + ' url=' + url);
             communion.addHumanMessage(normalized, messageSource);
             const requestImmediateTick = (communion as any).requestImmediateTick;
             if (typeof requestImmediateTick === 'function') {
