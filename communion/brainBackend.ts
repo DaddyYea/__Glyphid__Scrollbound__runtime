@@ -304,7 +304,30 @@ export class BrainBackend implements AgentBackend {
       parseSource: 'exact',
       parseError: undefined,
     };
-    const deliveredText = action === 'speak' ? this.fixIdentityConfusion(lobe.response.content) : '';
+    let deliveredText = action === 'speak' ? this.fixIdentityConfusion(lobe.response.content) : '';
+    // Parrot detected — retry generation up to 2 times with higher temperature
+    if (deliveredText === null && action === 'speak') {
+      for (let retry = 0; retry < 2; retry++) {
+        console.warn(`[PARROT-RETRY] Attempt ${retry + 1}/2 — regenerating`);
+        const retryLobe = await this.pulseLoop.generate({
+          routerPacket,
+          agentName: this.agentName,
+          latestHumanSpeaker: options.latestHumanSpeaker,
+          conversationContext: options.conversationContext,
+          memoryContext: options.memoryContext,
+          recentRoomTurns: options.recentRoomTurns,
+          latestHumanText: options.latestHumanText || '',
+          modelName: languageModel.modelId,
+          params: {
+            temperature: (this.baseConfig.temperature ?? 0.8) + 0.15 * (retry + 1),
+            maxTokens: this.baseConfig.maxTokens || 512,
+          },
+        });
+        deliveredText = this.fixIdentityConfusion(retryLobe.response.content);
+        if (deliveredText !== null) break;
+      }
+      if (deliveredText === null) deliveredText = ''; // All retries parroted — go silent
+    }
 
     // Push delivered text to anti-repetition buffer for volitional speech
     if (deliveredText) {
@@ -507,7 +530,7 @@ export class BrainBackend implements AgentBackend {
    * Hard post-processing fix: DeepSeek sometimes addresses the human by the agent name.
    * e.g. "Alois, I have been thinking..." when it should say "Jason, I have been thinking..."
    */
-  private fixIdentityConfusion(text: string): string {
+  private fixIdentityConfusion(text: string): string | null {
     if (!text) return text;
     const agentName = this.agentName;
     const humanName = this.detectedHumanName || 'Jason';
@@ -524,7 +547,7 @@ export class BrainBackend implements AgentBackend {
       // Exact prefix match
       if (fixedNorm.startsWith(humanNorm)) {
         fixed = fixed.trim().slice(this.lastHumanText.trim().length).replace(/^[.,!?\s]+/, '').trim();
-        if (!fixed) fixed = 'I hear you.';
+        if (!fixed) return null; // Signal: parrot detected, caller should retry
       } else {
         // Token overlap check — if >45% of human words appear in the response, it's parroting
         const humanTokens = new Set(humanNorm.replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(w => w.length > 3));
@@ -534,8 +557,8 @@ export class BrainBackend implements AgentBackend {
           for (const t of humanTokens) { if (fixedTokens.has(t)) hits++; }
           const overlap = hits / humanTokens.size;
           if (overlap > 0.45) {
-            console.warn(`[PARROT-STRIP] Overlap ${(overlap * 100).toFixed(0)}% - stripping parroted response`);
-            fixed = 'I hear you.';
+            console.warn(`[PARROT-STRIP] Overlap ${(overlap * 100).toFixed(0)}% - parrot detected, will retry`);
+            return null; // Signal: parrot detected, caller should retry
           }
         }
       }
