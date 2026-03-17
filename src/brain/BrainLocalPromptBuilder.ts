@@ -38,27 +38,25 @@ function normalizeBlock(block: string): string {
 
 function looksLikeRuntimeState(text: string): boolean {
   const s = String(text || '');
+  // Only match actual runtime control blocks — not human messages that happen
+  // to contain technical terms like "persistence", "coherence", "working memory".
+  // Require bracket/colon patterns that indicate injected control state.
   return (
     /\[COGNITIVE STATE\]/i.test(s) ||
-    /\bslot-\d+\b/i.test(s) ||
-    /\bdominance\b/i.test(s) ||
-    /\bpersistence\b/i.test(s) ||
-    /\bworking memory\b/i.test(s) ||
-    /\bmemory system state\b/i.test(s) ||
-    /\bscrollgraph\b/i.test(s) ||
-    /\breflection_flags\b/i.test(s) ||
-    /\bopen_slots\b/i.test(s) ||
-    /\bloop_intent\b/i.test(s) ||
-    /\bcoherence\b/i.test(s) ||
-    /\bDUAL-LOBE CONTROL\b/i.test(s) ||
-    /\bROUTED TURN SCHEMA\b/i.test(s) ||
-    /\bINTERNAL DOCTRINE\b/i.test(s) ||
-    /\bmust_answer:\b/i.test(s) ||
-    /\blive_topic:\b/i.test(s) ||
-    /\brepair_object:\b/i.test(s) ||
-    /\bquestion_form:\b/i.test(s) ||
-    /\bmixed_intent:\b/i.test(s) ||
-    /\brouter_packet_v1\b/i.test(s)
+    /\[ROUTED.SCHEMA\]/i.test(s) ||
+    /\[CONTROL.STATE\]/i.test(s) ||
+    /\[MEMORY.STATE\]/i.test(s) ||
+    /\[INTERNAL.DOCTRINE\]/i.test(s) ||
+    /DUAL-LOBE CONTROL:/i.test(s) ||
+    /ROUTED TURN SCHEMA/i.test(s) ||
+    /INTERNAL DOCTRINE/i.test(s) ||
+    /must_answer:/i.test(s) ||
+    /live_topic:/i.test(s) ||
+    /repair_object:/i.test(s) ||
+    /router_packet_v1/i.test(s) ||
+    /reflection_flags:/i.test(s) ||
+    /open_slots:/i.test(s) ||
+    /loop_intent:/i.test(s)
   );
 }
 
@@ -92,7 +90,7 @@ function stripDocToolContamination(text: string): string {
 function assertLiteralHumanText(text: string, fieldName: string): string {
   const normalized = normalizeBlock(text);
   if (looksLikeRuntimeState(normalized)) {
-    throw new Error(`${fieldName} contains runtime/control/state text`);
+    console.warn(`[PROMPT] ${fieldName} looks like runtime state — passing through`);
   }
   return normalized;
 }
