@@ -18861,9 +18861,12 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
    * Resolves the waiting promise in synthesizeAndEmit, allowing the next agent to speak.
    */
   reportSpeechComplete(requestId?: string): void {
-    // Accept any speech-done signal — strict request ID matching caused signals
-    // to be silently dropped when the timeout fired before the client reported done,
-    // clearing activeSpeechRequestId and causing all subsequent done signals to mismatch.
+    // Match requestId when possible, but don't silently drop signals
+    if (requestId && this.activeSpeechRequestId && requestId !== this.activeSpeechRequestId) {
+      // Stale signal from a previous request — ignore it, don't resolve current wait
+      console.log(`[VOICE] Ignoring stale speech-done (got ${requestId?.slice(-8)}, active ${this.activeSpeechRequestId?.slice(-8)})`);
+      return;
+    }
     this.activeSpeechRequestId = null;
     console.log('[VOICE] Client reported playback complete');
     if (this.speechResolve) {
