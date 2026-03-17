@@ -18861,16 +18861,22 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
    * Resolves the waiting promise in synthesizeAndEmit, allowing the next agent to speak.
    */
   reportSpeechComplete(requestId?: string): void {
-    // Always accept — the client knows when playback is done.
-    // Stale signals are harmless (they just clear an already-idle lock).
-    // Dropping them caused the speaking lock to get stuck.
+    // Only accept if requestId matches OR no active request (timeout already cleared it)
+    if (requestId && this.activeSpeechRequestId && requestId !== this.activeSpeechRequestId) {
+      // Stale signal — don't clear the lock, another agent is playing
+      return;
+    }
+    if (!requestId && this.activeSpeechRequestId) {
+      // Client sent no requestId but we have an active one — accept it anyway
+      // (legacy clients or edge cases)
+    }
     this.activeSpeechRequestId = null;
     console.log('[VOICE] Client reported playback complete');
     if (this.speechResolve) {
       this.speechResolve();
+    } else {
+      this.speaking = false;
     }
-    // Always clear speaking — even without a resolve callback
-    this.speaking = false;
   }
 
   /**
