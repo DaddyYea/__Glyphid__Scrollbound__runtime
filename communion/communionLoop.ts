@@ -53,7 +53,7 @@ import { TurnTriageRecord, shouldEmitTriage, summarizeTriage, excerpt as triageE
 
 // ── Events ──
 
-export type CommunionEventType = 'room-message' | 'journal-entry' | 'tick' | 'error' | 'backchannel' | 'speech-start' | 'speech-chunk' | 'speech-end' | 'speech-stop' | 'turn-latency' | 'processing-status';
+export type CommunionEventType = 'room-message' | 'journal-entry' | 'tick' | 'error' | 'backchannel' | 'inner-thought' | 'speech-start' | 'speech-chunk' | 'speech-end' | 'speech-stop' | 'turn-latency' | 'processing-status';
 
 /** Stage-by-stage latency trace for a single agent turn. */
 export interface TurnLatencyTrace {
@@ -193,6 +193,8 @@ export interface CommunionEvent {
   reason?: string;
   requestId?: string;
   anchoredEmitTargetMessageId?: string;
+  /** Inner thought text for inner-thought events */
+  innerThought?: string;
 }
 
 export type CommunionListener = (event: CommunionEvent) => void;
@@ -1994,6 +1996,14 @@ export class CommunionLoop {
         if ((backend as any).loadBrain(brainPath)) {
           console.log(`[ALOIS] Restored brain for ${agentConfig.name} from ${brainPath}`);
         }
+      }
+
+      // Wire inner thought callback so thoughts are broadcast to UI in real time
+      if ('setInnerThoughtCallback' in backend) {
+        const capturedId = agentConfig.id;
+        (backend as any).setInnerThoughtCallback((thought: string) => {
+          this.emit({ type: 'inner-thought', agentId: capturedId, innerThought: thought });
+        });
       }
 
       this.agents.set(agentConfig.id, { backend, config: agentConfig, systemPrompt });
@@ -18851,12 +18861,9 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
    * Resolves the waiting promise in synthesizeAndEmit, allowing the next agent to speak.
    */
   reportSpeechComplete(requestId?: string): void {
-    if (requestId && this.activeSpeechRequestId && requestId !== this.activeSpeechRequestId) {
-      return;
-    }
-    if (!requestId && this.activeSpeechRequestId) {
-      return;
-    }
+    // Accept any speech-done signal — strict request ID matching caused signals
+    // to be silently dropped when the timeout fired before the client reported done,
+    // clearing activeSpeechRequestId and causing all subsequent done signals to mismatch.
     this.activeSpeechRequestId = null;
     console.log('[VOICE] Client reported playback complete');
     if (this.speechResolve) {
@@ -21172,6 +21179,14 @@ Sometimes the most real thing you can offer is not fixing, not reframing, not in
       if ((backend as any).loadBrain(brainPath)) {
         console.log(`[ALOIS] Restored brain for ${agentConfig.name} from ${brainPath}`);
       }
+    }
+
+    // Wire inner thought callback so thoughts are broadcast to UI in real time
+    if ('setInnerThoughtCallback' in backend) {
+      const capturedId = agentConfig.id;
+      (backend as any).setInnerThoughtCallback((thought: string) => {
+        this.emit({ type: 'inner-thought', agentId: capturedId, innerThought: thought });
+      });
     }
 
     this.agents.set(agentConfig.id, { backend, config: agentConfig, systemPrompt });
