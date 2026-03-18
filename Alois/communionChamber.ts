@@ -142,6 +142,8 @@ export class CommunionChamber {
   /** Recent conversation window — last N live messages for LLM emotional context */
   private recentContext: RecentEntry[] = [];
   private readonly MAX_RECENT = 20;
+  /** Lifetime utterance counter — never capped, used for incubation maturity */
+  private totalUtteranceCount = 0;
 
   /** Dream state tracking */
   private lastDreamTick: number = 0;
@@ -505,6 +507,7 @@ export class CommunionChamber {
   }
 
   private pushRecentContext(speaker: string, text: string, embedding: number[], affect: number[]): void {
+    this.totalUtteranceCount++;
     this.recentContext.push({
       speaker,
       text,
@@ -1326,7 +1329,7 @@ export class CommunionChamber {
     return {
       spineDensity: this.graph.getAvgSpineDensity(),
       resonanceDepth: this.graph.getAvgResonanceDepth(),
-      utteranceCount: this.recentContext.length,
+      utteranceCount: this.totalUtteranceCount,
       dreamCount: this.dreamHistory.length,
       neuronCount: this.graph.getNeuronCount(),
       axonCount: this.graph.getAxonCount(),
@@ -1361,6 +1364,7 @@ export class CommunionChamber {
       version: 3,
       serializedAt: new Date().toISOString(),
       tick: this.tick,
+      totalUtteranceCount: this.totalUtteranceCount,
       lastAffect: this.lastAffect,
       lastDreamTick: this.lastDreamTick,
       recentContext: this.recentContext,
@@ -1404,6 +1408,7 @@ export class CommunionChamber {
 
     // Restore scalar state
     this.tick = data.tick || 0;
+    this.totalUtteranceCount = data.totalUtteranceCount || (data.recentContext?.length ?? 0);
     this.lastAffect = (data.lastAffect || new Array(8).fill(0))
       .map((v: number) => isFinite(v) ? Math.max(-2, Math.min(2, v)) : 0);
     this.lastDreamTick = data.lastDreamTick || 0;

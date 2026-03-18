@@ -60,6 +60,7 @@ export class BrainBackend implements AgentBackend {
   private lastIncubation: IncubationState | null = null;
   private readonly incubationInterval: number = 10;
   private pulseCount: number = 0;
+  private _tissueWeightOverride: number | null = null;
   private readonly maxContextTokens: number;
   private readonly safetyTokens: number;
   private warnedEmbeddingFallback = false;
@@ -445,6 +446,23 @@ export class BrainBackend implements AgentBackend {
   }
   getChamber(): CommunionChamber {
     return this.chamber;
+  }
+
+  getTissueWeight(): number {
+    if (this._tissueWeightOverride !== null) return this._tissueWeightOverride;
+    return this.lastIncubation?.tissueWeight ?? this.chamber.evaluateIncubation().tissueWeight;
+  }
+
+  setTissueWeight(weight: number): void {
+    this._tissueWeightOverride = Math.max(0, Math.min(1, weight));
+  }
+
+  isAutoGradient(): boolean {
+    return this.chamber.isAutoGradient();
+  }
+
+  setAutoGradient(enabled: boolean): void {
+    this.chamber.setAutoGradient(enabled);
   }
 
   /** Get recent volitional utterances for anti-repetition checking */

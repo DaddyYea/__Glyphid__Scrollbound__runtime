@@ -25,6 +25,9 @@ import { proposeWork, acceptWork, rejectWork, deferWork, executeWork, getWorkSni
 import { runWorkPass } from './work/workPass';
 // Import parsing happens in a child worker process (communion/import/worker.ts)
 import { promoteExample, listExamples, getExampleCount, enrichExample, loadProfile, listPreferencePairs, listEvalRuns, loadActiveBundle, loadCandidateBundle, promoteCandidate, checkAndEnrichRecentPromotions } from './goldenStore';
+import { workspace } from './docs/workspace';
+import type { SearchQuery, ChunkHighlight, ReviewSession } from './docs/types';
+import { CouncilOrchestrator } from './council/orchestrator';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -362,6 +365,15 @@ async function main() {
   await communion.initialize();
   initializeWorkDedupeIndex();
 
+  // Initialize document workspace from the configured documentsDir.
+  workspace.init(config.documentsDir).catch(err => console.error('[WORKSPACE] Init error:', err));
+
+  // Initialize Council orchestrator
+  const councilOrchestrator = new CouncilOrchestrator(
+    config.dataDir || 'data/communion',
+    (type, payload) => broadcast({ type, ...((payload && typeof payload === 'object') ? payload : { data: payload }) }),
+  );
+
   // Wire events → SSE broadcast
   communion.on((event: CommunionEvent) => {
     if (event.type === 'room-message' && event.message) {
@@ -482,7 +494,7 @@ async function main() {
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
       });
       res.end();
@@ -833,10 +845,35 @@ async function main() {
 
     // Human message (also accepts /transcript from Whisper STT bridge)
     if ((url === '/message' || url === '/transcript') && req.method === 'POST') {
-      // Reject STT transcripts while TTS is playing — prevents speaker feedback loop
+      // Queue STT transcripts while TTS is playing — replay after speech completes
       if (url === '/transcript' && (communion as any).speaking) {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'rejected', reason: 'tts_active' }));
+        let body2 = '';
+        req.on('data', (chunk: Buffer) => { body2 += chunk.toString(); });
+        req.on('end', () => {
+          try {
+            const ct = String(req.headers['content-type'] || '').toLowerCase();
+            let text = '';
+            const tb = (body2 || '').trim();
+            if (ct.includes('application/json') || tb.startsWith('{')) {
+              const parsed = JSON.parse(tb);
+              text = parsed.text || parsed.transcript || '';
+            } else {
+              text = tb;
+            }
+            const normalized = text.trim();
+            if (normalized) {
+              (communion as any).queueTranscript?.(normalized);
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ status: 'queued' }));
+            } else {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ status: 'empty' }));
+            }
+          } catch {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'queued' }));
+          }
+        });
         return;
       }
       const messageSource: 'voice' | 'keyboard' = url === '/transcript' ? 'voice' : 'keyboard';
@@ -2712,6 +2749,357 @@ async function main() {
       createReadStream(filePath).pipe(res);
       return;
     }
+
+    // ── Document Workspace API ──────────────────────────────────────────────────
+
+    const method = req.method || 'GET';
+    const pathname = url.split('?')[0];
+    const urlSearchParams = new URLSearchParams(url.split('?')[1] || '');
+
+    if (pathname === '/docs/status' && method === 'GET') {
+      const status = workspace.index.getStatus();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(status));
+      return;
+    }
+
+    if (pathname === '/docs/files' && method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(workspace.index.getAllDocuments()));
+      return;
+    }
+
+    if (pathname === '/docs/search' && method === 'POST') {
+      readJsonBody(req, res, (body: SearchQuery) => {
+        if (!body.text) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'text required' }));
+          return;
+        }
+        const results = workspace.search(body);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(results));
+      });
+      return;
+    }
+
+    if (pathname === '/docs/pack/build' && method === 'POST') {
+      readJsonBody(req, res, (body: any) => {
+        const pack = workspace.buildPack({
+          selectedChunkIds: body.selectedChunkIds || [],
+          pinnedChunkIds: body.pinnedChunkIds || [],
+          lockedChunkIds: body.lockedChunkIds || [],
+          budget: body.budget || 4000,
+          sessionId: body.sessionId,
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(pack));
+      });
+      return;
+    }
+
+    if (pathname === '/docs/pack/estimate' && method === 'POST') {
+      readJsonBody(req, res, (body: any) => {
+        const tokens = workspace.estimateTokens(body.chunkIds || []);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ tokens }));
+      });
+      return;
+    }
+
+    if (pathname === '/docs/highlight' && method === 'POST') {
+      readJsonBody(req, res, (body: any) => {
+        const { chunkId, highlight } = body as { chunkId: string; highlight: ChunkHighlight };
+        if (!chunkId || !highlight) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'chunkId and highlight required' }));
+          return;
+        }
+        const ok = workspace.index.addHighlight(chunkId, highlight);
+        res.writeHead(ok ? 200 : 404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok }));
+      });
+      return;
+    }
+
+    if (pathname === '/docs/highlight' && method === 'DELETE') {
+      readJsonBody(req, res, (body: any) => {
+        const { chunkId, highlightId } = body as { chunkId: string; highlightId: string };
+        const ok = workspace.index.removeHighlight(chunkId, highlightId);
+        res.writeHead(ok ? 200 : 404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok }));
+      });
+      return;
+    }
+
+    if (pathname === '/docs/review' && method === 'POST') {
+      readJsonBody(req, res, (body: any) => {
+        const session = workspace.reviewStore.createSession(body.fileId || null);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(session));
+      });
+      return;
+    }
+
+    if (pathname === '/docs/workspace/refresh' && method === 'POST') {
+      workspace.refresh().then(result => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      }).catch(err => {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: String(err) }));
+      });
+      return;
+    }
+
+    // /docs/file/:docId/map  — docId is URL-encoded
+    const docMapMatch = pathname.match(/^\/docs\/file\/(.+)\/map$/);
+    if (docMapMatch && method === 'GET') {
+      const docId = decodeURIComponent(docMapMatch[1]);
+      const docMap = workspace.index.getMap(docId);
+      if (!docMap) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Not found' }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(docMap));
+      return;
+    }
+
+    // /docs/file/:docId/chunks
+    const docChunksMatch = pathname.match(/^\/docs\/file\/(.+)\/chunks$/);
+    if (docChunksMatch && method === 'GET') {
+      const docId = decodeURIComponent(docChunksMatch[1]);
+      const chunks = workspace.index.getChunksForDoc(docId);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(chunks));
+      return;
+    }
+
+    // /docs/chunk/:chunkId/neighbors?radius=N
+    const chunkNeighborMatch = pathname.match(/^\/docs\/chunk\/(.+)\/neighbors$/);
+    if (chunkNeighborMatch && method === 'GET') {
+      const chunkId = decodeURIComponent(chunkNeighborMatch[1]);
+      const radius = parseInt(urlSearchParams.get('radius') || '2', 10) || 2;
+      const neighbors = workspace.index.getNeighbors(chunkId, radius);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(neighbors));
+      return;
+    }
+
+    // /docs/chunk/:chunkId
+    const chunkMatch = pathname.match(/^\/docs\/chunk\/(.+)$/);
+    if (chunkMatch && method === 'GET') {
+      const chunkId = decodeURIComponent(chunkMatch[1]);
+      const chunk = workspace.index.getChunk(chunkId);
+      if (!chunk) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Not found' }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(chunk));
+      return;
+    }
+
+    // /docs/review/:sessionId — GET or PATCH
+    const reviewMatch = pathname.match(/^\/docs\/review\/(.+)$/);
+    if (reviewMatch) {
+      const sessionId = decodeURIComponent(reviewMatch[1]);
+      if (method === 'GET') {
+        const session = workspace.reviewStore.getSession(sessionId);
+        if (!session) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'Not found' }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(session));
+        return;
+      }
+      if (method === 'PATCH') {
+        readJsonBody(req, res, (body: Partial<ReviewSession>) => {
+          const updated = workspace.reviewStore.updateSession(sessionId, body);
+          if (!updated) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: 'Not found' }));
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(updated));
+        });
+        return;
+      }
+    }
+
+    // ── End Document Workspace API ──────────────────────────────────────────────
+
+    // ── Council API ──────────────────────────────────────────────────────────────
+
+    if (url.startsWith('/council')) {
+      // CORS headers for council routes
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Content-Type', 'application/json');
+
+      // Wrap in async IIFE — the outer createServer callback is synchronous
+      (async () => {
+      const readBody = (): Promise<string> => new Promise((resolve) => {
+        let body = '';
+        req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+        req.on('end', () => resolve(body));
+      });
+
+      // POST /council/configure — wizard saves config
+      if (url === '/council/configure' && req.method === 'POST') {
+        const body = await readBody();
+        try {
+          const incoming = JSON.parse(body);
+          councilOrchestrator.saveConfig(incoming);
+          res.writeHead(200); res.end(JSON.stringify({ ok: true }));
+        } catch (err) {
+          res.writeHead(400); res.end(JSON.stringify({ ok: false, error: String(err) }));
+        }
+        return;
+      }
+
+      // GET /council/config — current config (apiKey masked)
+      if (url === '/council/config' && req.method === 'GET') {
+        const cfg = councilOrchestrator.getConfig();
+        if (!cfg) { res.writeHead(404); res.end(JSON.stringify({ error: 'Not configured' })); return; }
+        const masked = { ...cfg, apiKey: cfg.apiKey ? '***' : '' };
+        res.writeHead(200); res.end(JSON.stringify(masked));
+        return;
+      }
+
+      // GET /council/config/defaults — default config for wizard pre-fill
+      if (url === '/council/config/defaults' && req.method === 'GET') {
+        try {
+          const defaultCfgPath = join(__dirname, 'council', 'council.config.default.json');
+          const defaults = existsSync(defaultCfgPath)
+            ? JSON.parse(readFileSync(defaultCfgPath, 'utf-8'))
+            : {};
+          res.writeHead(200); res.end(JSON.stringify(defaults));
+        } catch (err) {
+          res.writeHead(500); res.end(JSON.stringify({ error: String(err) }));
+        }
+        return;
+      }
+
+      // GET /council/configured — quick boolean check
+      if (url === '/council/configured' && req.method === 'GET') {
+        res.writeHead(200); res.end(JSON.stringify({ configured: councilOrchestrator.isConfigured() }));
+        return;
+      }
+
+      // POST /council/start — SIP → start session
+      if (url === '/council/start' && req.method === 'POST') {
+        const body = await readBody();
+        try {
+          const sip = JSON.parse(body);
+          const result = await councilOrchestrator.startSession(sip);
+          res.writeHead(result.ok ? 200 : 400); res.end(JSON.stringify(result));
+        } catch (err) {
+          res.writeHead(400); res.end(JSON.stringify({ ok: false, error: String(err) }));
+        }
+        return;
+      }
+
+      // GET /council/status — session state + timerRemaining
+      if (url === '/council/status' && req.method === 'GET') {
+        res.writeHead(200); res.end(JSON.stringify(councilOrchestrator.getStatus()));
+        return;
+      }
+
+      // POST /council/message — human turn
+      if (url === '/council/message' && req.method === 'POST') {
+        const body = await readBody();
+        try {
+          const { text } = JSON.parse(body);
+          await councilOrchestrator.humanMessage(text || '');
+          res.writeHead(200); res.end(JSON.stringify({ ok: true }));
+        } catch (err) {
+          res.writeHead(400); res.end(JSON.stringify({ ok: false, error: String(err) }));
+        }
+        return;
+      }
+
+      // POST /council/pause
+      if (url === '/council/pause' && req.method === 'POST') {
+        const ok = councilOrchestrator.pauseSession('Manually paused by user');
+        res.writeHead(200); res.end(JSON.stringify({ ok }));
+        return;
+      }
+
+      // POST /council/resume
+      if (url === '/council/resume' && req.method === 'POST') {
+        const ok = councilOrchestrator.resumeSession();
+        res.writeHead(200); res.end(JSON.stringify({ ok }));
+        return;
+      }
+
+      // POST /council/stop
+      if (url === '/council/stop' && req.method === 'POST') {
+        const ok = await councilOrchestrator.stopSession();
+        res.writeHead(200); res.end(JSON.stringify({ ok }));
+        return;
+      }
+
+      // POST /council/witness/command — Protocol 0.4
+      if (url === '/council/witness/command' && req.method === 'POST') {
+        const body = await readBody();
+        try {
+          const { command } = JSON.parse(body);
+          const result = await councilOrchestrator.commandWitness(command || '');
+          res.writeHead(200); res.end(JSON.stringify(result));
+        } catch (err) {
+          res.writeHead(400); res.end(JSON.stringify({ ok: false, error: String(err) }));
+        }
+        return;
+      }
+
+      // GET /council/report — last final report (markdown)
+      if (url === '/council/report' && req.method === 'GET') {
+        const md = councilOrchestrator.getLastReport();
+        if (!md) { res.writeHead(404); res.end(JSON.stringify({ error: 'No reports yet' })); return; }
+        res.setHeader('Content-Type', 'text/markdown');
+        res.writeHead(200); res.end(md);
+        return;
+      }
+
+      // GET /council/reports — list saved reports
+      if (url === '/council/reports' && req.method === 'GET') {
+        res.writeHead(200); res.end(JSON.stringify(councilOrchestrator.listReports()));
+        return;
+      }
+
+      // GET /council/aether — list aether entries
+      if (url === '/council/aether' && req.method === 'GET') {
+        res.writeHead(200); res.end(JSON.stringify(councilOrchestrator.aether.getAll()));
+        return;
+      }
+
+      // POST /council/aether/ingest — manually add entry
+      if (url === '/council/aether/ingest' && req.method === 'POST') {
+        const body = await readBody();
+        try {
+          const { content, author, category, weight, tags } = JSON.parse(body);
+          const entry = await councilOrchestrator.aether.ingest(content, author, category, weight, tags);
+          res.writeHead(200); res.end(JSON.stringify(entry));
+        } catch (err) {
+          res.writeHead(400); res.end(JSON.stringify({ error: String(err) }));
+        }
+        return;
+      }
+
+      res.writeHead(404); res.end(JSON.stringify({ error: 'Council route not found' }));
+      })().catch(err => {
+        if (!res.headersSent) { res.writeHead(500); res.end(JSON.stringify({ error: String(err) })); }
+      });
+      return;
+    }
+
+    // ── End Council API ──────────────────────────────────────────────────────────
 
     res.writeHead(404);
     res.end('Not found');

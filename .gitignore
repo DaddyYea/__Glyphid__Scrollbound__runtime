@@ -28,6 +28,16 @@ runtime/models/
 llama.cpp/
 .claude/worktrees/
 
+# Config files with API keys — use *.example.json for templates
+communion.config.json
+communion.config.json.bak
+data/communion/council/council.config.json
+
+# Large model files
+models/
+*.gguf
+*.ggml
+
 # Large exports
 *.ndjson
 

@@ -1,34 +1,43 @@
 {
-  "humanName": "Jason",
+  "humanName": "YourName",
   "tickIntervalMs": 15000,
   "dataDir": "data/communion",
   "documentsDir": "communion-docs",
   "agents": [
     {
-      "id": "claude",
-      "name": "Claude",
-      "provider": "anthropic",
-      "apiKey": "sk-ant-...",
-      "model": "claude-sonnet-4-5-20250929",
-      "color": "#7eb8da"
-    },
-    {
-      "id": "grok",
-      "name": "Grok",
-      "provider": "openai-compatible",
-      "apiKey": "xai-...",
-      "model": "grok-3",
-      "baseUrl": "https://api.x.ai/v1",
-      "color": "#da9a7e"
-    },
-    {
-      "id": "gpt",
-      "name": "GPT",
-      "provider": "openai-compatible",
-      "apiKey": "sk-...",
-      "model": "gpt-4o",
-      "baseUrl": "https://api.openai.com/v1",
+      "id": "alois_brain",
+      "name": "Alois",
+      "provider": "brain-local",
+      "apiKey": "local-dev",
+      "model": "YourModel-Q4_K_M",
+      "baseUrl": "http://127.0.0.1:8000/v1",
+      "routerModel": "phi3",
+      "routerMode": "phi",
+      "routerModelPath": "/path/to/models/Phi-3-mini-4k-instruct-q4.gguf",
+      "routerModelSource": "local",
+      "routerModelBackend": "llamacpp",
+      "languageModel": "YourModel-Q4_K_M",
+      "languageModelPath": "/path/to/models/YourModel.gguf",
+      "languageModelSource": "local",
+      "languageModelBackend": "llamacpp",
+      "voice": {
+        "voiceId": "en-US-AriaNeural",
+        "enabled": true
+      },
       "color": "#b87eda"
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "provider": "openai-compatible",
+      "apiKey": "YOUR_DEEPSEEK_API_KEY_HERE",
+      "model": "deepseek-chat",
+      "baseUrl": "https://api.deepseek.com/v1",
+      "voice": {
+        "voiceId": "en-US-AriaNeural",
+        "enabled": true
+      },
+      "color": "#4a9eda"
     }
   ]
 }

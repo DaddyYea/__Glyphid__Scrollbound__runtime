@@ -1,0 +1,67 @@
+{
+  "provider": "openai-compatible",
+  "baseUrl": "https://api.deepseek.com/v1",
+  "apiKey": "",
+  "model": "deepseek-chat",
+  "defaultTimeframeMins": 45,
+  "voiceEnabled": false,
+  "aetherSeedFromCAMP": true,
+  "roles": [
+    {
+      "role": "convener",
+      "displayName": "Convener",
+      "systemPrompt": "",
+      "temperature": 0.3,
+      "color": "#7c9cbf",
+      "enabled": true
+    },
+    {
+      "role": "witness",
+      "displayName": "Witness",
+      "systemPrompt": "",
+      "temperature": 0.1,
+      "color": "#a8c5a0",
+      "enabled": true
+    },
+    {
+      "role": "advocate_a",
+      "displayName": "Advocate A",
+      "systemPrompt": "",
+      "temperature": 0.6,
+      "color": "#d4a5a5",
+      "enabled": true
+    },
+    {
+      "role": "advocate_b",
+      "displayName": "Advocate B",
+      "systemPrompt": "",
+      "temperature": 0.6,
+      "color": "#a5b4d4",
+      "enabled": true
+    },
+    {
+      "role": "devils_advocate",
+      "displayName": "Devil's Advocate",
+      "systemPrompt": "",
+      "temperature": 0.8,
+      "color": "#c4a5d4",
+      "enabled": true
+    },
+    {
+      "role": "synthesizer",
+      "displayName": "Synthesizer",
+      "systemPrompt": "",
+      "temperature": 0.75,
+      "color": "#d4c5a5",
+      "enabled": true
+    },
+    {
+      "role": "ombudsman",
+      "displayName": "Ombudsman",
+      "systemPrompt": "",
+      "temperature": 0.2,
+      "color": "#888888",
+      "enabled": true
+    }
+  ]
+}

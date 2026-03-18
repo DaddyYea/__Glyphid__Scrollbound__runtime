@@ -225,9 +225,11 @@ export class DendriticCell {
   static deserialize(data: any): DendriticCell {
     const cell = new DendriticCell(data.dim || 768, 0, data.clockOffset || 0);
     cell.affect = data.affect || new Array(8).fill(0);
-    // Restore resonance depth as placeholder array — actual embeddings rebuilt through ingest
+    // Restore resonance depth as placeholder zero-vectors — actual embeddings rebuilt through ingest.
+    // Must use zero-vectors (not empty arrays []) to avoid NaN in meanVector computations.
     const depth = data.resonanceDepth ?? (data.resonanceMemory?.length ?? 0);
-    cell.resonanceMemory = new Array(Math.min(depth, 64)).fill([]);
+    const dim = data.dim || 768;
+    cell.resonanceMemory = Array.from({ length: Math.min(depth, 64) }, () => new Array(dim).fill(0));
     cell.lastFiredBeat   = data.lastFiredBeat   ?? -1;
     cell.activationDecay = data.activationDecay ?? 0;
     cell.spines = (data.spines || []).map((s: any) => Spine.deserialize(s));

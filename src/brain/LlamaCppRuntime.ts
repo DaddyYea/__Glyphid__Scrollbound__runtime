@@ -1,4 +1,5 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 
@@ -21,6 +22,32 @@ interface RuntimeEntry extends LlamaRuntimeHandle {
 }
 
 const START_PORT = Number(process.env.BRAIN_LOCAL_LLAMA_START_PORT || 12434);
+
+// ── PID persistence — survives crashes and SIGKILL ───────────────────────────
+const PID_FILE = path.join(os.tmpdir(), 'llama-server-pids.json');
+
+function _readPidFile(): number[] {
+  try { return JSON.parse(fs.readFileSync(PID_FILE, 'utf-8')) as number[]; } catch { return []; }
+}
+function _writePidFile(pids: number[]): void {
+  try { fs.writeFileSync(PID_FILE, JSON.stringify(pids)); } catch {}
+}
+function _addPid(pid: number): void {
+  const pids = _readPidFile();
+  if (!pids.includes(pid)) { pids.push(pid); _writePidFile(pids); }
+}
+function _removePid(pid: number): void {
+  _writePidFile(_readPidFile().filter(p => p !== pid));
+}
+function killStaleLlamaProcesses(): void {
+  const pids = _readPidFile();
+  if (!pids.length) return;
+  console.log(`[LlamaCpp] Killing ${pids.length} stale llama-server process(es) from previous run:`, pids);
+  for (const pid of pids) {
+    try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+  }
+  _writePidFile([]);
+}
 const HEALTH_TIMEOUT_MS = Number(process.env.BRAIN_LOCAL_LLAMA_HEALTH_TIMEOUT_MS || 300000);
 const GPU_LAYERS = process.env.BRAIN_LOCAL_LLAMA_GPU_LAYERS || '999';
 const MAIN_GPU = process.env.BRAIN_LOCAL_LLAMA_MAIN_GPU || '0';
@@ -102,6 +129,7 @@ export class LlamaCppRuntimeManager {
       stdio: 'pipe',
       windowsHide: true,
     });
+    if (child.pid) _addPid(child.pid);
 
     const entry: RuntimeEntry = {
       modelPath,
@@ -122,6 +150,7 @@ export class LlamaCppRuntimeManager {
       entry.exited = true;
       entry.exitCode = code;
       entry.exitSignal = signal;
+      if (child.pid) _removePid(child.pid);
       const current = this.runtimes.get(runtimeKey);
       if (current?.process === child) {
         this.runtimes.delete(runtimeKey);
@@ -144,7 +173,9 @@ export class LlamaCppRuntimeManager {
   private disposeRuntime(runtimeKey: string): void {
     const entry = this.runtimes.get(runtimeKey);
     if (!entry) return;
+    const pid = entry.process.pid;
     try { entry.process.kill(); } catch {}
+    if (pid) _removePid(pid);
     this.runtimes.delete(runtimeKey);
   }
 
@@ -193,6 +224,7 @@ let runtimeManager: LlamaCppRuntimeManager | null = null;
 
 export function getLlamaCppRuntimeManager(): LlamaCppRuntimeManager {
   if (!runtimeManager) {
+    killStaleLlamaProcesses();
     runtimeManager = new LlamaCppRuntimeManager();
   }
   return runtimeManager;

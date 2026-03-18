@@ -1908,6 +1908,353 @@
     }
     #processingStatus .ps-label { flex: 1; }
     #processingStatus .ps-elapsed { color: #304050; }
+    /* ── Mode Toggle ── */
+    .mode-toggle-bar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 14px;
+      background: rgba(15,20,30,0.98);
+      border-bottom: 1px solid #1a2030;
+      flex-shrink: 0;
+    }
+    .mode-btn {
+      padding: 5px 18px;
+      border: 1px solid #2a3a50;
+      border-radius: 20px;
+      background: transparent;
+      color: #506070;
+      cursor: pointer;
+      font-family: 'Courier New', monospace;
+      font-size: 0.8em;
+      letter-spacing: 1px;
+      transition: all 0.2s;
+    }
+    .mode-btn.active {
+      background: rgba(80,140,200,0.15);
+      border-color: #5080a0;
+      color: #a0c8e8;
+    }
+    .mode-btn:hover:not(.active) { border-color: #3a5070; color: #7090a8; }
+
+    /* ── Council Panel ── */
+    #councilPanel {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      overflow: hidden;
+      background: #0a0e14;
+      min-height: 0;
+    }
+
+    /* Wizard */
+    .c-wizard {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 32px 24px;
+      overflow-y: auto;
+      max-width: 680px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .c-wizard h2 { color: #a0c8e8; font-weight: normal; letter-spacing: 2px; margin-bottom: 8px; font-size: 1.1em; }
+    .c-wizard p { color: #506070; font-size: 0.82em; margin-bottom: 20px; text-align: center; }
+    .c-step { display: none; width: 100%; }
+    .c-step.active { display: block; }
+    .c-wizard label { display: block; color: #7090a8; font-size: 0.8em; margin-bottom: 4px; margin-top: 14px; letter-spacing: 1px; }
+    .c-wizard input, .c-wizard textarea, .c-wizard select {
+      width: 100%;
+      background: #0d1520;
+      border: 1px solid #2a3a50;
+      color: #c0c8d4;
+      padding: 8px 10px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85em;
+      border-radius: 3px;
+      outline: none;
+    }
+    .c-wizard input:focus, .c-wizard textarea:focus { border-color: #5080a0; }
+    .c-wizard textarea { min-height: 70px; resize: vertical; }
+    .c-provider-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 8px; }
+    .c-provider-btn {
+      padding: 10px 8px;
+      border: 1px solid #2a3a50;
+      border-radius: 4px;
+      background: transparent;
+      color: #7090a8;
+      cursor: pointer;
+      font-family: 'Courier New', monospace;
+      font-size: 0.78em;
+      text-align: center;
+      transition: all 0.15s;
+    }
+    .c-provider-btn.selected { border-color: #5080a0; background: rgba(80,140,200,0.12); color: #a0c8e8; }
+    .c-role-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 8px; }
+    .c-role-card {
+      border: 1px solid #2a3a50;
+      border-radius: 4px;
+      padding: 10px 12px;
+      font-size: 0.8em;
+    }
+    .c-role-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+    .c-role-name { font-weight: bold; margin-bottom: 0; }
+    .c-role-meta { display: flex; gap: 6px; align-items: center; }
+    .c-role-temp { color: #506070; font-size: 0.78em; }
+    .c-role-provider-badge { background: #0a1520; border: 1px solid #1e2e3e; padding: 1px 5px; border-radius: 2px; color: #3a5a70; font-size: 0.72em; }
+    .c-expand-icon { color: #3a5060; font-size: 0.85em; transition: transform 0.2s; line-height: 1; }
+    .c-role-card.expanded .c-expand-icon { transform: rotate(180deg); }
+    .c-role-expanded { margin-top: 10px; border-top: 1px solid #1a2a3a; padding-top: 10px; }
+    .c-override-label { display: flex; align-items: center; gap: 6px; cursor: pointer; color: #6080a0; font-size: 0.78em; margin-bottom: 0; letter-spacing: 0; }
+    .c-override-label input[type="checkbox"] { width: auto; margin-top: 0; }
+    .c-role-override-fields { margin-top: 8px; }
+    .c-role-override-fields label { font-size: 0.72em; margin-top: 8px; letter-spacing: 0.5px; }
+    .c-provider-mini-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 3px; margin-top: 3px; margin-bottom: 6px; }
+    .c-provider-mini-btn { padding: 4px 6px; background: #0d1520; border: 1px solid #2a3a50; color: #4a6070; cursor: pointer; border-radius: 2px; font-size: 0.72em; font-family: 'Courier New', monospace; transition: all 0.15s; }
+    .c-provider-mini-btn.selected { border-color: #4a7a9a; color: #80b0c8; background: #0a1825; }
+    .c-provider-mini-btn:hover { border-color: #3a6080; color: #7090a8; }
+    .c-role-override-fields input[type="text"], .c-role-override-fields input[type="password"] { font-size: 0.78em; padding: 5px 8px; margin-top: 2px; }
+    .c-step-nav { display: flex; gap: 8px; margin-top: 20px; width: 100%; }
+    .c-btn {
+      padding: 8px 20px;
+      border: 1px solid #2a3a50;
+      border-radius: 3px;
+      background: transparent;
+      color: #7090a8;
+      cursor: pointer;
+      font-family: 'Courier New', monospace;
+      font-size: 0.82em;
+      transition: all 0.15s;
+      flex: 1;
+    }
+    .c-btn.primary { border-color: #5080a0; color: #a0c8e8; background: rgba(80,140,200,0.12); }
+    .c-btn:hover { border-color: #5080a0; color: #a0c8e8; }
+    .c-error { color: #d08080; font-size: 0.8em; margin-top: 8px; }
+
+    /* SIP form */
+    .c-sip-form {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px;
+      overflow-y: auto;
+      max-width: 680px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .c-sip-form h2 { color: #a0c8e8; font-weight: normal; letter-spacing: 2px; margin-bottom: 16px; font-size: 1.1em; }
+    .c-sip-form label { display: block; color: #7090a8; font-size: 0.8em; margin-bottom: 4px; margin-top: 14px; letter-spacing: 1px; }
+    .c-sip-form input, .c-sip-form textarea {
+      width: 100%;
+      background: #0d1520;
+      border: 1px solid #2a3a50;
+      color: #c0c8d4;
+      padding: 8px 10px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85em;
+      border-radius: 3px;
+      outline: none;
+    }
+    .c-sip-form input:focus, .c-sip-form textarea:focus { border-color: #5080a0; }
+    .c-sip-form textarea { min-height: 70px; resize: vertical; }
+    .c-timeframe-btns { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+    .c-tf-btn {
+      padding: 5px 14px;
+      border: 1px solid #2a3a50;
+      border-radius: 14px;
+      background: transparent;
+      color: #506070;
+      cursor: pointer;
+      font-family: 'Courier New', monospace;
+      font-size: 0.78em;
+    }
+    .c-tf-btn.selected { border-color: #5080a0; color: #a0c8e8; background: rgba(80,140,200,0.12); }
+    .c-sip-actions { display: flex; gap: 8px; margin-top: 20px; width: 100%; }
+    .c-reconfigure { color: #506070; font-size: 0.75em; text-decoration: underline; cursor: pointer; margin-top: 10px; }
+    .c-reconfigure:hover { color: #7090a8; }
+
+    /* Active session — 3 panes */
+    .c-session {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      min-height: 0;
+    }
+    .c-info-pane {
+      width: 200px;
+      flex-shrink: 0;
+      padding: 14px 12px;
+      border-right: 1px solid #1a2030;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow-y: auto;
+      font-size: 0.78em;
+    }
+    .c-info-label { color: #506070; letter-spacing: 1px; font-size: 0.75em; text-transform: uppercase; }
+    .c-info-value { color: #c0c8d4; word-break: break-all; }
+    .c-timer { font-size: 1.4em; color: #a0c8e8; font-weight: bold; margin: 4px 0; }
+    .c-timer.warning { color: #d09060; }
+    .c-status-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 0.75em;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .c-status-badge.active { background: rgba(80,180,100,0.15); color: #80d4a0; border: 1px solid rgba(80,180,100,0.3); }
+    .c-status-badge.paused { background: rgba(200,160,80,0.15); color: #d4c080; border: 1px solid rgba(200,160,80,0.3); }
+    .c-status-badge.closing { background: rgba(160,100,200,0.15); color: #c0a0d4; border: 1px solid rgba(160,100,200,0.3); }
+    .c-status-badge.closed { background: rgba(80,80,100,0.15); color: #8080a0; border: 1px solid rgba(80,80,100,0.3); }
+    .c-ctrl-btns { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+    .c-ctrl-btn {
+      padding: 5px 10px;
+      border: 1px solid #2a3a50;
+      border-radius: 3px;
+      background: transparent;
+      color: #7090a8;
+      cursor: pointer;
+      font-family: 'Courier New', monospace;
+      font-size: 0.78em;
+      text-align: center;
+    }
+    .c-ctrl-btn:hover { border-color: #5080a0; color: #a0c8e8; }
+    .c-ctrl-btn.danger { border-color: #5a3030; color: #c07070; }
+    .c-ctrl-btn.danger:hover { border-color: #804040; color: #d09090; }
+
+    .c-feed-pane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .c-feed-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .c-turn {
+      border-left: 3px solid #2a3a50;
+      padding: 8px 12px;
+      font-size: 0.83em;
+      line-height: 1.5;
+    }
+    .c-turn-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+      font-size: 0.82em;
+      color: #506070;
+    }
+    .c-turn-name { font-weight: bold; }
+    .c-turn-time { font-size: 0.85em; }
+    .c-turn-text { color: #c0c8d4; white-space: pre-wrap; word-break: break-word; }
+    .c-turn.witness .c-turn-text { font-style: italic; color: #a0c8a8; }
+    .c-turn.ombudsman .c-turn-text { color: #a0a8c8; }
+    .c-turn.human { border-left-color: #404858; }
+    .c-turn.human .c-turn-header { color: #6070a0; }
+    .c-turn.system-turn { border-left-color: #2a3a50; opacity: 0.7; font-style: italic; }
+    .c-recall-badge {
+      background: rgba(100,80,160,0.15);
+      border: 1px solid rgba(100,80,160,0.4);
+      border-radius: 4px;
+      padding: 8px 12px;
+      font-size: 0.78em;
+      color: #c0a8e8;
+      margin: 4px 0;
+    }
+    .c-recall-badge strong { color: #d0b8f8; }
+
+    .c-human-bar {
+      padding: 10px 14px;
+      border-top: 1px solid #1a2030;
+      display: flex;
+      gap: 8px;
+      background: rgba(10,14,20,0.95);
+    }
+    .c-human-input {
+      flex: 1;
+      background: #0d1520;
+      border: 1px solid #2a3a50;
+      color: #c0c8d4;
+      padding: 7px 10px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85em;
+      border-radius: 3px;
+      outline: none;
+    }
+    .c-human-input:focus { border-color: #5080a0; }
+    .c-human-input.witness-mode { border-color: #8060a0; color: #d0b8f0; }
+    .c-send-btn {
+      padding: 7px 16px;
+      border: 1px solid #5080a0;
+      border-radius: 3px;
+      background: rgba(80,140,200,0.12);
+      color: #a0c8e8;
+      cursor: pointer;
+      font-family: 'Courier New', monospace;
+      font-size: 0.82em;
+    }
+    .c-send-btn:hover { background: rgba(80,140,200,0.2); }
+
+    .c-witness-pane {
+      width: 230px;
+      flex-shrink: 0;
+      border-left: 1px solid #1a2030;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .c-witness-header {
+      padding: 10px 12px;
+      border-bottom: 1px solid #1a2030;
+      font-size: 0.75em;
+      color: #506070;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .c-witness-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .c-witness-empty { color: #2a3a50; font-size: 0.78em; font-style: italic; text-align: center; margin-top: 20px; }
+
+    /* Ombudsman pause overlay */
+    .c-pause-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(5,8,14,0.88);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .c-pause-overlay.visible { display: flex; }
+    .c-pause-box {
+      border: 1px solid rgba(200,160,80,0.4);
+      background: rgba(15,20,30,0.98);
+      padding: 28px 36px;
+      border-radius: 6px;
+      max-width: 480px;
+      text-align: center;
+    }
+    .c-pause-title { color: #d4c080; font-size: 1em; letter-spacing: 2px; margin-bottom: 12px; }
+    .c-pause-reason { color: #a0a8b0; font-size: 0.82em; line-height: 1.5; margin-bottom: 18px; }
+
   </style>
 </head>
 <body>
@@ -1989,6 +2336,161 @@
         <button class="btn-cancel" id="importCancelBtn">Cancel</button>
         <button class="btn-import" id="importStartBtn" disabled>Import</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Council Panel (hidden until Council mode selected) -->
+  <div id="councilPanel">
+    <!-- Wizard -->
+    <div class="c-wizard" id="cWizard" style="display:none;">
+      <h2>CITADEL COUNCIL — SETUP</h2>
+      <p>Configure the deliberative council. Each role inherits the global provider — expand any role to override independently.</p>
+
+      <div class="c-step active" id="cStep0">
+        <label>Select Provider</label>
+        <div class="c-provider-grid" id="cProviderGrid">
+          <button class="c-provider-btn selected" data-provider="openai-compatible" data-baseurl="https://api.deepseek.com/v1" data-model="deepseek-chat" onclick="selectProvider(this)">DeepSeek (default)</button>
+          <button class="c-provider-btn" data-provider="anthropic" data-baseurl="" data-model="claude-opus-4-6" onclick="selectProvider(this)">Anthropic / Claude</button>
+          <button class="c-provider-btn" data-provider="openai-compatible" data-baseurl="https://api.openai.com/v1" data-model="gpt-4o" onclick="selectProvider(this)">OpenAI</button>
+          <button class="c-provider-btn" data-provider="openai-compatible" data-baseurl="" data-model="" onclick="selectProvider(this)">Custom</button>
+        </div>
+        <div id="cCustomFields" style="display:none; margin-top:12px;">
+          <label>Base URL</label>
+          <input type="text" id="cCustomUrl" placeholder="https://your-api.com/v1" />
+          <label>Model</label>
+          <input type="text" id="cCustomModel" placeholder="model-name" />
+        </div>
+        <div class="c-step-nav"><button class="c-btn primary" onclick="wizardNext()">Next &rarr;</button></div>
+      </div>
+
+      <div class="c-step" id="cStep1">
+        <label>API Key</label>
+        <input type="password" id="cApiKey" placeholder="sk-..." autocomplete="new-password" />
+        <div class="c-step-nav">
+          <button class="c-btn" onclick="wizardBack()">&larr; Back</button>
+          <button class="c-btn primary" onclick="wizardNext()">Next &rarr;</button>
+        </div>
+      </div>
+
+      <div class="c-step" id="cStep2">
+        <label>Role Configuration (7 agents)</label>
+        <div class="c-role-grid" id="cRoleGrid"></div>
+        <div class="c-step-nav">
+          <button class="c-btn" onclick="wizardBack()">&larr; Back</button>
+          <button class="c-btn primary" onclick="wizardNext()">Next &rarr;</button>
+        </div>
+      </div>
+
+      <div class="c-step" id="cStep3">
+        <label>Default Session Timeframe (minutes)</label>
+        <div class="c-timeframe-btns" id="cTimeframeBtns">
+          <button class="c-tf-btn" onclick="selectTimeframe(15)">15</button>
+          <button class="c-tf-btn selected" onclick="selectTimeframe(45)">45</button>
+          <button class="c-tf-btn" onclick="selectTimeframe(60)">60</button>
+          <button class="c-tf-btn" onclick="selectTimeframe(90)">90</button>
+        </div>
+        <label style="margin-top:16px; display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.82em;">
+          <input type="checkbox" id="cSeedCAMP" checked style="width:auto;" />
+          Pre-seed CAMP foundational protocols (Mutualism, Tahiti, TREE(3), Chimera)
+        </label>
+        <div class="c-step-nav">
+          <button class="c-btn" onclick="wizardBack()">&larr; Back</button>
+          <button class="c-btn primary" onclick="wizardNext()">Review &rarr;</button>
+        </div>
+      </div>
+
+      <div class="c-step" id="cStep4">
+        <label>Review</label>
+        <div id="cReviewText" style="background:#0d1520;border:1px solid #2a3a50;padding:12px;font-size:0.8em;line-height:1.6;border-radius:3px;margin-top:6px;white-space:pre-wrap;"></div>
+        <div class="c-error" id="cWizardError" style="display:none;"></div>
+        <div class="c-step-nav">
+          <button class="c-btn" onclick="wizardBack()">&larr; Back</button>
+          <button class="c-btn primary" id="cSaveConfigBtn" onclick="wizardSave()">Save &amp; Continue</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SIP Form -->
+    <div class="c-sip-form" id="cSIPForm" style="display:none;">
+      <h2>INITIATE COUNCIL SESSION</h2>
+      <label>The Question *</label>
+      <input type="text" id="sipQuestion" placeholder="What should we decide? (must end with ?)" />
+      <label>Context &amp; Constraints *</label>
+      <textarea id="sipContext" placeholder="Describe the situation, constraints, and relevant background..."></textarea>
+      <label>Stakes *</label>
+      <textarea id="sipStakes" placeholder="What happens if we get this wrong? What is at stake?"></textarea>
+      <label>Advocate A — Assigned Position</label>
+      <input type="text" id="sipAdvocateA" placeholder="e.g. Prioritize physical security first" />
+      <label>Advocate B — Assigned Position</label>
+      <input type="text" id="sipAdvocateB" placeholder="e.g. Prioritize digital continuity first" />
+      <label>Session Timeframe</label>
+      <div class="c-timeframe-btns" id="sipTimeframeBtns">
+        <button class="c-tf-btn" onclick="selectSIPTimeframe(15)">15 min</button>
+        <button class="c-tf-btn selected" onclick="selectSIPTimeframe(45)">45 min</button>
+        <button class="c-tf-btn" onclick="selectSIPTimeframe(60)">60 min</button>
+        <button class="c-tf-btn" onclick="selectSIPTimeframe(90)">90 min</button>
+      </div>
+      <div class="c-error" id="cSIPError" style="display:none;"></div>
+      <div class="c-sip-actions">
+        <button class="c-btn primary" onclick="startCouncilSession()">Start Council</button>
+      </div>
+      <span class="c-reconfigure" onclick="showWizard()">&cog; Reconfigure</span>
+    </div>
+
+    <!-- Active Session — 3-pane layout -->
+    <div class="c-session" id="cSession" style="display:none;">
+      <div class="c-info-pane">
+        <div>
+          <div class="c-info-label">Status</div>
+          <span class="c-status-badge active" id="cStatusBadge">ACTIVE</span>
+        </div>
+        <div>
+          <div class="c-info-label">Timer</div>
+          <div class="c-timer" id="cTimer">--:--</div>
+        </div>
+        <div>
+          <div class="c-info-label">Session</div>
+          <div class="c-info-value" id="cSessionId" style="font-size:0.72em;color:#506070;">—</div>
+        </div>
+        <div>
+          <div class="c-info-label">Turns / Recalls</div>
+          <div class="c-info-value"><span id="cTurnCount">0</span> / <span id="cRecallCount">0</span></div>
+        </div>
+        <div class="c-ctrl-btns">
+          <button class="c-ctrl-btn" id="cPauseBtn" onclick="councilPauseResume()">Pause</button>
+          <button class="c-ctrl-btn danger" onclick="councilStop()">Stop Session</button>
+          <button class="c-ctrl-btn" onclick="councilShowSIP()" style="margin-top:6px;border-color:#1a2030;color:#405060;">New Session</button>
+        </div>
+      </div>
+
+      <div class="c-feed-pane">
+        <div class="c-feed-messages" id="cFeedMessages">
+          <div style="color:#2a3a50;font-style:italic;font-size:0.82em;text-align:center;margin-top:20px;">Waiting for the Council to convene...</div>
+        </div>
+        <div class="c-human-bar">
+          <input type="text" class="c-human-input" id="cHumanInput"
+            placeholder="Speak into the Council... (prefix 'Witness: ' for Protocol 0.4)"
+            onkeydown="if(event.key==='Enter')sendCouncilMessage()"
+            oninput="updateWitnessMode(this)" />
+          <button class="c-send-btn" onclick="sendCouncilMessage()">Send</button>
+        </div>
+      </div>
+
+      <div class="c-witness-pane">
+        <div class="c-witness-header">&#128221; Aether Recalls</div>
+        <div class="c-witness-list" id="cWitnessList">
+          <div class="c-witness-empty">No recalls yet. The Witness is listening.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ombudsman Pause Overlay -->
+  <div class="c-pause-overlay" id="cPauseOverlay">
+    <div class="c-pause-box">
+      <div class="c-pause-title">&#9889; OMBUDSMAN — SESSION PAUSED</div>
+      <div class="c-pause-reason" id="cPauseReason">Deliberation paused.</div>
+      <button class="c-btn primary" onclick="councilResume()" style="margin-top:8px;">Resume Deliberation</button>
     </div>
   </div>
 
@@ -2135,6 +2637,12 @@
     </div>
   </div>
 
+  <!-- Mode Toggle Bar -->
+  <div class="mode-toggle-bar" id="modeToggleBar">
+    <button class="mode-btn active" id="companionModeBtn" onclick="setMode('companion')">&#9679; Companion</button>
+    <button class="mode-btn" id="councilModeBtn" onclick="setMode('council')">&#9675; Council</button>
+  </div>
+
   <div class="main" id="mainLayout">
     <!-- Layout is built dynamically from config -->
     <div class="room-panel" id="roomPanel">
@@ -2142,6 +2650,7 @@
         <span>The Room</span>
         <span class="room-stats" id="roomStats"></span>
         <button class="gold-btn" id="goldPanelToggle" title="Golden Set Viewer" style="margin-left:8px;font-size:1em;padding:4px 14px;border:1px solid #2a4060;border-radius:3px;color:#c0a060;cursor:pointer;background:transparent;">Gold</button>
+        <button id="workspacePanelToggle" title="Document Workspace" style="margin-left:8px;font-size:1em;padding:4px 14px;border:1px solid rgba(126,184,218,0.3);border-radius:3px;color:#7eb8da;cursor:pointer;background:transparent;">Docs</button>
       </div>
       <div class="room-messages" id="roomMessages">
         <div class="empty-state">The room is quiet. Waiting for the first voice...</div>
@@ -2161,13 +2670,54 @@
     </div>
   </div>
 
-  <div id="pianoWrap"><!-- inner content built by pianoRoll.buildUI() --></div>
+  <!-- ── Document Workspace Panel ─────────────────────────────────────────── -->
+  <div id="workspacePanel" style="display:none;position:fixed;inset:0;background:#0d1520;z-index:200;display:none;flex-direction:column;overflow:hidden;">
+    <div style="display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid rgba(126,184,218,0.15);gap:12px;flex-shrink:0;">
+      <span style="color:#7eb8da;font-size:1em;font-weight:600;letter-spacing:1px;">READING DESK</span>
+      <div style="flex:1;display:flex;gap:8px;align-items:center;">
+        <input id="wsSearchInput" type="text" placeholder="Search documents…" style="flex:1;max-width:400px;padding:5px 10px;background:rgba(126,184,218,0.07);border:1px solid rgba(126,184,218,0.2);border-radius:3px;color:#c0d8f0;font-size:0.85em;outline:none;" />
+        <button id="wsSearchBtn" style="padding:5px 14px;background:rgba(126,184,218,0.12);border:1px solid rgba(126,184,218,0.25);border-radius:3px;color:#7eb8da;cursor:pointer;font-size:0.85em;">Search</button>
+        <button id="wsBuildPackBtn" style="padding:5px 14px;background:rgba(142,218,126,0.1);border:1px solid rgba(142,218,126,0.25);border-radius:3px;color:#8eda7e;cursor:pointer;font-size:0.85em;">Build Pack</button>
+        <button id="wsRefreshBtn" style="padding:5px 10px;background:transparent;border:1px solid rgba(126,184,218,0.15);border-radius:3px;color:#607080;cursor:pointer;font-size:0.8em;" title="Re-scan documents directory">↻</button>
+      </div>
+      <button id="workspacePanelClose" style="padding:4px 12px;background:transparent;border:1px solid rgba(200,80,80,0.25);border-radius:3px;color:#c06060;cursor:pointer;font-size:0.85em;">✕ Close</button>
+    </div>
+    <div style="display:flex;flex:1;overflow:hidden;gap:0;">
+      <!-- FileTree pane -->
+      <div id="wsFileTree" style="width:200px;flex-shrink:0;border-right:1px solid rgba(126,184,218,0.1);overflow-y:auto;padding:8px 0;"></div>
+      <!-- DocMap pane -->
+      <div style="width:220px;flex-shrink:0;border-right:1px solid rgba(126,184,218,0.1);display:flex;flex-direction:column;overflow:hidden;">
+        <div style="padding:6px 10px;font-size:0.7em;color:#607080;border-bottom:1px solid rgba(126,184,218,0.08);flex-shrink:0;">STRUCTURE</div>
+        <div id="wsDocMap" style="flex:1;overflow-y:auto;padding:6px 0;"></div>
+      </div>
+      <!-- ChunkViewer pane -->
+      <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid rgba(126,184,218,0.1);">
+        <div style="padding:6px 10px;font-size:0.7em;color:#607080;border-bottom:1px solid rgba(126,184,218,0.08);display:flex;align-items:center;gap:8px;flex-shrink:0;">
+          <span id="wsChunkBreadcrumb">CHUNKS</span>
+          <span id="wsChunkCount" style="color:#405060;"></span>
+        </div>
+        <div id="wsChunkViewer" style="flex:1;overflow-y:auto;padding:8px 12px;"></div>
+      </div>
+      <!-- ActiveContextTray -->
+      <div style="width:280px;flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;">
+        <div style="padding:6px 10px;font-size:0.7em;color:#607080;border-bottom:1px solid rgba(126,184,218,0.08);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+          <span>ACTIVE CONTEXT</span>
+          <span id="wsPackTokens" style="color:#405060;"></span>
+        </div>
+        <div id="wsContextTray" style="flex:1;overflow-y:auto;padding:6px 8px;"></div>
+      </div>
+    </div>
+  </div>
+  <!-- ── End Document Workspace Panel ──────────────────────────────────────── -->
+
+  <div id="pianoWrap"><!-- inner content built by pianoRoll.buildUI() --></div></div>
   <div id="drumWrap"><!-- content built by buildDrumMachine() --></div>
   <div id="soundWrap"><!-- content built by pianoRoll init --></div>
   <div id="presetWrap"><!-- content built by buildPresetPanel() --></div>
 
   <script>
     const eventSource = new EventSource('/events');
+    window.__sseSource = eventSource; // exposed for council SSE handlers
     // ID-based dedup Sets — persists across reconnects so SSE replays never double-render
     const renderedMessageIds = new Set();   // room-message ids
     const renderedJournalIds  = new Set();  // journal-entry ids
@@ -2182,6 +2732,292 @@
     const roomStats = document.getElementById('roomStats');
     const goldPanelToggle = document.getElementById('goldPanelToggle');
     if (goldPanelToggle) goldPanelToggle.addEventListener('click', () => toggleGoldPanel());
+
+    // ── Document Workspace ──────────────────────────────────────────────────────
+    (function initWorkspace() {
+      const panel = document.getElementById('workspacePanel');
+      const toggleBtn = document.getElementById('workspacePanelToggle');
+      const closeBtn = document.getElementById('workspacePanelClose');
+      const fileTree = document.getElementById('wsFileTree');
+      const docMap = document.getElementById('wsDocMap');
+      const chunkViewer = document.getElementById('wsChunkViewer');
+      const contextTray = document.getElementById('wsContextTray');
+      const searchInput = document.getElementById('wsSearchInput');
+      const searchBtn = document.getElementById('wsSearchBtn');
+      const buildPackBtn = document.getElementById('wsBuildPackBtn');
+      const refreshBtn = document.getElementById('wsRefreshBtn');
+      const breadcrumb = document.getElementById('wsChunkBreadcrumb');
+      const chunkCount = document.getElementById('wsChunkCount');
+      const packTokens = document.getElementById('wsPackTokens');
+      if (!panel) return;
+
+      let wsState = {
+        openDocId: null,
+        selectedChunkIds: [],
+        pinnedChunkIds: [],
+        lockedChunkIds: [],
+        activePack: null,
+      };
+
+      function showPanel() {
+        panel.style.display = 'flex';
+        loadFiles();
+      }
+      function hidePanel() { panel.style.display = 'none'; }
+
+      if (toggleBtn) toggleBtn.addEventListener('click', () => {
+        panel.style.display === 'none' || !panel.style.display ? showPanel() : hidePanel();
+      });
+      if (closeBtn) closeBtn.addEventListener('click', hidePanel);
+
+      async function apiFetch(path, opts) {
+        try {
+          const r = await fetch(path, opts);
+          if (!r.ok) return null;
+          return r.json();
+        } catch { return null; }
+      }
+
+      async function loadFiles() {
+        if (!fileTree) return;
+        const files = await apiFetch('/docs/files');
+        if (!files) { fileTree.innerHTML = '<div style="padding:12px;color:#405060;font-size:0.8em;">No files indexed</div>'; return; }
+        const byDir = {};
+        for (const f of files) {
+          const parts = f.path.split('/');
+          const dir = parts.length > 1 ? parts.slice(0, -1).join('/') : '';
+          if (!byDir[dir]) byDir[dir] = [];
+          byDir[dir].push(f);
+        }
+        let html = '';
+        for (const [dir, fs] of Object.entries(byDir).sort()) {
+          if (dir) html += `<div style="padding:4px 10px 2px;font-size:0.7em;color:#405060;">${dir}/</div>`;
+          for (const f of fs) {
+            html += `<div class="ws-file-item" data-doc-id="${f.id}" style="padding:5px 12px 5px ${dir ? '20px' : '10px'};cursor:pointer;font-size:0.82em;color:#7090a8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${f.path}">${f.filename} <span style="color:#304050;font-size:0.85em;">${f.chunkCount}c</span></div>`;
+          }
+        }
+        fileTree.innerHTML = html || '<div style="padding:12px;color:#405060;font-size:0.8em;">Empty</div>';
+        fileTree.querySelectorAll('.ws-file-item').forEach(el => {
+          el.addEventListener('click', () => openDoc(el.dataset.docId));
+          el.addEventListener('mouseenter', () => el.style.background = 'rgba(126,184,218,0.07)');
+          el.addEventListener('mouseleave', () => el.style.background = '');
+        });
+      }
+
+      async function openDoc(docId) {
+        wsState.openDocId = docId;
+        if (breadcrumb) breadcrumb.textContent = docId.replace('doc:', '');
+        const [map, chunks] = await Promise.all([
+          apiFetch(`/docs/file/${encodeURIComponent(docId)}/map`),
+          apiFetch(`/docs/file/${encodeURIComponent(docId)}/chunks`),
+        ]);
+        renderDocMap(map);
+        renderChunks(chunks || []);
+      }
+
+      function renderDocMap(map) {
+        if (!docMap) return;
+        if (!map) { docMap.innerHTML = '<div style="padding:10px;color:#405060;font-size:0.8em;">—</div>'; return; }
+        docMap.innerHTML = renderNode(map.root, 0);
+        docMap.querySelectorAll('.ws-map-node').forEach(el => {
+          el.addEventListener('click', () => {
+            const nodeId = el.dataset.nodeId;
+            const target = chunkViewer && chunkViewer.querySelector(`[data-node-id="${nodeId}"]`);
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          });
+          el.addEventListener('mouseenter', () => el.style.background = 'rgba(126,184,218,0.06)');
+          el.addEventListener('mouseleave', () => el.style.background = '');
+        });
+      }
+
+      function renderNode(node, depth) {
+        if (!node) return '';
+        const pad = depth * 10;
+        const icon = node.type === 'root' ? '' : node.type === 'section' || node.type === 'subsection' ? '§' : node.type === 'code_block' ? '{}' : '¶';
+        let html = `<div class="ws-map-node" data-node-id="${node.id}" style="padding:3px 8px 3px ${8 + pad}px;cursor:pointer;font-size:0.78em;color:#607888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${node.label}"><span style="color:#405060;margin-right:4px;">${icon}</span>${node.label}</div>`;
+        for (const child of (node.children || [])) html += renderNode(child, depth + 1);
+        return html;
+      }
+
+      function renderChunks(chunks) {
+        if (!chunkViewer) return;
+        if (chunkCount) chunkCount.textContent = `${chunks.length} chunks`;
+        if (!chunks.length) { chunkViewer.innerHTML = '<div style="padding:16px;color:#405060;">No chunks</div>'; return; }
+        chunkViewer.innerHTML = chunks.map(c => renderChunkCard(c)).join('');
+        chunkViewer.querySelectorAll('.ws-chunk-card').forEach(el => {
+          el.querySelector('.ws-chunk-select')?.addEventListener('click', () => toggleSelect(el.dataset.chunkId));
+          el.querySelector('.ws-chunk-pin')?.addEventListener('click', () => togglePin(el.dataset.chunkId));
+          el.querySelector('.ws-chunk-lock')?.addEventListener('click', () => toggleLock(el.dataset.chunkId));
+          el.querySelector('.ws-chunk-neighbors')?.addEventListener('click', () => expandNeighbors(el.dataset.chunkId));
+        });
+      }
+
+      function renderChunkCard(c) {
+        const sel = wsState.selectedChunkIds.includes(c.id);
+        const pin = wsState.pinnedChunkIds.includes(c.id);
+        const lock = wsState.lockedChunkIds.includes(c.id);
+        const border = lock ? 'rgba(218,180,80,0.4)' : pin ? 'rgba(142,218,126,0.3)' : sel ? 'rgba(126,184,218,0.3)' : 'rgba(126,184,218,0.08)';
+        const path = c.structuralPath && c.structuralPath.length ? c.structuralPath.join(' › ') : '';
+        const preview = c.text.length > 400 ? c.text.slice(0, 400) + '…' : c.text;
+        return `<div class="ws-chunk-card" data-chunk-id="${c.id}" data-node-id="${c.nodeId}" style="margin-bottom:10px;border:1px solid ${border};border-radius:4px;overflow:hidden;">
+          <div style="padding:4px 8px;background:rgba(126,184,218,0.05);display:flex;align-items:center;gap:6px;font-size:0.72em;color:#607080;">
+            <span style="color:#405060;">#${c.index}</span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${path}</span>
+            <span style="color:#304050;">${c.tokenEstimate}t</span>
+            <button class="ws-chunk-select" title="Select" style="padding:1px 6px;border:1px solid ${sel ? 'rgba(126,184,218,0.5)' : 'rgba(126,184,218,0.2)'};border-radius:2px;background:${sel ? 'rgba(126,184,218,0.15)' : 'transparent'};color:#7eb8da;cursor:pointer;">+</button>
+            <button class="ws-chunk-pin" title="Pin" style="padding:1px 6px;border:1px solid ${pin ? 'rgba(142,218,126,0.5)' : 'rgba(126,184,218,0.15)'};border-radius:2px;background:${pin ? 'rgba(142,218,126,0.12)' : 'transparent'};color:#8eda7e;cursor:pointer;">📌</button>
+            <button class="ws-chunk-lock" title="Lock" style="padding:1px 6px;border:1px solid ${lock ? 'rgba(218,180,80,0.5)' : 'rgba(126,184,218,0.15)'};border-radius:2px;background:${lock ? 'rgba(218,180,80,0.1)' : 'transparent'};color:#dab450;cursor:pointer;">🔒</button>
+            <button class="ws-chunk-neighbors" title="Expand neighbors" style="padding:1px 6px;border:1px solid rgba(126,184,218,0.15);border-radius:2px;background:transparent;color:#607080;cursor:pointer;">±</button>
+          </div>
+          <pre style="margin:0;padding:8px 10px;font-size:0.78em;color:#8099a8;white-space:pre-wrap;word-break:break-word;line-height:1.5;">${escapeHtml(preview)}</pre>
+        </div>`;
+      }
+
+      function escapeHtml(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+      function toggleSelect(id) {
+        const i = wsState.selectedChunkIds.indexOf(id);
+        if (i !== -1) wsState.selectedChunkIds.splice(i, 1);
+        else wsState.selectedChunkIds.push(id);
+        refreshChunkCard(id);
+        refreshContextTray();
+      }
+
+      function togglePin(id) {
+        const i = wsState.pinnedChunkIds.indexOf(id);
+        if (i !== -1) wsState.pinnedChunkIds.splice(i, 1);
+        else wsState.pinnedChunkIds.push(id);
+        refreshChunkCard(id);
+        refreshContextTray();
+      }
+
+      function toggleLock(id) {
+        const i = wsState.lockedChunkIds.indexOf(id);
+        if (i !== -1) wsState.lockedChunkIds.splice(i, 1);
+        else wsState.lockedChunkIds.push(id);
+        refreshChunkCard(id);
+        refreshContextTray();
+      }
+
+      function refreshChunkCard(id) {
+        if (!chunkViewer) return;
+        const card = chunkViewer.querySelector(`[data-chunk-id="${id}"]`);
+        if (!card) return;
+        apiFetch(`/docs/chunk/${encodeURIComponent(id)}`).then(c => {
+          if (!c) return;
+          const newCard = document.createElement('div');
+          newCard.innerHTML = renderChunkCard(c);
+          const inner = newCard.firstChild;
+          if (inner) {
+            card.replaceWith(inner);
+            inner.querySelector('.ws-chunk-select')?.addEventListener('click', () => toggleSelect(inner.dataset.chunkId));
+            inner.querySelector('.ws-chunk-pin')?.addEventListener('click', () => togglePin(inner.dataset.chunkId));
+            inner.querySelector('.ws-chunk-lock')?.addEventListener('click', () => toggleLock(inner.dataset.chunkId));
+            inner.querySelector('.ws-chunk-neighbors')?.addEventListener('click', () => expandNeighbors(inner.dataset.chunkId));
+          }
+        });
+      }
+
+      async function expandNeighbors(id) {
+        const data = await apiFetch(`/docs/chunk/${encodeURIComponent(id)}/neighbors?radius=2`);
+        if (!data) return;
+        const chunks = [...(data.before || []), ...(data.after || [])];
+        if (!chunks.length) return;
+        const card = chunkViewer && chunkViewer.querySelector(`[data-chunk-id="${id}"]`);
+        if (!card) { renderChunks(chunks); return; }
+        for (const c of data.before.reverse()) {
+          if (!chunkViewer.querySelector(`[data-chunk-id="${c.id}"]`)) {
+            const el = document.createElement('div');
+            el.innerHTML = renderChunkCard(c);
+            const inner = el.firstChild;
+            if (inner) { card.before(inner); wireCard(inner); }
+          }
+        }
+        for (const c of data.after) {
+          if (!chunkViewer.querySelector(`[data-chunk-id="${c.id}"]`)) {
+            const el = document.createElement('div');
+            el.innerHTML = renderChunkCard(c);
+            const inner = el.firstChild;
+            if (inner) { card.after(inner); wireCard(inner); }
+          }
+        }
+      }
+
+      function wireCard(el) {
+        if (!el) return;
+        el.querySelector('.ws-chunk-select')?.addEventListener('click', () => toggleSelect(el.dataset.chunkId));
+        el.querySelector('.ws-chunk-pin')?.addEventListener('click', () => togglePin(el.dataset.chunkId));
+        el.querySelector('.ws-chunk-lock')?.addEventListener('click', () => toggleLock(el.dataset.chunkId));
+        el.querySelector('.ws-chunk-neighbors')?.addEventListener('click', () => expandNeighbors(el.dataset.chunkId));
+      }
+
+      function refreshContextTray() {
+        if (!contextTray) return;
+        const allIds = [...new Set([...wsState.lockedChunkIds, ...wsState.pinnedChunkIds, ...wsState.selectedChunkIds])];
+        if (!allIds.length) { contextTray.innerHTML = '<div style="padding:12px;color:#304050;font-size:0.8em;">No chunks selected</div>'; if (packTokens) packTokens.textContent = ''; return; }
+        const est = allIds.length;
+        contextTray.innerHTML = allIds.map(id => {
+          const isLocked = wsState.lockedChunkIds.includes(id);
+          const isPinned = wsState.pinnedChunkIds.includes(id);
+          const tag = isLocked ? 'LOCKED' : isPinned ? 'PINNED' : 'SEL';
+          const tagColor = isLocked ? '#dab450' : isPinned ? '#8eda7e' : '#7eb8da';
+          return `<div style="padding:5px 8px;border-bottom:1px solid rgba(126,184,218,0.06);display:flex;align-items:center;gap:6px;font-size:0.78em;">
+            <span style="color:${tagColor};font-size:0.7em;min-width:36px;">${tag}</span>
+            <span style="flex:1;color:#607080;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${id.split(':').slice(-2).join(':')}</span>
+            <button onclick="(function(){var i=wsState.selectedChunkIds.indexOf('${id}');if(i!==-1)wsState.selectedChunkIds.splice(i,1);var j=wsState.pinnedChunkIds.indexOf('${id}');if(j!==-1)wsState.pinnedChunkIds.splice(j,1);var k=wsState.lockedChunkIds.indexOf('${id}');if(k!==-1)wsState.lockedChunkIds.splice(k,1);refreshContextTray();})()" style="padding:1px 6px;border:1px solid rgba(200,80,80,0.2);border-radius:2px;background:transparent;color:#c06060;cursor:pointer;font-size:0.9em;">×</button>
+          </div>`;
+        }).join('');
+      }
+
+      if (searchBtn) searchBtn.addEventListener('click', async () => {
+        const q = searchInput && searchInput.value.trim();
+        if (!q) return;
+        if (chunkViewer) chunkViewer.innerHTML = '<div style="padding:12px;color:#607080;font-size:0.85em;">Searching…</div>';
+        const results = await apiFetch('/docs/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: q, maxResults: 30 }) });
+        if (!results || !results.groups) { if (chunkViewer) chunkViewer.innerHTML = '<div style="padding:12px;color:#607080;">No results</div>'; return; }
+        const allChunks = [];
+        for (const g of results.groups) for (const h of g.hits) allChunks.push(h.chunk);
+        if (breadcrumb) breadcrumb.textContent = `Search: ${q}`;
+        if (chunkCount) chunkCount.textContent = `${results.totalHits} hits`;
+        renderChunks(allChunks);
+      });
+
+      if (searchInput) searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') searchBtn && searchBtn.click(); });
+
+      if (buildPackBtn) buildPackBtn.addEventListener('click', async () => {
+        const pack = await apiFetch('/docs/pack/build', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ selectedChunkIds: wsState.selectedChunkIds, pinnedChunkIds: wsState.pinnedChunkIds, lockedChunkIds: wsState.lockedChunkIds, budget: 4000 }),
+        });
+        if (!pack) return;
+        wsState.activePack = pack;
+        if (packTokens) packTokens.textContent = `${pack.totalTokens} / ${pack.budgetTokens} tokens`;
+        if (contextTray) {
+          const header = `<div style="padding:5px 8px;font-size:0.72em;color:#607080;border-bottom:1px solid rgba(126,184,218,0.1);">${pack.items.length} chunks · ${pack.sourceFileIds.length} files · ${pack.totalTokens}t</div>`;
+          contextTray.innerHTML = header + pack.items.map(item => {
+            const tagColor = item.inclusionReason === 'locked' ? '#dab450' : item.inclusionReason === 'pinned' ? '#8eda7e' : '#7eb8da';
+            const path = item.structuralPath && item.structuralPath.length ? item.structuralPath.slice(-2).join(' › ') : item.docId.replace('doc:', '');
+            return `<div style="padding:5px 8px;border-bottom:1px solid rgba(126,184,218,0.05);font-size:0.78em;">
+              <div style="display:flex;gap:6px;align-items:center;margin-bottom:2px;">
+                <span style="color:${tagColor};font-size:0.7em;min-width:50px;">${item.inclusionReason.toUpperCase()}</span>
+                <span style="color:#607080;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${path}</span>
+                <span style="color:#304050;">${item.tokenEstimate}t</span>
+              </div>
+              <div style="color:#405058;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.9em;">${escapeHtml(item.text.slice(0, 80))}</div>
+            </div>`;
+          }).join('');
+        }
+      });
+
+      if (refreshBtn) refreshBtn.addEventListener('click', async () => {
+        refreshBtn.textContent = '…';
+        const r = await apiFetch('/docs/workspace/refresh', { method: 'POST' });
+        refreshBtn.textContent = '↻';
+        if (r) { loadFiles(); }
+      });
+    })();
+    // ── End Document Workspace ─────────────────────────────────────────────────
     const pauseBtn = document.getElementById('pauseBtn');
     const speedSlider = document.getElementById('speedSlider');
     const speedValue = document.getElementById('speedValue');
@@ -13744,6 +14580,560 @@
     pianoRoll.init();
 
     chatInput.focus();
+
+    // ── Council Mode ──────────────────────────────────────────────────────────
+
+    const council = (() => {
+      // State
+      let mode          = localStorage.getItem('communionMode') || 'companion';
+      let wizardStep    = 0;
+      let wizardConfig  = {};
+      let sipTimeframe  = 45;
+      let cTimeframe    = 45;
+      let sessionActive = false;
+      let timerInterval = null;
+      let sessionIsPaused = false;
+
+      // ── Mode switching ──────────────────────────────────────────────────────
+
+      function setMode(m) {
+        mode = m;
+        localStorage.setItem('communionMode', m);
+        document.getElementById('mainLayout').style.display    = (m === 'companion') ? 'flex' : 'none';
+        document.getElementById('councilPanel').style.display  = (m === 'council')   ? 'flex' : 'none';
+        document.getElementById('companionModeBtn').classList.toggle('active', m === 'companion');
+        document.getElementById('councilModeBtn').classList.toggle('active', m === 'council');
+        if (m === 'council') councilInit();
+      }
+
+      async function councilInit() {
+        try {
+          const res = await fetch('/council/configured');
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          if (!data.configured) {
+            showWizard();
+          } else if (sessionActive) {
+            showSession();
+          } else {
+            showSIPForm();
+          }
+        } catch (err) {
+          console.warn('[Council] councilInit fetch failed, defaulting to wizard:', err);
+          showWizard();
+        }
+      }
+
+      // ── Wizard ──────────────────────────────────────────────────────────────
+
+      function showWizard() {
+        document.getElementById('cWizard').style.display   = 'flex';
+        document.getElementById('cSIPForm').style.display  = 'none';
+        document.getElementById('cSession').style.display  = 'none';
+        wizardStep = 0;
+        renderWizardStep();
+        loadDefaultConfig();
+      }
+
+      async function loadDefaultConfig() {
+        try {
+          const res = await fetch('/council/config/defaults');
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          wizardConfig = await res.json();
+        } catch (err) {
+          console.warn('[Council] loadDefaultConfig failed, using built-in defaults:', err);
+          // Built-in fallback — matches council.config.default.json
+          wizardConfig = {
+            provider: 'openai-compatible', baseUrl: 'https://api.deepseek.com/v1',
+            model: 'deepseek-chat', defaultTimeframeMins: 45, aetherSeedFromCAMP: true,
+            roles: [
+              { role: 'convener',        displayName: 'Convener',          temperature: 0.3,  color: '#7c9cbf', enabled: true, systemPrompt: '' },
+              { role: 'witness',         displayName: 'Witness',           temperature: 0.1,  color: '#a8c5a0', enabled: true, systemPrompt: '' },
+              { role: 'advocate_a',      displayName: 'Advocate A',        temperature: 0.6,  color: '#d4a5a5', enabled: true, systemPrompt: '' },
+              { role: 'advocate_b',      displayName: 'Advocate B',        temperature: 0.6,  color: '#a5b4d4', enabled: true, systemPrompt: '' },
+              { role: 'devils_advocate', displayName: "Devil's Advocate",  temperature: 0.8,  color: '#c4a5d4', enabled: true, systemPrompt: '' },
+              { role: 'synthesizer',     displayName: 'Synthesizer',       temperature: 0.75, color: '#d4c5a5', enabled: true, systemPrompt: '' },
+              { role: 'ombudsman',       displayName: 'Ombudsman',         temperature: 0.2,  color: '#888888', enabled: true, systemPrompt: '' },
+            ],
+          };
+        }
+        renderRoleGrid();
+      }
+
+      function renderWizardStep() {
+        document.querySelectorAll('.c-step').forEach((el, i) => {
+          el.classList.toggle('active', i === wizardStep);
+        });
+        if (wizardStep === 4) renderReview();
+      }
+
+      function wizardNext() {
+        if (wizardStep === 4) return;
+        wizardStep++;
+        renderWizardStep();
+      }
+
+      function wizardBack() {
+        if (wizardStep === 0) return;
+        wizardStep--;
+        renderWizardStep();
+      }
+
+      function selectProvider(btn) {
+        document.querySelectorAll('.c-provider-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        const isCustom = !btn.dataset.baseurl && !btn.dataset.model;
+        document.getElementById('cCustomFields').style.display = isCustom ? 'block' : 'none';
+        wizardConfig.provider = btn.dataset.provider;
+        wizardConfig.baseUrl  = btn.dataset.baseurl;
+        wizardConfig.model    = btn.dataset.model;
+      }
+
+      function selectTimeframe(v) {
+        cTimeframe = v;
+        document.querySelectorAll('#cTimeframeBtns .c-tf-btn').forEach(b => {
+          b.classList.toggle('selected', parseInt(b.textContent) === v);
+        });
+      }
+
+      function renderRoleGrid() {
+        const grid = document.getElementById('cRoleGrid');
+        if (!grid) return;
+        const roles = (wizardConfig.roles || []);
+        const COLORS = { convener:'#7c9cbf', witness:'#a8c5a0', advocate_a:'#d4a5a5', advocate_b:'#a5b4d4', devils_advocate:'#c4a5d4', synthesizer:'#d4c5a5', ombudsman:'#888888' };
+        grid.innerHTML = roles.map(r => {
+          const color = COLORS[r.role] || '#888888';
+          const badge = r.provider ? r.provider.replace('openai-compatible','OAI') : '↑ global';
+          const hasOverride = !!r.provider;
+          return `
+          <div class="c-role-card" id="roleCard-${r.role}" style="border-color:${color}20;background:${color}08;">
+            <div class="c-role-header" onclick="toggleRoleCard('${r.role}')">
+              <div class="c-role-name" style="color:${color}">${r.displayName}</div>
+              <div class="c-role-meta">
+                <span class="c-role-temp">${r.temperature}</span>
+                <span class="c-role-provider-badge" id="roleBadge-${r.role}">${badge}</span>
+                <span class="c-expand-icon">▾</span>
+              </div>
+            </div>
+            <div class="c-role-expanded" id="roleExp-${r.role}" style="display:none;">
+              <label class="c-override-label">
+                <input type="checkbox" id="roleOverride-${r.role}" onchange="toggleRoleOverride('${r.role}',this.checked)" ${hasOverride?'checked':''}/>
+                Override global provider
+              </label>
+              <div class="c-role-override-fields" id="roleFields-${r.role}" style="${hasOverride?'':'display:none;'}">
+                <label>Provider</label>
+                <div class="c-provider-mini-grid" id="rolePGrid-${r.role}">
+                  <button class="c-provider-mini-btn selected" data-provider="openai-compatible" data-baseurl="https://api.deepseek.com/v1" data-model="deepseek-chat" onclick="selectRoleProvider('${r.role}',this)">DeepSeek</button>
+                  <button class="c-provider-mini-btn" data-provider="anthropic" data-baseurl="" data-model="claude-opus-4-6" onclick="selectRoleProvider('${r.role}',this)">Anthropic</button>
+                  <button class="c-provider-mini-btn" data-provider="openai-compatible" data-baseurl="https://api.openai.com/v1" data-model="gpt-4o" onclick="selectRoleProvider('${r.role}',this)">OpenAI</button>
+                  <button class="c-provider-mini-btn" data-provider="openai-compatible" data-baseurl="" data-model="" onclick="selectRoleProvider('${r.role}',this)">Custom</button>
+                </div>
+                <label>Base URL</label>
+                <input type="text" id="roleUrl-${r.role}" placeholder="Inherit global" value="${r.baseUrl||''}" />
+                <label>Model</label>
+                <input type="text" id="roleModel-${r.role}" placeholder="Inherit global" value="${r.model||''}" />
+                <label>API Key</label>
+                <input type="password" id="roleKey-${r.role}" placeholder="Leave blank to use global key" autocomplete="new-password" />
+              </div>
+            </div>
+          </div>`;
+        }).join('');
+      }
+
+      function toggleRoleCard(role) {
+        const card = document.getElementById(`roleCard-${role}`);
+        const exp  = document.getElementById(`roleExp-${role}`);
+        if (!card || !exp) return;
+        const isOpen = exp.style.display !== 'none';
+        exp.style.display = isOpen ? 'none' : 'block';
+        card.classList.toggle('expanded', !isOpen);
+      }
+
+      function toggleRoleOverride(role, checked) {
+        const fields = document.getElementById(`roleFields-${role}`);
+        const badge  = document.getElementById(`roleBadge-${role}`);
+        if (fields) fields.style.display = checked ? 'block' : 'none';
+        if (!checked) {
+          const r = (wizardConfig.roles || []).find(x => x.role === role);
+          if (r) { delete r.provider; delete r.baseUrl; delete r.model; }
+          if (badge) badge.textContent = '↑ global';
+        } else {
+          if (badge) badge.textContent = 'override';
+        }
+      }
+
+      function selectRoleProvider(role, btn) {
+        document.querySelectorAll(`#rolePGrid-${role} .c-provider-mini-btn`).forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        const urlEl   = document.getElementById(`roleUrl-${role}`);
+        const modelEl = document.getElementById(`roleModel-${role}`);
+        if (urlEl)   urlEl.value   = btn.dataset.baseurl || '';
+        if (modelEl) modelEl.value = btn.dataset.model   || '';
+      }
+
+      function renderReview() {
+        const provider = document.querySelector('.c-provider-btn.selected');
+        const baseUrl  = document.getElementById('cCustomUrl')?.value || (provider?.dataset.baseurl ?? '');
+        const model    = document.getElementById('cCustomModel')?.value || (provider?.dataset.model ?? '');
+        const apiKey   = document.getElementById('cApiKey')?.value || '';
+        const seedCAMP = document.getElementById('cSeedCAMP')?.checked;
+        const roles    = wizardConfig.roles || [];
+        const overrides = roles.filter(r => document.getElementById(`roleOverride-${r.role}`)?.checked);
+        const overrideSummary = overrides.length
+          ? overrides.map(r => {
+              const m = document.getElementById(`roleModel-${r.role}`)?.value?.trim();
+              const u = document.getElementById(`roleUrl-${r.role}`)?.value?.trim();
+              const k = document.getElementById(`roleKey-${r.role}`)?.value?.trim();
+              return `    ${r.displayName}: model=${m||'(inherit)'} key=${k?'set':'(use global)'}`;
+            }).join('\n')
+          : '    (all roles inherit global settings)';
+        document.getElementById('cReviewText').textContent =
+          `Global provider:  ${provider?.textContent?.trim() || 'Unknown'}\n` +
+          `Base URL:         ${baseUrl || '(anthropic default)'}\n` +
+          `Model:            ${model}\n` +
+          `API Key:          ${apiKey ? '(set — …' + apiKey.slice(-4) + ')' : '(not set)'}\n` +
+          `Timeframe:        ${cTimeframe} min\n` +
+          `Seed CAMP:        ${seedCAMP ? 'Yes' : 'No'}\n` +
+          `Role overrides:\n${overrideSummary}`;
+      }
+
+      async function wizardSave() {
+        const providerBtn = document.querySelector('.c-provider-btn.selected');
+        const isCustom    = !providerBtn?.dataset.baseurl && !providerBtn?.dataset.model;
+        // Collect per-role overrides — never copy key from existing config
+        const roles = (wizardConfig.roles || []).map(r => {
+          const overrideChecked = document.getElementById(`roleOverride-${r.role}`)?.checked;
+          if (!overrideChecked) {
+            // Strip any previously stored per-role overrides
+            const { provider: _p, baseUrl: _b, model: _m, apiKey: _k, ...rest } = r;
+            return rest;
+          }
+          const provBtn   = document.querySelector(`#rolePGrid-${r.role} .c-provider-mini-btn.selected`);
+          const roleUrl   = document.getElementById(`roleUrl-${r.role}`)?.value?.trim() || undefined;
+          const roleModel = document.getElementById(`roleModel-${r.role}`)?.value?.trim() || undefined;
+          const roleKey   = document.getElementById(`roleKey-${r.role}`)?.value?.trim() || undefined;
+          return {
+            ...r,
+            provider: provBtn?.dataset.provider || 'openai-compatible',
+            ...(roleUrl   ? { baseUrl: roleUrl }   : {}),
+            ...(roleModel ? { model: roleModel }   : {}),
+            ...(roleKey   ? { apiKey: roleKey }    : {}),
+          };
+        });
+        const cfg = {
+          ...wizardConfig,
+          roles,
+          provider:            providerBtn?.dataset.provider || 'openai-compatible',
+          baseUrl:             isCustom ? document.getElementById('cCustomUrl').value : (providerBtn?.dataset.baseurl || ''),
+          model:               isCustom ? document.getElementById('cCustomModel').value : (providerBtn?.dataset.model || ''),
+          apiKey:              document.getElementById('cApiKey')?.value || '',
+          defaultTimeframeMins: cTimeframe,
+          aetherSeedFromCAMP:  document.getElementById('cSeedCAMP')?.checked ?? true,
+        };
+        const errEl = document.getElementById('cWizardError');
+        errEl.style.display = 'none';
+        try {
+          const res = await fetch('/council/configure', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cfg),
+          });
+          const data = await res.json();
+          if (data.ok) {
+            showSIPForm();
+          } else {
+            errEl.textContent = data.error || 'Save failed';
+            errEl.style.display = 'block';
+          }
+        } catch (err) {
+          errEl.textContent = String(err);
+          errEl.style.display = 'block';
+        }
+      }
+
+      // ── SIP Form ────────────────────────────────────────────────────────────
+
+      function showSIPForm() {
+        document.getElementById('cWizard').style.display   = 'none';
+        document.getElementById('cSIPForm').style.display  = 'flex';
+        document.getElementById('cSession').style.display  = 'none';
+      }
+
+      function selectSIPTimeframe(v) {
+        sipTimeframe = v;
+        document.querySelectorAll('#sipTimeframeBtns .c-tf-btn').forEach(b => {
+          b.classList.toggle('selected', b.textContent.startsWith(String(v)));
+        });
+      }
+
+      async function startCouncilSession() {
+        const question   = document.getElementById('sipQuestion').value.trim();
+        const context    = document.getElementById('sipContext').value.trim();
+        const stakes     = document.getElementById('sipStakes').value.trim();
+        const advA       = document.getElementById('sipAdvocateA').value.trim();
+        const advB       = document.getElementById('sipAdvocateB').value.trim();
+        const errEl      = document.getElementById('cSIPError');
+        errEl.style.display = 'none';
+
+        if (!question || !context || !stakes) {
+          errEl.textContent = 'Question, context, and stakes are required.';
+          errEl.style.display = 'block';
+          return;
+        }
+        if (!question.endsWith('?')) {
+          errEl.textContent = 'Question must end with a question mark.';
+          errEl.style.display = 'block';
+          return;
+        }
+
+        try {
+          const res = await fetch('/council/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question, context, stakes, advocateAPosition: advA, advocateBPosition: advB, timeframeMins: sipTimeframe }),
+          });
+          const data = await res.json();
+          if (data.ok) {
+            sessionActive = true;
+            sessionIsPaused = false;
+            showSession();
+            document.getElementById('cFeedMessages').innerHTML = '';
+            document.getElementById('cWitnessList').innerHTML = '<div class="c-witness-empty">Listening...</div>';
+            document.getElementById('cSessionId').textContent = data.session?.sessionId || '';
+            startTimer(data.session);
+          } else {
+            errEl.textContent = data.error || 'Failed to start session';
+            errEl.style.display = 'block';
+          }
+        } catch (err) {
+          errEl.textContent = String(err);
+          errEl.style.display = 'block';
+        }
+      }
+
+      // ── Session UI ──────────────────────────────────────────────────────────
+
+      function showSession() {
+        document.getElementById('cWizard').style.display   = 'none';
+        document.getElementById('cSIPForm').style.display  = 'none';
+        document.getElementById('cSession').style.display  = 'flex';
+      }
+
+      function councilShowSIP() {
+        sessionActive = false;
+        clearInterval(timerInterval);
+        showSIPForm();
+      }
+
+      function startTimer(session) {
+        clearInterval(timerInterval);
+        const expiresAt = session?.expiresAt || (Date.now() + (sipTimeframe * 60000));
+        timerInterval = setInterval(() => {
+          const remaining = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
+          const mins = Math.floor(remaining / 60).toString().padStart(2, '0');
+          const secs = (remaining % 60).toString().padStart(2, '0');
+          const el = document.getElementById('cTimer');
+          if (el) {
+            el.textContent = `${mins}:${secs}`;
+            el.classList.toggle('warning', remaining < 300);
+          }
+          if (remaining === 0) clearInterval(timerInterval);
+        }, 1000);
+      }
+
+      async function councilPauseResume() {
+        const btn = document.getElementById('cPauseBtn');
+        if (sessionIsPaused) {
+          await fetch('/council/resume', { method: 'POST' });
+        } else {
+          await fetch('/council/pause', { method: 'POST' });
+        }
+      }
+
+      async function councilResume() {
+        document.getElementById('cPauseOverlay').classList.remove('visible');
+        await fetch('/council/resume', { method: 'POST' });
+      }
+
+      async function councilStop() {
+        if (!confirm('Stop the current council session?')) return;
+        await fetch('/council/stop', { method: 'POST' });
+      }
+
+      async function sendCouncilMessage() {
+        const input = document.getElementById('cHumanInput');
+        const text  = input.value.trim();
+        if (!text) return;
+        input.value = '';
+        input.classList.remove('witness-mode');
+
+        const isWitnessCmd = /^Witness:/i.test(text);
+        if (isWitnessCmd) {
+          await fetch('/council/witness/command', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: text.replace(/^Witness:\s*/i, '') }),
+          });
+        } else {
+          await fetch('/council/message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+          });
+        }
+      }
+
+      function updateWitnessMode(input) {
+        input.classList.toggle('witness-mode', /^Witness:/i.test(input.value));
+      }
+
+      // ── SSE handlers ────────────────────────────────────────────────────────
+
+      function handleCouncilTurn(turn) {
+        const feed = document.getElementById('cFeedMessages');
+        if (!feed) return;
+
+        // Remove placeholder
+        const placeholder = feed.querySelector('[style*="Waiting"]');
+        if (placeholder) placeholder.remove();
+
+        const el = document.createElement('div');
+        const roleClass = turn.isHuman ? 'human' : (turn.role || '');
+        el.className = `c-turn ${roleClass}`;
+        if (turn.color) el.style.borderLeftColor = turn.color;
+
+        const time = new Date(turn.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const isProtocol = turn.text && (turn.text.startsWith('[PROTOCOL') || turn.text.startsWith('[WITNESS') || turn.text.startsWith('[AETHER'));
+        if (isProtocol) el.classList.add('system-turn');
+
+        el.innerHTML = `
+          <div class="c-turn-header">
+            <span class="c-turn-name" style="color:${turn.color||'#7090a8'}">${escapeHtml(turn.agentName||turn.role)}</span>
+            <span class="c-turn-time">${time}</span>
+          </div>
+          <div class="c-turn-text">${escapeHtml(turn.text||'')}</div>`;
+
+        feed.appendChild(el);
+        feed.scrollTop = feed.scrollHeight;
+
+        // Update turn count
+        const tc = document.getElementById('cTurnCount');
+        if (tc) tc.textContent = String(parseInt(tc.textContent || '0') + 1);
+      }
+
+      function handleCouncilRecall(recall) {
+        const list = document.getElementById('cWitnessList');
+        if (!list) return;
+        const empty = list.querySelector('.c-witness-empty');
+        if (empty) empty.remove();
+
+        const el = document.createElement('div');
+        el.className = 'c-recall-badge';
+        el.innerHTML = `<strong>${escapeHtml(recall.memoryId)}</strong> (${(recall.similarity||0).toFixed(2)})<br>${escapeHtml(recall.anchor||'')}`;
+        list.appendChild(el);
+        list.scrollTop = list.scrollHeight;
+
+        const rc = document.getElementById('cRecallCount');
+        if (rc) rc.textContent = String(parseInt(rc.textContent || '0') + 1);
+      }
+
+      function handleCouncilStatus(status) {
+        const badge = document.getElementById('cStatusBadge');
+        if (badge) {
+          badge.className = `c-status-badge ${status.status||''}`;
+          badge.textContent = (status.status || '').toUpperCase();
+        }
+        const pauseBtn = document.getElementById('cPauseBtn');
+        if (pauseBtn) {
+          sessionIsPaused = (status.status === 'paused');
+          pauseBtn.textContent = sessionIsPaused ? 'Resume' : 'Pause';
+        }
+        if (status.status === 'closed') {
+          sessionActive = false;
+          clearInterval(timerInterval);
+          const el = document.getElementById('cTimer');
+          if (el) el.textContent = 'CLOSED';
+        }
+      }
+
+      function handleCouncilPause(data) {
+        sessionIsPaused = true;
+        const overlay = document.getElementById('cPauseOverlay');
+        const reason  = document.getElementById('cPauseReason');
+        if (overlay) overlay.classList.add('visible');
+        if (reason && data.alert) reason.textContent = data.alert.reason || 'Deliberation paused.';
+        handleCouncilStatus(data.session || { status: 'paused' });
+      }
+
+      function escapeHtml(str) {
+        return String(str || '')
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/\n/g, '<br>');
+      }
+
+      // ── Init ────────────────────────────────────────────────────────────────
+
+      function init() {
+        // Wire SSE for council events (add handlers to existing SSE connection)
+        const origEvtSource = window.__sseSource;
+        if (origEvtSource) {
+          origEvtSource.addEventListener('message', (e) => {
+            try {
+              const data = JSON.parse(e.data);
+              if (data.type === 'council_turn')   handleCouncilTurn(data);
+              if (data.type === 'council_recall')  handleCouncilRecall(data);
+              if (data.type === 'council_status')  handleCouncilStatus(data);
+              if (data.type === 'council_pause')   handleCouncilPause(data);
+              if (data.type === 'council_report')  handleCouncilReport(data);
+            } catch { /* skip */ }
+          });
+        }
+        // Apply saved mode
+        setMode(mode);
+      }
+
+      function handleCouncilReport(data) {
+        // Append a "report ready" notice to the feed
+        const feed = document.getElementById('cFeedMessages');
+        if (!feed) return;
+        const el = document.createElement('div');
+        el.className = 'c-turn system-turn';
+        el.style.borderLeftColor = '#7060a0';
+        el.innerHTML = `<div class="c-turn-header"><span style="color:#c0a8e8">&#128196; FINAL REPORT GENERATED</span></div><div class="c-turn-text" style="color:#a090c8;">Session ${data.sessionId} — report saved. GET /council/report to retrieve.</div>`;
+        feed.appendChild(el);
+        feed.scrollTop = feed.scrollHeight;
+      }
+
+      return { init, setMode, showWizard, showSIPForm, showSession, wizardNext, wizardBack,
+               selectProvider, selectTimeframe, selectSIPTimeframe, wizardSave,
+               toggleRoleCard, toggleRoleOverride, selectRoleProvider,
+               startCouncilSession, sendCouncilMessage, updateWitnessMode,
+               councilPauseResume, councilResume, councilStop, councilShowSIP };
+    })();
+
+    // Expose council functions to global scope for inline onclick handlers
+    function setMode(m)                    { council.setMode(m); }
+    function showWizard()                  { council.showWizard(); }
+    function wizardNext()                  { council.wizardNext(); }
+    function wizardBack()                  { council.wizardBack(); }
+    function wizardSave()                  { council.wizardSave(); }
+    function selectProvider(btn)           { council.selectProvider(btn); }
+    function selectTimeframe(v)            { council.selectTimeframe(v); }
+    function selectSIPTimeframe(v)         { council.selectSIPTimeframe(v); }
+    function startCouncilSession()         { council.startCouncilSession(); }
+    function sendCouncilMessage()          { council.sendCouncilMessage(); }
+    function updateWitnessMode(el)         { council.updateWitnessMode(el); }
+    function toggleRoleCard(role)          { council.toggleRoleCard(role); }
+    function toggleRoleOverride(role, v)   { council.toggleRoleOverride(role, v); }
+    function selectRoleProvider(role, btn) { council.selectRoleProvider(role, btn); }
+    function councilPauseResume()          { council.councilPauseResume(); }
+    function councilResume()               { council.councilResume(); }
+    function councilStop()                 { council.councilStop(); }
+    function councilShowSIP()              { council.councilShowSIP(); }
+
+    // Init council after DOM is ready (eventSource already created above)
+    setTimeout(() => council.init(), 100);
+
   </script>
 </body>
 </html>

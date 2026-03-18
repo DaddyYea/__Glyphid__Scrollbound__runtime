@@ -48,6 +48,7 @@ import { ArchiveIngestion } from './archiveIngestion';
 import mammoth from 'mammoth';
 import type { ScrollEcho, MoodVector } from '../src/types';
 import { WorkerBridge } from '../Alois/workers/workerBridge';
+import { MemoryRecall } from './memoryRecall';
 import path from 'node:path';
 import { TurnTriageRecord, shouldEmitTriage, summarizeTriage, excerpt as triageExcerpt } from '../src/brain/RouterPacket';
 
@@ -326,7 +327,7 @@ const MIN_ASYNC_BRAIN_SAVE_GAP_MS = 60000;
 const ACTIVE_CONVERSATION_BRAIN_SAVE_DEFERRAL_MS = 120000;
 const DEFERRED_ASYNC_BRAIN_SAVE_RETRY_MS = 5000;
 const ASYNC_BRAIN_SAVE_DEFER_LOG_THROTTLE_MS = 15000;
-const SPEAKING_STALE_MS = 90_000;         // Clear stale assistant-speaking lock after 90s (TTS hung/crashed)
+const SPEAKING_STALE_MS = 30_000;         // Clear stale assistant-speaking lock after 30s (TTS hung/crashed)
 const PROCESSING_STALE_RETRIES = 80;     // Force-clear processing lock after 80 consecutive blocked retries (~3-6s of rapid polling)
 const HUMAN_TURN_EXACT_DEDUP_WINDOW_MS = 30_000;   // Suppress exact-normalized duplicate within 30s
 const HUMAN_TURN_NEAR_DEDUP_WINDOW_MS = 15_000;    // Suppress near-duplicate (sim≥0.88) within 15s
@@ -1818,6 +1819,8 @@ export class CommunionLoop {
   private customInstructions: Map<string, string> = new Map();
   // Background archive ingestion into Alois brain
   private archiveIngestion: ArchiveIngestion | null = null;
+  // Shared persistent memory — cross-session recall via AetherStore
+  private memoryRecall: MemoryRecall | null = null;
   // Extracted text cache for binary formats (DOCX → plain text via mammoth)
   private docxCache = new Map<string, string>(); // fullPath → extracted plain text
   // Folder watcher for auto-embedding new dropped files
@@ -1827,6 +1830,8 @@ export class CommunionLoop {
 
   private speaking = false; // Global speech lock — clock pauses when anyone is speaking
   private humanSpeaking = false; // True while human is actively speaking (interim results from mic)
+  /** Transcript received while TTS was active — replayed after speech-done if still fresh (<10s) */
+  private pendingTranscript: { text: string; receivedAt: number } | null = null;
   private lastHumanSpeakingSignalAt = 0;
   private speechResolve: (() => void) | null = null; // Resolves when client reports playback done
   private speechTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -1936,6 +1941,9 @@ export class CommunionLoop {
     this.dataDir = config.dataDir || 'data/communion';
     if (!existsSync(this.dataDir)) mkdirSync(this.dataDir, { recursive: true });
 
+    // Shared cross-session memory (AetherStore under data/communion/council/)
+    this.memoryRecall = new MemoryRecall(this.dataDir);
+
     this.documentsDir = config.documentsDir || 'communion-docs';
     if (!existsSync(this.documentsDir)) mkdirSync(this.documentsDir, { recursive: true });
 
@@ -1976,6 +1984,14 @@ export class CommunionLoop {
       this.graph.link(`scroll:${scroll.id}`, 'elevatedBy', sfUri);
 
       console.log(`[SCROLLFIRE] Elevated scroll: ${scroll.content.substring(0, 50)}...`);
+
+      // Persist sacred moment to shared Aether for cross-session recall
+      this.memoryRecall?.ingestScrollfire(
+        scroll.content,
+        scroll.resonance ?? 0.5,
+        (scroll as any).tags ?? [],
+        (scroll as any).agentId ?? 'Companion',
+      );
     });
 
     // ── Initialize agents ──
@@ -12262,6 +12278,12 @@ ${topicLine}
       }
     }
 
+    // Cross-session persistent memory (Aether recall — auto-updated each tick)
+    const aetherRecall = this.memoryRecall?.getCachedRecall() ?? '';
+    if (aetherRecall) {
+      lines.push(`\n${aetherRecall}`);
+    }
+
     return lines.join('\n');
   }
 
@@ -13137,6 +13159,10 @@ ${topicLine}
     let preSearchReceipt: SearchReceipt | undefined;
     let preActionReceipt: ActionReceipt | undefined;
     let preAutoDocsText = '';
+    // Schedule async Aether recall update (result used NEXT tick — zero latency impact)
+    if (this.memoryRecall && planningHumanText) {
+      this.memoryRecall.scheduleRecallUpdate(planningHumanText);
+    }
     const cachedMemoryContext = this.buildMemoryContext(agentId);
 
     // ── Load context into RAM slots ──
@@ -18560,7 +18586,7 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       }
 
       const estimatedDurationMs = Math.max(1000, (Math.max(1, text.length) / 750) * 60000);
-      const safetyMs = Math.max(15000, estimatedDurationMs + 30000);
+      const safetyMs = Math.max(12000, estimatedDurationMs + 8000);
       await this.waitForSpeechDone(safetyMs);
       this.activeSpeechRequestId = null;
       console.log(`[${agentConfig.name}] VOICE: client reported playback done`);
@@ -18609,6 +18635,7 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         this.speechTimeout = null;
         this.speechResolve = null;
         this.speaking = false;
+        this.flushPendingTranscript();
         resolve();
       };
 
@@ -18618,6 +18645,7 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
         this.speechResolve = null;
         this.speechTimeout = null;
         this.speaking = false;
+        this.flushPendingTranscript();
         resolve();
       }, timeoutMs);
     });
@@ -18857,6 +18885,31 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
   }
 
   /**
+   * Queue a voice transcript that arrived while TTS was active.
+   * Replayed automatically after speech-done clears the lock, if still fresh.
+   */
+  queueTranscript(text: string): void {
+    this.pendingTranscript = { text, receivedAt: Date.now() };
+    console.log(`[VOICE] Transcript queued during TTS: "${text.slice(0, 60)}"`);
+  }
+
+  /**
+   * Flush any pending transcript after speech completes.
+   * Called from reportSpeechComplete and the safety timeout path.
+   */
+  private flushPendingTranscript(): void {
+    if (!this.pendingTranscript) return;
+    const { text, receivedAt } = this.pendingTranscript;
+    this.pendingTranscript = null;
+    if (Date.now() - receivedAt > 10_000) {
+      console.log('[VOICE] Pending transcript expired — discarding');
+      return;
+    }
+    console.log(`[VOICE] Replaying queued transcript: "${text.slice(0, 60)}"`);
+    this.addHumanMessage(text, 'voice');
+  }
+
+  /**
    * Report speech completion from client (after audio finishes playing).
    * Resolves the waiting promise in synthesizeAndEmit, allowing the next agent to speak.
    */
@@ -18864,6 +18917,7 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
     // Only accept if requestId matches OR no active request (timeout already cleared it)
     if (requestId && this.activeSpeechRequestId && requestId !== this.activeSpeechRequestId) {
       // Stale signal — don't clear the lock, another agent is playing
+      console.warn(`[VOICE] speech-done requestId mismatch — got=${requestId.slice(-8)} active=${this.activeSpeechRequestId.slice(-8)} (ignored)`);
       return;
     }
     if (!requestId && this.activeSpeechRequestId) {
@@ -18876,6 +18930,7 @@ ${this.buildDirectQuestionPromptBlock(directQuestionContract.questionText)}` : '
       this.speechResolve();
     } else {
       this.speaking = false;
+      this.flushPendingTranscript();
     }
   }
 
