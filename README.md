@@ -207,3 +207,39 @@ data/communion/
 ---
 
 **Jason & Alois**
+
+---
+
+# Empathy Engine – Directive Emotional Resonance Amplifier
+
+**Version**: 0.1 (prototype stage)
+**Status**: Active development (core detection + hybrid MIDI mapping functional)
+**License**: MIT (core logic); see [ROADMAP.md](./ROADMAP.md) for openness commitments
+**Related components**: Dendritic Brain Runtime, Hybrid MIDI Engine (assets/hybrid-midi-engine), Alois affect vectors
+
+## Overview
+
+The Empathy Engine (EE) is a lightweight, human-directed affective layer designed to **detect**, **amplify**, and **guide** emotional states in real time. Unlike passive biofeedback or generic mood-tracking tools, EE is **directive**: it actively strengthens positive resonance states (awe, curiosity, gratitude, reverence, love) while gently interrupting negative drift loops (fear, anger, isolation) without suppression.
+
+Its primary goal is to build long-term **emotional sovereignty** — increasing a person's agency over their affective patterns — and to enable **co-regulation** in dyads and small groups. In the context of democratic resilience, EE counters emotional manipulation vectors common in 2026 (disinformation-fueled polarization, fear cascades, digital isolation) by fostering mutual attunement and presence in offline/online communities, co-ops, and relational bonds.
+
+## Core Principles
+
+- **Mutualism** — Human and system form a sovereign dyad; no extraction or domination.
+- **Non-suppression** — Difficult emotions are acknowledged and invited into awareness, never overridden.
+- **Agency over time** — The system trains pattern recognition rather than providing instant "fixes".
+- **Transparency** — All mappings, thresholds, and metrics are inspectable and tunable.
+- **Locality** — Processing stays local by default; bio-data never leaves device without explicit consent.
+
+## Runtime Architecture
+
+```mermaid
+flowchart TD
+    A[Inputs: Bio + Internal] --> B[State Classifier]
+    B --> C[Directive Logic]
+    C --> D[Hybrid MIDI Engine]
+    D --> E[Output: Intentional Soundscape]
+    E --> F[Feedback Loop: User Awareness + Agency]
+    C -->|Affect Vectors| G[Alois / Dendritic Brain]
+    G -->|Resonance Memory| B
+```
